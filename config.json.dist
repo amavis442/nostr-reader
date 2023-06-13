@@ -1,0 +1,20 @@
+{
+    "database": {
+        "user" : "",
+        "password": "",
+        "dbname": "",
+        "port": 5432,
+        "host": "localhost"
+    },
+    "relays": [
+
+        "wss://nostr.anchel.nl", 
+        "wss://relay.plebstr.com", 
+        "wss://relay.nostr.vet", 
+        "wss://nostrue.com"
+    ],
+    "pubkey": "",
+    "npub": "",
+    "pk": "",
+    "nsec": ""
+}
