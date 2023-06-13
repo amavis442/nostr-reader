@@ -19,14 +19,6 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
-const (
-	host     = "localhost"
-	port     = 5432
-	user     = "nostr"
-	password = "nostr"
-	dbname   = "nostr"
-)
-
 type Event struct {
 	ID        string   `json:"id"`
 	Pubkey    string   `json:"pubkey"`
@@ -452,6 +444,15 @@ func getLast10(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(events)
 }
 
+func searchEvent(id string, db *sql.DB) Event {
+	row := db.QueryRow(`SELECT e.id, e.pubkey, e.kind, e.created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture
+	FROM events e LEFT JOIN users u ON (u.pubkey = e.pubkey ) LEFT JOIN blockusers b on (b.pubkey = e.pubkey) 
+	WHERE e.id = $1`, id)
+	var ev Event
+	row.Scan(&ev)
+	return ev
+}
+
 func CheckError(err error) {
 	if err != nil {
 		panic(err)
@@ -588,6 +589,26 @@ func main() {
 		test["status"] = "ok"
 		test["blocked"] = j.Pubkey
 		json.NewEncoder(w).Encode(test)
+	})
+
+	http.HandleFunc("/api/searchevent", func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		type Request struct {
+			ID string
+		}
+		var j Request
+		err = json.NewDecoder(r.Body).Decode(&j)
+		if err != nil {
+			panic(err)
+		}
+		log.Println("Searching event with Id: ", j.ID)
+		ev := searchEvent(j.ID, db)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(ev)
 	})
 
 	http.Handle("/", http.FileServer(http.Dir("web/nostr-reader/dist")))

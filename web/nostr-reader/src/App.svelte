@@ -39,8 +39,8 @@ async function refreshView() {
     fetch("/api/getnext")
   }
 
-  async function blockUser(pubkey) {
-    await fetch("/api/blockuser", {
+  function blockUser(pubkey) {
+    fetch("/api/blockuser", {
       method: "POST",
       body: JSON.stringify({ pubkey: pubkey }),
       headers: {
@@ -52,6 +52,28 @@ async function refreshView() {
       .then((data) => {
         console.log("Json is ", data);
         refreshView();
+        return data;
+      })
+      .catch((err) => {
+        console.error("error", err);
+      });
+  }
+
+  let searchEvent = writable({})
+  function searchEvents(etag) 
+  {
+    fetch("/api/searchevent", {
+      method: "POST",
+      body: JSON.stringify({ id: etag }),
+      headers: {
+        "Content-Type": "application/json",
+      }
+    }).then((res) => {
+        return res.json();
+      })
+      .then((data) => {
+        console.log("Json is ", data);
+        document.getElementById('search'+etag).html = data.content;
         return data;
       })
       .catch((err) => {
@@ -72,7 +94,16 @@ async function refreshView() {
         </div>
         <div class="border-r border-b border-l border-gray-400 lg:border-l-0 lg:border-t lg:border-gray-400 bg-white rounded-b lg:rounded-b-none lg:rounded-r p-4 flex flex-col justify-between leading-normal">
           <div class="mb-8">
+            <small>Event id: {note.id}</small>
+            <hr/>
             <p class="text-gray-700 text-base">{ note.content }</p>
+            {#if note.etags && note.etags.length > 0}
+              Response to:
+              {#each note.etags as etag}
+                <p><small><button on:click="{searchEvents(etag)}">{etag}</button></small></p>
+                <div id="search{etag}"></div>
+              {/each}
+            {/if}
           </div>
           <div class="flex items-center">
             <img class="w-10 h-10 rounded-full mr-4" src="{ note.picture ? note.picture : placeholder}" alt="Placeholder" title="{ note.about ? note.about : ''}">
