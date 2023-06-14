@@ -2,7 +2,7 @@
   import { onMount, onDestroy, afterUpdate } from "svelte";
   import { get, writable, type Writable } from "svelte/store";
   import placeholder from './assets/profile-picture.jpg';
-
+  import { toHtml, findLink } from "./lib/util/html";
 
 
   let page = writable([]);
@@ -93,10 +93,10 @@ async function refreshView() {
         <div class="h-48 lg:h-auto lg:w-48 flex-none bg-cover rounded-t lg:rounded-t-none lg:rounded-l text-center overflow-hidden" style="background-image: url('https://images.alphacoders.com/188/188121.jpg')" title="Mountain">
         </div>
         <div class="border-r border-b border-l border-gray-400 lg:border-l-0 lg:border-t lg:border-gray-400 bg-white rounded-b lg:rounded-b-none lg:rounded-r p-4 flex flex-col justify-between leading-normal">
-          <div class="mb-8">
+          <div class="mb-8 text-left">
             <small>Event id: {note.id}</small>
             <hr/>
-            <p class="text-gray-700 text-base">{ note.content }</p>
+            <p class="text-gray-700 text-base">{@html toHtml(note.content)}</p>
             {#if note.etags && note.etags.length > 0}
               Response to:
               {#each note.etags as etag}
@@ -106,9 +106,9 @@ async function refreshView() {
             {/if}
           </div>
           <div class="flex items-center">
-            <img class="w-10 h-10 rounded-full mr-4" src="{ note.picture ? note.picture : placeholder}" alt="Placeholder" title="{ note.about ? note.about : ''}">
-            <div class="text-sm">
-              <p class="text-gray-900 leading-none">{ note.name.slice(0, 20) } <button on:click="{blockUser(note.pubkey)}">Block</button></p>
+            <img class="w-10 h-10 rounded-full mr-4" src="{ note.profile.picture ? note.profile.picture : placeholder}" alt="Placeholder" title="{ note.profile.about ? note.profile.about : ''}">
+            <div class="text-sm text-left">
+              <p class="text-gray-900 leading-none">{ note.profile.name.slice(0, 20) } <button on:click="{blockUser(note.pubkey)}">Block</button></p>
               <p class="text-gray-600"><small>{ (new Date(note.created_at  * 1000)).toLocaleString('nl-NL') }</small></p>
             </div>
           </div>
