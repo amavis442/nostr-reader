@@ -9,3 +9,5 @@ it will show that after clicking the id. If not, you are out of luck.
 There is a block function based on blocking pubkeys, but that is as fancy as it gets.
 
 This is a project to learn golang better.
+
+Inspiration is taken from [https://github.com/mattn/algia](algia)

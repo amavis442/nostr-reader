@@ -10,12 +10,10 @@ import (
 	"log"
 	"mime"
 	"net/http"
-	"strings"
+	"sync"
 	"time"
 
 	"github.com/lib/pq"
-	_ "github.com/lib/pq"
-
 	"github.com/nbd-wtf/go-nostr"
 )
 
@@ -60,6 +58,13 @@ type DbConfig struct {
 	Host     string
 }
 
+type Relay struct {
+	Relay *nostr.Relay
+	Url   string
+	Read  bool
+	Write bool
+}
+
 type Config struct {
 	Database *DbConfig
 	Relays   []string
@@ -67,6 +72,7 @@ type Config struct {
 	Npub     string
 	Pk       string
 	Nsec     string
+	Db       *sql.DB
 }
 
 const CreateQuery string = `
@@ -163,14 +169,37 @@ func receiveEvents(sub *nostr.Subscription) {
 	}
 }
 
-func receiveAndProcessPoolEvents(ctx context.Context, db *sql.DB, pool *nostr.SimplePool, filters nostr.Filters) {
+/*
+ * Please see https://github.com/mattn/algia/blob/main/main.go for the code i shamelessly copied
+ */
+func (cfg *Config) Do(f func(*nostr.Relay)) {
+	var wg sync.WaitGroup
 
+	for _, v := range cfg.Relays {
+		wg.Add(1)
+		go func(wg *sync.WaitGroup, v string) {
+			defer wg.Done()
+			ctx := context.WithValue(context.Background(), "url", v)
+			relay, err := nostr.RelayConnect(ctx, v)
+			if err != nil {
+				log.Fatal(err)
+				return
+			}
+			f(relay)
+			relay.Close()
+		}(&wg, v)
+	}
+	wg.Wait()
+}
+
+/* This function can go to storage.go */
+func (cfg *Config) saveEvents(evs []*nostr.Event) []string {
 	var qry = `INSERT INTO "events" ("id", "pubkey", "kind", "created_at", "content" , "tags_full" , "sig" , "raw" , "ptags" , "etags") 
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO NOTHING;`
 
 	var pubkeys = make([]string, 0)
 
-	tx, err := db.Begin()
+	tx, err := cfg.Db.Begin()
 	if err != nil {
 		panic(err)
 	}
@@ -182,17 +211,10 @@ func receiveAndProcessPoolEvents(ctx context.Context, db *sql.DB, pool *nostr.Si
 	}
 	defer stmt.Close() // Prepared statements take up server resources and should be closed after use.
 
-	log.Println("Opening relay connections and receiving from channel")
-	for _, relay := range pool.Relays {
-		err = relay.Connect(context.Background())
-		if err != nil {
-			panic(err)
-		}
-	}
-
 	ptags, etags := make([]string, 0), make([]string, 0)
-	for ev := range pool.SubManyEose(ctx, settings.Relays, filters) {
+	for _, ev := range evs {
 		log.Println("Event ID: ", ev.ID)
+		pubkeys = append(pubkeys, fmt.Sprintf("%x", ev.PubKey))
 
 		ptags = ptags[:0]
 		etags = etags[:0]
@@ -224,69 +246,50 @@ func receiveAndProcessPoolEvents(ctx context.Context, db *sql.DB, pool *nostr.Si
 		if _, err := stmt.Exec(ev.ID, ev.PubKey, ev.Kind, ev.CreatedAt, ev.Content, string(tagJson), ev.Sig, ev.String(), pq.Array(ptags), pq.Array(etags)); err != nil {
 			panic(err)
 		}
-		log.Println("Waiting for next event")
 	}
 
 	log.Println("Ready to save events")
 	if err := tx.Commit(); err != nil {
 		panic(err)
 	}
-
-	updateUsers(pubkeys, db, pool)
-
-	defer func() {
-		for _, relay := range pool.Relays {
-			relay.Close()
-		}
-
-		log.Println("Done receiving and closed ralay connections")
-		//wg.Done()
-	}()
+	return pubkeys
 }
 
-func processQueue(db *sql.DB) {
-	var qry = `INSERT OR IGNORE INTO events (id, pubkey, kind, created_at, content,tags_full, sig, raw, p_tags, e_tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	ptags, etags := make([]string, 0), make([]string, 0)
-
-	defer func() {
-		log.Println("Done processing")
-	}()
-
-	for _, ev := range EventsQueue {
-		log.Println("Processing Queue")
-		log.Println(ev.String())
-
-		ptags = ptags[:0]
-		etags = etags[:0]
-
-		for _, tag := range ev.Tags {
-			switch {
-			case tag[0] == "e":
-				if b, e := hex.DecodeString(tag[1]); e != nil || len(b) != 32 {
-					continue
-				} else {
-					etags = append(etags, fmt.Sprintf("%x", b))
-				}
-			case tag[0] == "p":
-				if b, e := hex.DecodeString(tag[1]); e != nil || len(b) != 32 {
-					continue
-				} else {
-					ptags = append(ptags, fmt.Sprintf("%x", b))
-				}
+func (cfg *Config) getEvents(filter nostr.Filter) {
+	log.Println("Get Event data from relays")
+	var m sync.Map
+	cfg.Do(func(relay *nostr.Relay) {
+		evs, err := relay.QuerySync(context.Background(), filter)
+		if err != nil {
+			return
+		}
+		for _, ev := range evs {
+			if _, ok := m.Load(ev.ID); !ok {
+				/* if ev.Kind == nostr.KindEncryptedDirectMessage {
+					if err := cfg.Decode(ev); err != nil {
+						continue
+					}
+				} */
+				m.LoadOrStore(ev.ID, ev)
 			}
 		}
-		etagsString := strings.Join(etags, "\n")
-		ptagsString := strings.Join(ptags, "\n")
+	})
 
-		tagJson, err := json.Marshal(ev.Tags)
-		if err != nil {
-			log.Fatal(err)
-		}
-		_, execErr := db.Exec(qry, ev.ID, ev.PubKey, ev.Kind, ev.CreatedAt, ev.Content, string(tagJson), ev.Sig, ev.String(), ptagsString, etagsString)
-		if execErr != nil {
-			log.Fatal(execErr)
-		}
-	}
+	var evs []*nostr.Event
+	m.Range(func(k, v any) bool {
+		log.Println(k)
+		evs = append(evs, v.(*nostr.Event))
+		return true
+	})
+
+	var pubkeys = make([]string, 0)
+	pubkeys = cfg.saveEvents(evs)
+
+	cfg.updateUsers(pubkeys)
+
+	defer func() {
+		log.Println("Done receiving and closed ralay connections")
+	}()
 }
 
 func getFilters(createdAt int64) nostr.Filters {
@@ -302,9 +305,9 @@ func getFilters(createdAt int64) nostr.Filters {
 	return filters
 }
 
-func getRelayData(db *sql.DB, ctxParent context.Context, relay *nostr.Relay) { //}, wg *sync.WaitGroup) {
+func (cfg *Config) getEventData() {
 	var createdAt int64
-	row := db.QueryRow("SELECT MAX(created_at) as MaxCreated FROM events")
+	row := cfg.Db.QueryRow("SELECT MAX(created_at) as MaxCreated FROM events")
 	row.Scan(&createdAt)
 	log.Println(createdAt)
 	if createdAt < 1 {
@@ -315,66 +318,34 @@ func getRelayData(db *sql.DB, ctxParent context.Context, relay *nostr.Relay) { /
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(ctxParent, 15*time.Second)
-	defer cancel()
-	sub, err := relay.Subscribe(ctx, getFilters(createdAt))
-	if err != nil {
-		panic(err)
+	var timeStamp nostr.Timestamp = nostr.Timestamp(createdAt + 1)
+	filter := nostr.Filter{
+		Kinds: []int{nostr.KindTextNote, nostr.KindReaction, nostr.KindArticle},
+		Since: &timeStamp,
 	}
 
-	receiveEvents(sub)
-
-	defer func() {
-		log.Println("Closing shop")
-		sub.Unsub()
-		processQueue(db)
-		//relay.Close()
-		//wg.Done()
-	}()
-}
-
-func getPoolData(db *sql.DB, ctxParent context.Context, pool *nostr.SimplePool) {
-	var createdAt int64
-	row := db.QueryRow("SELECT MAX(created_at) as MaxCreated FROM events")
-	row.Scan(&createdAt)
-	log.Println(createdAt)
-	if createdAt < 1 {
-		createdAt = time.Now().Unix() - 60
-	}
-	if createdAt > time.Now().Unix()-60 {
-		log.Printf("Time lapse is to short for getting new data %d %d", createdAt, time.Now().Unix()-60)
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(ctxParent, 120*time.Second)
-	defer cancel()
-	receiveAndProcessPoolEvents(ctx, db, pool, getFilters(createdAt))
+	cfg.getEvents(filter)
 
 	defer func() {
 		log.Println("Closing shop")
 	}()
 }
 
-func updateUsers(pubkeys []string, db *sql.DB, pool *nostr.SimplePool) {
-	var err error
-	filters := []nostr.Filter{{
-		Kinds:   []int{nostr.KindSetMetadata},
-		Authors: pubkeys,
-	}}
-
+/* This function can go to storage.go */
+func (cfg *Config) saveProfiles(evs []*nostr.Event) {
 	var qry = `INSERT INTO "users" ("pubkey", "name","about", "picture",  "website", "nip05",
-	"lud16", "display_name", "raw", "created_at") 
+	"lud16", "display_name", "raw", "created_at")
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (pubkey) DO NOTHING;`
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
 	var tx *sql.Tx
-	tx, err = db.Begin()
+	tx, err := cfg.Db.Begin()
 	if err != nil {
 		panic(err)
 	}
-	for ev := range pool.SubManyEose(ctx, settings.Relays, filters) {
+	for _, ev := range evs {
 		var data Profile
 		err = json.Unmarshal([]byte(ev.Content), &data)
 		if err != nil {
@@ -394,11 +365,40 @@ func updateUsers(pubkeys []string, db *sql.DB, pool *nostr.SimplePool) {
 	if err := tx.Commit(); err != nil {
 		log.Fatal(err)
 	}
+}
 
+func (cfg *Config) updateUsers(pubkeys []string) {
+	filter := nostr.Filter{
+		Kinds:   []int{nostr.KindSetMetadata},
+		Authors: pubkeys,
+	}
+
+	log.Println("Get user data from relays")
+	var m sync.Map
+	cfg.Do(func(relay *nostr.Relay) {
+		evs, err := relay.QuerySync(context.Background(), filter)
+		if err != nil {
+			return
+		}
+		for _, ev := range evs {
+			if _, ok := m.Load(ev.ID); !ok {
+				m.LoadOrStore(ev.ID, ev)
+			}
+		}
+	})
+
+	var evs []*nostr.Event
+	m.Range(func(k, v any) bool {
+		log.Println(k)
+		evs = append(evs, v.(*nostr.Event))
+		return true
+	})
+
+	cfg.saveProfiles(evs)
 	log.Println("Done for users")
 }
 
-func getLast10(w http.ResponseWriter, r *http.Request) {
+func getLast(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
 	w.WriteHeader(http.StatusOK)
@@ -510,40 +510,43 @@ func blockUser(db *sql.DB, user *BlockUser) {
 	}
 }
 
-var settings Config
+func loadConfig() (*Config, error) {
+	var cfg Config
 
-func readConfig() error {
 	content, err := ioutil.ReadFile("./config.json")
 	if err != nil {
 		fmt.Println("Done", err)
 		log.Fatal("Error when opening file: ", err)
-		return err
+		return nil, err
 	}
 
-	err = json.Unmarshal(content, &settings)
+	err = json.Unmarshal(content, &cfg)
 	if err != nil {
 		log.Fatal("Error during Unmarshal(): ", err)
-		return err
+		return nil, err
 	}
 
 	//log.Println("Content nieuw", *settings)
 	// Let's print the unmarshalled data!
-	log.Printf("dbName: %s\n", settings.Database.Dbname)
-	log.Printf("Pubkey: %s\n", settings.Pubkey)
-	return nil
+	log.Printf("dbName: %s\n", cfg.Database.Dbname)
+	log.Printf("Pubkey: %s\n", cfg.Pubkey)
+	return &cfg, nil
 }
 
 func main() {
-	if err := readConfig(); err != nil {
+	cfg, err := loadConfig()
+	if err != nil {
 		panic(err)
 	}
 
 	// connection string
-	psqlconn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", settings.Database.Host, settings.Database.Port, settings.Database.User, settings.Database.Password, settings.Database.Dbname)
+	psqlconn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", cfg.Database.Host, cfg.Database.Port, cfg.Database.User, cfg.Database.Password, cfg.Database.Dbname)
 
 	// open database
 	db, err := sql.Open("postgres", psqlconn)
 	CheckError(err)
+
+	cfg.Db = db
 
 	// close database
 	defer db.Close()
@@ -561,25 +564,13 @@ func main() {
 
 	myDb = db
 
-	//var wg sync.WaitGroup
-	//wg.Add(1)
-	//ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second) //Keep it open for 1 minute and then close
-	//defer cancel()
-	//go getRelayData(db, ctx)
-	//wg.Wait()
-
-	//ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second) //Keep it open for 1 minute and then close
-	//defer cancel()
-	ctx := context.Background()
-	pool := nostr.NewSimplePool(context.Background())
-
 	// Windows may be missing this
 	mime.AddExtensionType(".js", "application/javascript")
-	http.Handle("/api/follow", http.HandlerFunc(getLast10))
+	http.HandleFunc("/api/follow", getLast)
 	http.HandleFunc("/api/getnext", func(w http.ResponseWriter, r *http.Request) {
 
 		EventsQueue = EventsQueue[:0]
-		go getPoolData(db, ctx, pool)
+		cfg.getEventData()
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -587,31 +578,6 @@ func main() {
 		test := make(map[string]string)
 		test["status"] = "ok"
 		test["message"] = "This will take a while"
-		json.NewEncoder(w).Encode(test)
-	})
-
-	http.HandleFunc("/api/updateusers", func(w http.ResponseWriter, r *http.Request) {
-
-		rows, err := myDb.Query("SELECT pubkey FROM events WHERE kind = 1 ORDER BY created_at DESC LIMIT 30")
-		if err != nil {
-			log.Fatal(err)
-			return
-		}
-		defer rows.Close()
-		var pubkeys []string
-		var pubkey string
-		for rows.Next() {
-			rows.Scan(&pubkey)
-			pubkeys = append(pubkeys, pubkey)
-		}
-		go updateUsers(pubkeys, db, pool)
-
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
-		w.WriteHeader(http.StatusOK)
-		test := []string{}
-		test = append(test, "Hello")
-		test = append(test, "Users")
 		json.NewEncoder(w).Encode(test)
 	})
 

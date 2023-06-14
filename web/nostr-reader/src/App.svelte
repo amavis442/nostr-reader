@@ -108,7 +108,7 @@ async function refreshView() {
           <div class="flex items-center">
             <img class="w-10 h-10 rounded-full mr-4" src="{ note.profile.picture ? note.profile.picture : placeholder}" alt="Placeholder" title="{ note.profile.about ? note.profile.about : ''}">
             <div class="text-sm text-left">
-              <p class="text-gray-900 leading-none">{ note.profile.name.slice(0, 20) } <button on:click="{blockUser(note.pubkey)}">Block</button></p>
+              <p class="text-gray-900 leading-none">{ note.profile.display_name ? note.profile.display_name : note.profile.name.slice(0, 20) } <button on:click="{blockUser(note.pubkey)}">Block</button></p>
               <p class="text-gray-600"><small>{ (new Date(note.created_at  * 1000)).toLocaleString('nl-NL') }</small></p>
             </div>
           </div>
