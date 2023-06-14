@@ -19,6 +19,16 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
+type Profile struct {
+	Name        string `json:"name"`
+	About       string `json:"about"`
+	Picture     string `json:"picture"`
+	Website     string `json:"website"`
+	Nip05       string `json:"nip05"`
+	Lud16       string `json:"lud16"`
+	DisplayName string `json:"display_name"`
+}
+
 type Event struct {
 	ID        string   `json:"id"`
 	Pubkey    string   `json:"pubkey"`
@@ -29,9 +39,13 @@ type Event struct {
 	Etags     []string `json:"etags"`
 	Ptags     []string `json:"ptags"`
 	Sig       string   `json:"sig"`
-	Name      string   `json:"name"`
-	About     string   `json:"about"`
-	Picture   string   `json:"picture"`
+	Profile   Profile  `json:"profile"`
+}
+
+type User struct {
+	Name    string `json:"name"`
+	About   string `json:"about"`
+	Picture string `json:"picture"`
 }
 
 type BlockUser struct {
@@ -79,6 +93,10 @@ CREATE TABLE IF NOT EXISTS users (
 	name TEXT,
 	about TEXT,
 	picture TEXT,
+	website TEXT,
+	nip05 TEXT,
+	lud16 TEXT,
+	display_name TEXT,
 	raw TEXT,
 	created_at INTEGER 	
 );
@@ -95,12 +113,6 @@ CREATE INDEX IF NOT EXISTS blockusers_by_pubkey ON blockusers (pubkey);
 var EventsQueue = make([]nostr.Event, 0)
 var myDb *sql.DB
 var ptagsQueue = make([]string, 0)
-
-type User struct {
-	Name    string `json:"name"`
-	About   string `json:"about"`
-	Picture string `json:"picture"`
-}
 
 func receiveEvents(sub *nostr.Subscription) {
 
@@ -170,12 +182,16 @@ func receiveAndProcessPoolEvents(ctx context.Context, db *sql.DB, pool *nostr.Si
 	}
 	defer stmt.Close() // Prepared statements take up server resources and should be closed after use.
 
-	ctxChild, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
+	log.Println("Opening relay connections and receiving from channel")
+	for _, relay := range pool.Relays {
+		err = relay.Connect(context.Background())
+		if err != nil {
+			panic(err)
+		}
+	}
 
 	ptags, etags := make([]string, 0), make([]string, 0)
-	log.Println("Receiving from channel")
-	for ev := range pool.SubMany(ctxChild, settings.Relays, filters) {
+	for ev := range pool.SubManyEose(ctx, settings.Relays, filters) {
 		log.Println("Event ID: ", ev.ID)
 
 		ptags = ptags[:0]
@@ -199,9 +215,6 @@ func receiveAndProcessPoolEvents(ctx context.Context, db *sql.DB, pool *nostr.Si
 			}
 		}
 
-		//etagsString := strings.Join(etags, "\n")
-		//ptagsString := strings.Join(ptags, "\n")
-
 		tagJson, err := json.Marshal(ev.Tags)
 		if err != nil {
 			log.Fatal(err)
@@ -219,13 +232,14 @@ func receiveAndProcessPoolEvents(ctx context.Context, db *sql.DB, pool *nostr.Si
 		panic(err)
 	}
 
-	go updateUsers(pubkeys, db, pool)
+	updateUsers(pubkeys, db, pool)
 
 	defer func() {
-		log.Println("Done receiving and closing context")
-		//sub.Unsub()
-		//processQueue(db)
-		//relay.Close()
+		for _, relay := range pool.Relays {
+			relay.Close()
+		}
+
+		log.Println("Done receiving and closed ralay connections")
 		//wg.Done()
 	}()
 }
@@ -332,7 +346,7 @@ func getPoolData(db *sql.DB, ctxParent context.Context, pool *nostr.SimplePool) 
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(ctxParent, 15*time.Second)
+	ctx, cancel := context.WithTimeout(ctxParent, 120*time.Second)
 	defer cancel()
 	receiveAndProcessPoolEvents(ctx, db, pool, getFilters(createdAt))
 
@@ -348,10 +362,11 @@ func updateUsers(pubkeys []string, db *sql.DB, pool *nostr.SimplePool) {
 		Authors: pubkeys,
 	}}
 
-	var qry = `INSERT INTO "users" ("pubkey", "name","about", "picture", "raw", "created_at") 
-		VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (pubkey) DO NOTHING;`
+	var qry = `INSERT INTO "users" ("pubkey", "name","about", "picture",  "website", "nip05",
+	"lud16", "display_name", "raw", "created_at") 
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (pubkey) DO NOTHING;`
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
 	var tx *sql.Tx
@@ -360,13 +375,13 @@ func updateUsers(pubkeys []string, db *sql.DB, pool *nostr.SimplePool) {
 		panic(err)
 	}
 	for ev := range pool.SubManyEose(ctx, settings.Relays, filters) {
-		var data User
+		var data Profile
 		err = json.Unmarshal([]byte(ev.Content), &data)
 		if err != nil {
 			panic(err)
 		}
 
-		_, err = tx.Exec(qry, ev.PubKey, data.Name, data.About, data.Picture, ev.String(), time.Now().Unix())
+		_, err = tx.Exec(qry, ev.PubKey, data.Name, data.About, data.Picture, data.Website, data.Nip05, data.Lud16, data.DisplayName, ev.String(), time.Now().Unix())
 		if err != nil {
 			if rollbackErr := tx.Rollback(); rollbackErr != nil {
 				log.Fatalf("update users: unable to rollback: %v", rollbackErr)
@@ -374,6 +389,7 @@ func updateUsers(pubkeys []string, db *sql.DB, pool *nostr.SimplePool) {
 			log.Fatal(err)
 			ctx.Done()
 		}
+		log.Println("User: ", data.Name)
 	}
 	if err := tx.Commit(); err != nil {
 		log.Fatal(err)
@@ -392,7 +408,8 @@ func getLast10(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	rows, err := tx.Query(`SELECT e.id, e.pubkey, e.kind, e.created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture
+	rows, err := tx.Query(`SELECT e.id, e.pubkey, e.kind, e.created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
+	u.website, u.nip05, u.lud16, u.display_name
 	FROM events e LEFT JOIN users u ON (u.pubkey = e.pubkey ) LEFT JOIN blockusers b on (b.pubkey = e.pubkey) 
 	WHERE e.kind = 1 AND b.pubkey IS NULL ORDER BY e.created_at DESC LIMIT 30`)
 	if err != nil {
@@ -409,19 +426,39 @@ func getLast10(w http.ResponseWriter, r *http.Request) {
 		var name sql.NullString
 		var about sql.NullString
 		var picture sql.NullString
-		if err := rows.Scan(&event.ID, &event.Pubkey, &event.Kind, &event.CreatedAt, &event.Content, &event.Tags_full, pq.Array(&event.Etags), pq.Array(&event.Ptags), &event.Sig, &name, &about, &picture); err != nil {
+
+		var website sql.NullString
+		var nip05 sql.NullString
+		var lud16 sql.NullString
+		var displayname sql.NullString
+
+		if err := rows.Scan(&event.ID, &event.Pubkey, &event.Kind, &event.CreatedAt, &event.Content, &event.Tags_full, pq.Array(&event.Etags), pq.Array(&event.Ptags), &event.Sig,
+			&name, &about, &picture, &website, &nip05, &lud16, &displayname); err != nil {
 			log.Fatal(err)
 		}
 		if name.Valid {
-			event.Name = name.String
+			event.Profile.Name = name.String
 		} else {
-			event.Name = event.Pubkey
+			event.Profile.Name = event.Pubkey
 		}
 		if about.Valid {
-			event.About = about.String
+			event.Profile.About = about.String
 		}
 		if picture.Valid {
-			event.Picture = picture.String
+			event.Profile.Picture = picture.String
+		}
+
+		if website.Valid {
+			event.Profile.Website = website.String
+		}
+		if nip05.Valid {
+			event.Profile.Nip05 = nip05.String
+		}
+		if lud16.Valid {
+			event.Profile.Lud16 = lud16.String
+		}
+		if displayname.Valid {
+			event.Profile.DisplayName = displayname.String
 		}
 
 		/* WIP
@@ -450,6 +487,13 @@ func searchEvent(id string, db *sql.DB) Event {
 	WHERE e.id = $1`, id)
 	var ev Event
 	row.Scan(&ev)
+
+	if ev.ID != "" {
+		log.Println("200 Found the event you are searching for ;)")
+	}
+	if ev.ID == "" {
+		log.Println("404 Event not found")
+	}
 	return ev
 }
 
@@ -540,9 +584,9 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
 		w.WriteHeader(http.StatusOK)
-		test := []string{}
-		test = append(test, "Hello")
-		test = append(test, "World")
+		test := make(map[string]string)
+		test["status"] = "ok"
+		test["message"] = "This will take a while"
 		json.NewEncoder(w).Encode(test)
 	})
 
