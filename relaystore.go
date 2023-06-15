@@ -48,6 +48,10 @@ type BlockUser struct {
 	Pubkey string `json:"pubkey"`
 }
 
+type FollowUser struct {
+	Pubkey string `json:"pubkey"`
+}
+
 type DbConfig struct {
 	User     string
 	Password string
@@ -112,6 +116,13 @@ CREATE TABLE IF NOT EXISTS blockusers (
 	created_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS blockusers_by_pubkey ON blockusers (pubkey);
+
+CREATE TABLE IF NOT EXISTS followusers (
+	id Integer Primary Key Generated Always as Identity, 
+	pubkey VARCHAR UNIQUE, 
+	created_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS followusers_by_pubkey ON followusers (pubkey);
 `
 
 var EventsQueue = make([]nostr.Event, 0)
@@ -261,22 +272,6 @@ func (cfg *Config) getLast(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(events)
 }
 
-func (cfg *Config) searchEvent(id string) Event {
-	row := cfg.Storage.Db.QueryRow(`SELECT e.id, e.pubkey, e.kind, e.created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture
-	FROM events e LEFT JOIN users u ON (u.pubkey = e.pubkey ) LEFT JOIN blockusers b on (b.pubkey = e.pubkey) 
-	WHERE e.id = $1`, id)
-	var ev Event
-	row.Scan(&ev)
-
-	if ev.ID != "" {
-		log.Println("200 Found the event you are searching for ;)")
-	}
-	if ev.ID == "" {
-		log.Println("404 Event not found")
-	}
-	return ev
-}
-
 func (cfg *Config) blockUser(user *BlockUser) {
 	_, err := cfg.Storage.Db.Exec(`INSERT INTO "blockusers" (pubkey, created_at) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING;`, user.Pubkey, time.Now().Unix())
 	if err != nil {
@@ -365,6 +360,26 @@ func main() {
 		json.NewEncoder(w).Encode(test)
 	})
 
+	http.HandleFunc("/api/followuser", func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		var user FollowUser
+		err = json.NewDecoder(r.Body).Decode(&user)
+		if err != nil {
+			panic(err)
+		}
+
+		cfg.Storage.FollowUser(user.Pubkey)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
+		w.WriteHeader(http.StatusOK)
+		test := map[string]string{}
+		test["status"] = "ok"
+		test["followed"] = user.Pubkey
+		json.NewEncoder(w).Encode(test)
+	})
+
 	http.HandleFunc("/api/searchevent", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
@@ -377,7 +392,43 @@ func main() {
 			panic(err)
 		}
 		log.Println("Searching event with Id: ", j.ID)
-		ev := cfg.searchEvent(j.ID)
+		ev := cfg.Storage.FindEvent(j.ID)
+		if ev.ID == "" {
+			var tagMap nostr.TagMap
+			if tagMap == nil {
+				tagMap = make(nostr.TagMap)
+			}
+			tagMap["e"] = append(tagMap["e"], j.ID)
+			filter := nostr.Filter{
+				Tags:  tagMap,
+				Limit: 1,
+			}
+			log.Println(filter)
+			var m sync.Map
+			cfg.Do(func(relay *nostr.Relay) {
+				evs, err := relay.QuerySync(context.Background(), filter)
+				if err != nil {
+					return
+				}
+				for _, ev := range evs {
+					if _, ok := m.Load(ev.ID); !ok {
+						m.LoadOrStore(ev.ID, ev)
+					}
+				}
+			})
+
+			var evs []*nostr.Event
+			m.Range(func(k, v any) bool {
+				log.Println(k)
+				evs = append(evs, v.(*nostr.Event))
+				return true
+			})
+
+			pubkeys := cfg.Storage.SaveEvents(evs)
+			cfg.updateUsers(pubkeys)
+
+		}
+		ev = cfg.Storage.FindEvent(j.ID)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS

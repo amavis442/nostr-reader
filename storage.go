@@ -205,3 +205,55 @@ func (db *Storage) GetEvents(limit int) (*[]Event, error) {
 
 	return &events, nil
 }
+
+func (db *Storage) FindEvent(id string) Event {
+	var qry = `SELECT e.id, e.pubkey, e.kind, e.created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
+	u.website, u.nip05, u.lud16, u.display_name
+	FROM events e LEFT JOIN users u ON (u.pubkey = e.pubkey ) LEFT JOIN blockusers b on (b.pubkey = e.pubkey) 
+	WHERE e.id = $1`
+	//qry = qry + "'" + id + "'"
+	log.Println(qry)
+
+	var event Event
+	var name sql.NullString
+	var about sql.NullString
+	var picture sql.NullString
+
+	var website sql.NullString
+	var nip05 sql.NullString
+	var lud16 sql.NullString
+	var displayname sql.NullString
+
+	err := db.Db.QueryRow(qry, id).Scan(&event.ID, &event.Pubkey, &event.Kind, &event.CreatedAt, &event.Content, &event.Tags_full, pq.Array(&event.Etags), pq.Array(&event.Ptags), &event.Sig,
+		&name, &about, &picture, &website, &nip05, &lud16, &displayname)
+	switch {
+	case err == sql.ErrNoRows:
+		log.Printf("404 no event with id %s\n", id)
+	case err != nil:
+		log.Fatalf("502 query error: %v\n", err)
+	default:
+		log.Println("200 Event: ", event)
+	}
+
+	return event
+}
+
+func (db *Storage) BlockUser(pubkey string) error {
+	_, err := db.Db.Exec(`INSERT INTO "blockusers" (pubkey, created_at) VALUES ($1, $2) ON CONFLICT (pubkey) DO NOTHING;`, pubkey, time.Now().Unix())
+	if err != nil {
+		log.Fatal(err)
+		return err
+	}
+
+	return nil
+}
+
+func (db *Storage) FollowUser(pubkey string) error {
+	_, err := db.Db.Exec(`INSERT INTO "followusers" (pubkey, created_at) VALUES ($1, $2) ON CONFLICT (pubkey) DO NOTHING;`, pubkey, time.Now().Unix())
+	if err != nil {
+		log.Fatal(err)
+		return err
+	}
+
+	return nil
+}
