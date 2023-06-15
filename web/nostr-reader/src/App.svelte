@@ -58,9 +58,28 @@ async function refreshView() {
         console.error("error", err);
       });
   }
+  
+  function followUser(pubkey) {
+    fetch("/api/followuser", {
+      method: "POST",
+      body: JSON.stringify({ pubkey: pubkey }),
+      headers: {
+        "Content-Type": "application/json",
+      }
+    }).then((res) => {
+        return res.json();
+      })
+      .then((data) => {
+        console.log("Json is ", data);
+        return data;
+      })
+      .catch((err) => {
+        console.error("error", err);
+      });
+  }
 
   let searchEvent = writable({})
-  function searchEvents(etag) 
+  function searchEvents(noteId, etag) 
   {
     fetch("/api/searchevent", {
       method: "POST",
@@ -73,7 +92,13 @@ async function refreshView() {
       })
       .then((data) => {
         console.log("Json is ", data);
-        document.getElementById('search'+etag).html = data.content;
+        if (data.content) {
+          document.getElementById('search_' + noteId + '_' + etag).innerHTML = data.content+ '<br/>' + data.profile.name;
+        }
+        if (!data.content) {
+          document.getElementById('search_' + noteId + '_' + etag).innerHTML = "No event data available";
+        }
+        
         return data;
       })
       .catch((err) => {
@@ -100,15 +125,15 @@ async function refreshView() {
             {#if note.etags && note.etags.length > 0}
               Response to:
               {#each note.etags as etag}
-                <p><small><button on:click="{searchEvents(etag)}">{etag}</button></small></p>
-                <div id="search{etag}"></div>
+                <p><small><button on:click="{searchEvents(note.id, etag)}">{etag}</button></small></p>
+                <div id="search_{note.id}_{etag}" class="border-t border-l border-r border-gray-400 p-10"></div>
               {/each}
             {/if}
           </div>
           <div class="flex items-center">
             <img class="w-10 h-10 rounded-full mr-4" src="{ note.profile.picture ? note.profile.picture : placeholder}" alt="Placeholder" title="{ note.profile.about ? note.profile.about : ''}">
             <div class="text-sm text-left">
-              <p class="text-gray-900 leading-none">{ note.profile.display_name ? note.profile.display_name : note.profile.name.slice(0, 20) } <button on:click="{blockUser(note.pubkey)}">Block</button></p>
+              <p class="text-gray-900 leading-none">{ note.profile.display_name ? note.profile.display_name : note.profile.name.slice(0, 20) } <button on:click="{followUser(note.pubkey)}">Follow</button>| <button on:click="{blockUser(note.pubkey)}">Block</button></p>
               <p class="text-gray-600"><small>{ (new Date(note.created_at  * 1000)).toLocaleString('nl-NL') }</small></p>
             </div>
           </div>
