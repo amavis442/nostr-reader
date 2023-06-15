@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -13,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lib/pq"
 	"github.com/nbd-wtf/go-nostr"
 )
 
@@ -72,7 +70,7 @@ type Config struct {
 	Npub     string
 	Pk       string
 	Nsec     string
-	Db       *sql.DB
+	Storage  *Storage
 }
 
 const CreateQuery string = `
@@ -120,55 +118,6 @@ var EventsQueue = make([]nostr.Event, 0)
 var myDb *sql.DB
 var ptagsQueue = make([]string, 0)
 
-func receiveEvents(sub *nostr.Subscription) {
-
-	//var qry = `INSERT OR IGNORE INTO events (id, pubkey, kind, created_at, content,tags_full, sig, raw, p_tags, e_tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-
-	//var ptags []string
-	//var etags []string
-	//ptags, etags := make([]string, 0), make([]string, 0)
-
-	for ev := range sub.Events {
-		log.Println("Receiving from channel")
-		log.Println(ev.String())
-
-		//ptags = ptags[:0]
-		//etags = etags[:0]
-
-		EventsQueue = append(EventsQueue, *ev)
-
-		/*
-			for _, tag := range ev.Tags {
-				switch {
-				case tag[0] == "e":
-					if b, e := hex.DecodeString(tag[1]); e != nil || len(b) != 32 {
-						continue
-					} else {
-						etags = append(etags, fmt.Sprintf("%x", b))
-					}
-				case tag[0] == "p":
-					if b, e := hex.DecodeString(tag[1]); e != nil || len(b) != 32 {
-						continue
-					} else {
-						ptags = append(ptags, fmt.Sprintf("%x", b))
-					}
-				}
-			}
-			etagsString := strings.Join(etags, "\n")
-			ptagsString := strings.Join(ptags, "\n")
-
-			tagJson, err := json.Marshal(ev.Tags)
-			if err != nil {
-				log.Fatal(err)
-			}
-			_, execErr := db.Exec(qry, ev.ID, ev.PubKey, ev.Kind, ev.CreatedAt, ev.Content, string(tagJson), ev.Sig, ev.String(), ptagsString, etagsString)
-			if execErr != nil {
-				log.Fatal(execErr)
-			}
-		*/
-	}
-}
-
 /*
  * Please see https://github.com/mattn/algia/blob/main/main.go for the code i shamelessly copied
  */
@@ -190,69 +139,6 @@ func (cfg *Config) Do(f func(*nostr.Relay)) {
 		}(&wg, v)
 	}
 	wg.Wait()
-}
-
-/* This function can go to storage.go */
-func (cfg *Config) saveEvents(evs []*nostr.Event) []string {
-	var qry = `INSERT INTO "events" ("id", "pubkey", "kind", "created_at", "content" , "tags_full" , "sig" , "raw" , "ptags" , "etags") 
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO NOTHING;`
-
-	var pubkeys = make([]string, 0)
-
-	tx, err := cfg.Db.Begin()
-	if err != nil {
-		panic(err)
-	}
-	defer tx.Rollback() // The rollback will be ignored if the tx has been committed later in the function.
-
-	stmt, err := tx.Prepare(qry)
-	if err != nil {
-		panic(err)
-	}
-	defer stmt.Close() // Prepared statements take up server resources and should be closed after use.
-
-	ptags, etags := make([]string, 0), make([]string, 0)
-	for _, ev := range evs {
-		log.Println("Event ID: ", ev.ID)
-		pubkeys = append(pubkeys, fmt.Sprintf("%x", ev.PubKey))
-
-		ptags = ptags[:0]
-		etags = etags[:0]
-
-		for _, tag := range ev.Tags {
-			switch {
-			case tag[0] == "e":
-				if b, e := hex.DecodeString(tag[1]); e != nil || len(b) != 32 {
-					continue
-				} else {
-					etags = append(etags, fmt.Sprintf("%x", b))
-				}
-			case tag[0] == "p":
-				if b, e := hex.DecodeString(tag[1]); e != nil || len(b) != 32 {
-					continue
-				} else {
-					ptags = append(ptags, fmt.Sprintf("%x", b))
-					pubkeys = append(pubkeys, fmt.Sprintf("%x", b))
-				}
-			}
-		}
-
-		tagJson, err := json.Marshal(ev.Tags)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		log.Println("Add to transaction")
-		if _, err := stmt.Exec(ev.ID, ev.PubKey, ev.Kind, ev.CreatedAt, ev.Content, string(tagJson), ev.Sig, ev.String(), pq.Array(ptags), pq.Array(etags)); err != nil {
-			panic(err)
-		}
-	}
-
-	log.Println("Ready to save events")
-	if err := tx.Commit(); err != nil {
-		panic(err)
-	}
-	return pubkeys
 }
 
 func (cfg *Config) getEvents(filter nostr.Filter) {
@@ -283,7 +169,7 @@ func (cfg *Config) getEvents(filter nostr.Filter) {
 	})
 
 	var pubkeys = make([]string, 0)
-	pubkeys = cfg.saveEvents(evs)
+	pubkeys = cfg.Storage.SaveEvents(evs)
 
 	cfg.updateUsers(pubkeys)
 
@@ -307,7 +193,7 @@ func getFilters(createdAt int64) nostr.Filters {
 
 func (cfg *Config) getEventData() {
 	var createdAt int64
-	row := cfg.Db.QueryRow("SELECT MAX(created_at) as MaxCreated FROM events")
+	row := cfg.Storage.Db.QueryRow("SELECT MAX(created_at) as MaxCreated FROM events")
 	row.Scan(&createdAt)
 	log.Println(createdAt)
 	if createdAt < 1 {
@@ -329,42 +215,6 @@ func (cfg *Config) getEventData() {
 	defer func() {
 		log.Println("Closing shop")
 	}()
-}
-
-/* This function can go to storage.go */
-func (cfg *Config) saveProfiles(evs []*nostr.Event) {
-	var qry = `INSERT INTO "users" ("pubkey", "name","about", "picture",  "website", "nip05",
-	"lud16", "display_name", "raw", "created_at")
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (pubkey) DO NOTHING;`
-
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
-
-	var tx *sql.Tx
-	tx, err := cfg.Db.Begin()
-	if err != nil {
-		panic(err)
-	}
-	for _, ev := range evs {
-		var data Profile
-		err = json.Unmarshal([]byte(ev.Content), &data)
-		if err != nil {
-			panic(err)
-		}
-
-		_, err = tx.Exec(qry, ev.PubKey, data.Name, data.About, data.Picture, data.Website, data.Nip05, data.Lud16, data.DisplayName, ev.String(), time.Now().Unix())
-		if err != nil {
-			if rollbackErr := tx.Rollback(); rollbackErr != nil {
-				log.Fatalf("update users: unable to rollback: %v", rollbackErr)
-			}
-			log.Fatal(err)
-			ctx.Done()
-		}
-		log.Println("User: ", data.Name)
-	}
-	if err := tx.Commit(); err != nil {
-		log.Fatal(err)
-	}
 }
 
 func (cfg *Config) updateUsers(pubkeys []string) {
@@ -394,95 +244,25 @@ func (cfg *Config) updateUsers(pubkeys []string) {
 		return true
 	})
 
-	cfg.saveProfiles(evs)
+	cfg.Storage.SaveProfiles(evs)
 	log.Println("Done for users")
 }
 
-func getLast(w http.ResponseWriter, r *http.Request) {
+func (cfg *Config) getLast(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
 	w.WriteHeader(http.StatusOK)
 
-	tx, err := myDb.Begin()
-	if err != nil {
-		panic(err)
-	}
-
-	rows, err := tx.Query(`SELECT e.id, e.pubkey, e.kind, e.created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
-	u.website, u.nip05, u.lud16, u.display_name
-	FROM events e LEFT JOIN users u ON (u.pubkey = e.pubkey ) LEFT JOIN blockusers b on (b.pubkey = e.pubkey) 
-	WHERE e.kind = 1 AND b.pubkey IS NULL ORDER BY e.created_at DESC LIMIT 30`)
+	events, err := cfg.Storage.GetEvents(30)
 	if err != nil {
 		log.Fatal(err)
-		return
 	}
-	defer rows.Close()
-
-	//log.Println("We got rows")
-
-	events := make([]Event, 0)
-	for rows.Next() {
-		var event Event
-		var name sql.NullString
-		var about sql.NullString
-		var picture sql.NullString
-
-		var website sql.NullString
-		var nip05 sql.NullString
-		var lud16 sql.NullString
-		var displayname sql.NullString
-
-		if err := rows.Scan(&event.ID, &event.Pubkey, &event.Kind, &event.CreatedAt, &event.Content, &event.Tags_full, pq.Array(&event.Etags), pq.Array(&event.Ptags), &event.Sig,
-			&name, &about, &picture, &website, &nip05, &lud16, &displayname); err != nil {
-			log.Fatal(err)
-		}
-		if name.Valid {
-			event.Profile.Name = name.String
-		} else {
-			event.Profile.Name = event.Pubkey
-		}
-		if about.Valid {
-			event.Profile.About = about.String
-		}
-		if picture.Valid {
-			event.Profile.Picture = picture.String
-		}
-
-		if website.Valid {
-			event.Profile.Website = website.String
-		}
-		if nip05.Valid {
-			event.Profile.Nip05 = nip05.String
-		}
-		if lud16.Valid {
-			event.Profile.Lud16 = lud16.String
-		}
-		if displayname.Valid {
-			event.Profile.DisplayName = displayname.String
-		}
-
-		/* WIP
-		var tags nostr.Tags = json.Unmarshal(event.Tags_full.(nostr.Tag))
-		if tags.GetFirst("e") != nil {
-			continue
-		}
-		*/
-		events = append(events, event)
-	}
-	// Check for errors from iterating over rows.
-	if err := rows.Err(); err != nil {
-		log.Fatal(err)
-	}
-
-	//encoder := json.NewEncoder(w)
-	//encoder.SetEscapeHTML(false)
-	//encoder.Encode(events)
 
 	json.NewEncoder(w).Encode(events)
 }
 
-func searchEvent(id string, db *sql.DB) Event {
-	row := db.QueryRow(`SELECT e.id, e.pubkey, e.kind, e.created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture
+func (cfg *Config) searchEvent(id string) Event {
+	row := cfg.Storage.Db.QueryRow(`SELECT e.id, e.pubkey, e.kind, e.created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture
 	FROM events e LEFT JOIN users u ON (u.pubkey = e.pubkey ) LEFT JOIN blockusers b on (b.pubkey = e.pubkey) 
 	WHERE e.id = $1`, id)
 	var ev Event
@@ -497,14 +277,8 @@ func searchEvent(id string, db *sql.DB) Event {
 	return ev
 }
 
-func CheckError(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
-
-func blockUser(db *sql.DB, user *BlockUser) {
-	_, err := myDb.Exec(`INSERT INTO "blockusers" (pubkey, created_at) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING;`, user.Pubkey, time.Now().Unix())
+func (cfg *Config) blockUser(user *BlockUser) {
+	_, err := cfg.Storage.Db.Exec(`INSERT INTO "blockusers" (pubkey, created_at) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING;`, user.Pubkey, time.Now().Unix())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -539,34 +313,24 @@ func main() {
 		panic(err)
 	}
 
-	// connection string
-	psqlconn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", cfg.Database.Host, cfg.Database.Port, cfg.Database.User, cfg.Database.Password, cfg.Database.Dbname)
+	var st Storage
+	st.Connect(cfg)
 
-	// open database
-	db, err := sql.Open("postgres", psqlconn)
-	CheckError(err)
-
-	cfg.Db = db
+	cfg.Storage = &st
 
 	// close database
-	defer db.Close()
+	defer st.Db.Close()
 
-	// check db
-	err = db.Ping()
-	CheckError(err)
-
-	fmt.Println("Connected!")
-
-	_, err = db.Exec(CreateQuery)
+	_, err = st.Db.Exec(CreateQuery)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	myDb = db
+	myDb = st.Db
 
 	// Windows may be missing this
 	mime.AddExtensionType(".js", "application/javascript")
-	http.HandleFunc("/api/follow", getLast)
+	http.HandleFunc("/api/follow", cfg.getLast)
 	http.HandleFunc("/api/getnext", func(w http.ResponseWriter, r *http.Request) {
 
 		EventsQueue = EventsQueue[:0]
@@ -590,7 +354,7 @@ func main() {
 			panic(err)
 		}
 
-		blockUser(db, &j)
+		cfg.blockUser(&j)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -613,7 +377,7 @@ func main() {
 			panic(err)
 		}
 		log.Println("Searching event with Id: ", j.ID)
-		ev := searchEvent(j.ID, db)
+		ev := cfg.searchEvent(j.ID)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS

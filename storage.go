@@ -17,6 +17,24 @@ type Storage struct {
 	Db *sql.DB
 }
 
+func (db *Storage) CheckError(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (db *Storage) Connect(cfg *Config) {
+	// connection string
+	psqlconn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", cfg.Database.Host, cfg.Database.Port, cfg.Database.User, cfg.Database.Password, cfg.Database.Dbname)
+
+	var err error
+	// open database
+	db.Db, err = sql.Open("postgres", psqlconn)
+	db.CheckError(err)
+
+	fmt.Println("Connected!")
+}
+
 func (db *Storage) SaveProfiles(evs []*nostr.Event) {
 	var qry = `INSERT INTO "users" ("pubkey", "name","about", "picture",  "website", "nip05",
 	"lud16", "display_name", "raw", "created_at")
