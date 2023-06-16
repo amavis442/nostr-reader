@@ -455,9 +455,10 @@ func main() {
 
 		w.WriteHeader(http.StatusOK)
 		t := strings.TrimSpace(url.Url)
-		log.Println("Url to preview: ", t)
+		s := strings.Split(t, "\n")
+		log.Println("Url to preview: ", s[0])
 
-		result, err := URLPreview(t)
+		result, err := URLPreview(s[0])
 		if err != nil {
 			log.Fatal(err)
 		}
