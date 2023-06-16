@@ -460,7 +460,8 @@ func main() {
 
 		result, err := URLPreview(s[0])
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
+
 		}
 		log.Println("Preview result: ", result)
 		json.NewEncoder(w).Encode(result)

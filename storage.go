@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lib/pq"
+	"github.com/microcosm-cc/bluemonday"
 	"github.com/nbd-wtf/go-nostr"
 )
 
@@ -118,6 +119,11 @@ func (db *Storage) SaveEvents(evs []*nostr.Event) []string {
 		if err != nil {
 			log.Fatal(err)
 		}
+
+		p := bluemonday.StrictPolicy()
+
+		// The policy can then be used to sanitize lots of input and it is safe to use the policy in multiple goroutines
+		ev.Content = p.Sanitize(ev.Content)
 
 		log.Println("Add to transaction")
 		if _, err := stmt.Exec(ev.ID, ev.PubKey, ev.Kind, ev.CreatedAt, ev.Content, string(tagJson), ev.Sig, ev.String(), pq.Array(ptags), pq.Array(etags)); err != nil {
