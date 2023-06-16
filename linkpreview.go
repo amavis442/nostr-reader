@@ -1,0 +1,170 @@
+package main
+
+/*
+ * Based on https://github.com/sbabashahi/urlPreviewGo/blob/master/main.go
+ */
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	parse "net/url"
+	"strings"
+	"time"
+
+	"golang.org/x/net/html"
+)
+
+// HTMLMeta data to response
+type HTMLMeta struct {
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Images      []string `json:"images"`
+	SiteName    string   `json:"siteName"`
+	Icon        string   `json:"icon"`
+	Videos      []string `json:"videos"`
+	MediaType   string   `json:"mediaType"`
+	ContentType string   `json:"contentType"`
+	Url         string   `json:"url"`
+	Favicons    []string `json:"favicons"`
+}
+
+// HandleURL check it and validations
+func HandleURL(url string) (string, error) {
+	if url == "" {
+		msg := "You missed to set url query param."
+		return msg, errors.New(msg)
+	}
+	u, err := parse.Parse(url)
+	if err != nil {
+		return err.Error(), err
+	}
+	if u.Scheme == "" {
+		url = fmt.Sprintf("%s%s", "http://", url)
+	} else if !strings.HasPrefix(u.Scheme, "http") {
+		msg := "URL schema must be http or https."
+		return msg, errors.New(msg)
+	}
+	_, err = parse.ParseRequestURI(url)
+	if err != nil {
+		return err.Error(), err
+	}
+	return url, nil
+}
+
+// Message function structure response
+func Message(data interface{}, message string, status bool) map[string]interface{} {
+	now := time.Now()
+	return map[string]interface{}{"data": data, "status": status, "message": message, "current_time": now.Unix()}
+}
+
+// Respond function send response as json
+func Respond(w http.ResponseWriter, data map[string]interface{}) {
+	w.Header().Add("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(data)
+}
+
+// URLPreview function for main page
+func URLPreview(url string) (map[string]interface{}, error) {
+	meta := HTMLMeta{}
+
+	resp, err := http.Get(url)
+	// handle the error if there is one
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New("request not succesfull " + fmt.Sprintf("%d", resp.StatusCode))
+	}
+	contentType := resp.Header.Get("Content-type")
+
+	if contentType == "image/jpeg" {
+		meta.MediaType = "image"
+	} else {
+		// do this now so it won't be forgotten
+		meta = Extract(resp.Body)
+	}
+	meta.Url = url
+	meta.ContentType = contentType
+
+	defer resp.Body.Close()
+
+	data := map[string]interface{}{"url": url, "data": meta}
+	return data, nil
+}
+
+// Extract html meta tags
+func Extract(resp io.Reader) (hm HTMLMeta) {
+	z := html.NewTokenizer(resp)
+
+	for {
+		tt := z.Next()
+		switch tt {
+		case html.ErrorToken:
+			return
+		case html.StartTagToken, html.SelfClosingTagToken:
+			t := z.Token()
+			if t.Data == "meta" {
+				title, ok := extractMetaProperty(t, "og:title")
+				if ok {
+					hm.Title = title
+				}
+
+				desc, ok := extractMetaProperty(t, "og:description")
+				if ok {
+					hm.Description = desc
+				}
+
+				image, ok := extractMetaProperty(t, "og:image")
+				if ok {
+					hm.Images = append(hm.Images, image)
+				}
+
+				siteName, ok := extractMetaProperty(t, "og:site_name")
+				if ok {
+					hm.SiteName = siteName
+				}
+
+				mediaType, ok := extractMetaProperty(t, "og:type")
+				if ok {
+					hm.MediaType = mediaType
+				}
+			}
+			if t.Data == "link" {
+				icon, ok := extractIcon(t, "shortcut icon")
+				if ok {
+					hm.Favicons = append(hm.Favicons, icon)
+				}
+			}
+		}
+	}
+}
+
+func extractMetaProperty(t html.Token, prop string) (content string, ok bool) {
+	for _, attr := range t.Attr {
+		if attr.Key == "property" && attr.Val == prop {
+			ok = true
+		}
+
+		if attr.Key == "content" {
+			content = attr.Val
+		}
+	}
+
+	return
+}
+
+func extractIcon(t html.Token, prop string) (content string, ok bool) {
+	for _, attr := range t.Attr {
+		if attr.Key == "rel" && attr.Val == prop {
+			ok = true
+		}
+
+		if attr.Key == "href" {
+			content = attr.Val
+		}
+	}
+
+	return
+}

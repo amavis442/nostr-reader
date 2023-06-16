@@ -9,6 +9,7 @@ import (
 	"log"
 	"mime"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -434,6 +435,34 @@ func main() {
 		w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(ev)
+	})
+
+	http.HandleFunc("/api/preview/link", func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		type Url struct {
+			Url string
+		}
+		var url Url
+		err = json.NewDecoder(r.Body).Decode(&url)
+		if err != nil {
+			panic(err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept")
+
+		w.WriteHeader(http.StatusOK)
+		t := strings.TrimSpace(url.Url)
+		log.Println("Url to preview: ", t)
+
+		result, err := URLPreview(t)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Println("Preview result: ", result)
+		json.NewEncoder(w).Encode(result)
 	})
 
 	http.Handle("/", http.FileServer(http.Dir("web/nostr-reader/dist")))

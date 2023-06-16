@@ -3,7 +3,7 @@
   import { get, writable, type Writable } from "svelte/store";
   import placeholder from './assets/profile-picture.jpg';
   import { toHtml, findLink } from "./lib/util/html";
-
+  import Preview from "./lib/partials/Preview/Preview.svelte";
 
   let page = writable([]);
   let test = []
@@ -93,7 +93,7 @@ async function refreshView() {
       .then((data) => {
         console.log("Json is ", data);
         if (data.content) {
-          document.getElementById('search_' + noteId + '_' + etag).innerHTML = data.content+ '<br/>' + data.profile.name;
+          document.getElementById('search_' + noteId + '_' + etag).innerHTML = toHtml(data.content) + '<br/>' + data.profile.name;
         }
         if (!data.content) {
           document.getElementById('search_' + noteId + '_' + etag).innerHTML = "No event data available";
@@ -121,7 +121,20 @@ async function refreshView() {
           <div class="mb-8 text-left">
             <small>Event id: {note.id}</small>
             <hr/>
-            <p class="text-gray-700 text-base">{@html toHtml(note.content)}</p>
+            <p class="text-gray-700 text-base">
+              {@html toHtml(note.content)}
+              {#if findLink(note.content)}
+              <!-- svelte-ignore a11y-click-events-have-key-events -->
+              <div class="mt-2" on:click={(e) => e.stopPropagation()}>
+                <Preview
+                  endpoint={`${
+                    import.meta.env.VITE_PREVIEW_LINK
+                  }/api/preview/link`}
+                  url={findLink(note.content)}
+                />
+              </div>
+            {/if}
+            </p>
             {#if note.etags && note.etags.length > 0}
               Response to:
               {#each note.etags as etag}
