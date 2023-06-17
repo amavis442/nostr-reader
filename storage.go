@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/lib/pq"
@@ -124,7 +125,7 @@ func (db *Storage) SaveEvents(evs []*nostr.Event) []string {
 
 		// The policy can then be used to sanitize lots of input and it is safe to use the policy in multiple goroutines
 		ev.Content = p.Sanitize(ev.Content)
-
+		ev.Content = strings.ReplaceAll(ev.Content, "&#39;", "'")
 		log.Println("Add to transaction")
 		if _, err := stmt.Exec(ev.ID, ev.PubKey, ev.Kind, ev.CreatedAt, ev.Content, string(tagJson), ev.Sig, ev.String(), pq.Array(ptags), pq.Array(etags)); err != nil {
 			panic(err)
