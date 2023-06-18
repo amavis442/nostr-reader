@@ -79,7 +79,7 @@ func URLPreview(url string) (map[string]interface{}, error) {
 	}
 	contentType := resp.Header.Get("Content-type")
 
-	if contentType == "image/jpeg" || contentType == "image/gif" || contentType == "image/webp" || contentType == "image/png" {
+	if contentType == "image/jpeg" || contentType == "image/jpg" || contentType == "image/gif" || contentType == "image/webp" || contentType == "image/png" {
 		meta.MediaType = "image"
 	} else {
 		// do this now so it won't be forgotten
