@@ -76,6 +76,8 @@ func (db *Storage) SaveEvents(evs []*nostr.Event) []string {
 	var qry = `INSERT INTO "events" ("id", "pubkey", "kind", "created_at", "content" , "tags_full" , "sig" , "raw" , "ptags" , "etags") 
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO NOTHING;`
 
+	var treeQry = `INSERT INTO tree ("event_id","root_event_id", "reply_event_id", "created_at") VALUES ($1, $2, $3, $4)`
+
 	var pubkeys = make([]string, 0)
 
 	tx, err := db.Db.Begin()
@@ -91,6 +93,12 @@ func (db *Storage) SaveEvents(evs []*nostr.Event) []string {
 	defer stmt.Close() // Prepared statements take up server resources and should be closed after use.
 
 	ptags, etags := make([]string, 0), make([]string, 0)
+
+	type Tree struct {
+		RootTag  string
+		ReplyTag string
+	}
+	var tree Tree
 	for _, ev := range evs {
 		log.Println("Event ID: ", ev.ID)
 		pubkeys = append(pubkeys, fmt.Sprintf("%x", ev.PubKey))
@@ -99,6 +107,9 @@ func (db *Storage) SaveEvents(evs []*nostr.Event) []string {
 		etags = etags[:0]
 		ptagsNum := 0
 		etagsNum := 0
+
+		tree.RootTag = ""
+		tree.ReplyTag = ""
 		for _, tag := range ev.Tags {
 			switch {
 			case tag[0] == "e":
@@ -107,6 +118,12 @@ func (db *Storage) SaveEvents(evs []*nostr.Event) []string {
 				} else {
 					etags = append(etags, fmt.Sprintf("%x", b))
 					etagsNum = etagsNum + 1
+				}
+				if len(tag) == 4 && tag[3] == "root" {
+					tree.RootTag = tag[1]
+				}
+				if len(tag) == 4 && tag[3] == "reply" {
+					tree.ReplyTag = tag[1]
 				}
 			case tag[0] == "p":
 				if b, e := hex.DecodeString(tag[1]); e != nil || len(b) != 32 {
@@ -130,6 +147,12 @@ func (db *Storage) SaveEvents(evs []*nostr.Event) []string {
 		ev.Content = p.Sanitize(ev.Content)
 		ev.Content = strings.ReplaceAll(ev.Content, "&#39;", "'")
 		ev.Content = strings.ReplaceAll(ev.Content, "&#34;", "\"")
+		ev.Content = strings.ReplaceAll(ev.Content, "&lt;", "<")
+		ev.Content = strings.ReplaceAll(ev.Content, "&gt;", ">")
+		ev.Content = strings.ReplaceAll(ev.Content, "&amp;", "&")
+		ev.Content = strings.ReplaceAll(ev.Content, "<br>", "\n")
+		ev.Content = strings.ReplaceAll(ev.Content, "<br/>", "\n")
+
 		log.Println("Add to transaction")
 		ev.Content = strings.ReplaceAll(ev.Content, "\u0000", "")
 		ptagsSliceSize := ptagsNum
@@ -145,6 +168,12 @@ func (db *Storage) SaveEvents(evs []*nostr.Event) []string {
 		if _, err := stmt.Exec(ev.ID, ev.PubKey, ev.Kind, ev.CreatedAt, ev.Content, string(tagJson), ev.Sig, ev.String(), pq.Array(ptags), pq.Array(etags)); err != nil {
 			log.Fatal(ev.String(), err)
 			panic(err)
+		}
+
+		if len(tree.RootTag) > 0 {
+			log.Println("Roottag is ", tree.RootTag)
+
+			tx.Exec(treeQry, ev.ID, tree.RootTag, tree.ReplyTag, time.Now().Unix())
 		}
 	}
 

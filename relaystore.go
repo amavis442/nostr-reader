@@ -131,6 +131,14 @@ CREATE TABLE IF NOT EXISTS seen (
 	created_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS seen_by_event_id ON seen (event_id);
+
+CREATE TABLE IF NOT EXISTS tree (
+	id Integer Primary Key Generated Always as Identity, 
+	event_id VARCHAR,
+	root_event_id VARCHAR,
+	reply_event_id VARCHAR, 
+	created_at INTEGER
+);
 `
 
 var EventsQueue = make([]nostr.Event, 0)
