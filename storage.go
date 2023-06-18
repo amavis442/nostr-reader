@@ -97,7 +97,8 @@ func (db *Storage) SaveEvents(evs []*nostr.Event) []string {
 
 		ptags = ptags[:0]
 		etags = etags[:0]
-
+		ptagsNum := 0
+		etagsNum := 0
 		for _, tag := range ev.Tags {
 			switch {
 			case tag[0] == "e":
@@ -105,6 +106,7 @@ func (db *Storage) SaveEvents(evs []*nostr.Event) []string {
 					continue
 				} else {
 					etags = append(etags, fmt.Sprintf("%x", b))
+					etagsNum = etagsNum + 1
 				}
 			case tag[0] == "p":
 				if b, e := hex.DecodeString(tag[1]); e != nil || len(b) != 32 {
@@ -112,6 +114,7 @@ func (db *Storage) SaveEvents(evs []*nostr.Event) []string {
 				} else {
 					ptags = append(ptags, fmt.Sprintf("%x", b))
 					pubkeys = append(pubkeys, fmt.Sprintf("%x", b))
+					ptagsNum = ptagsNum + 1
 				}
 			}
 		}
@@ -126,8 +129,21 @@ func (db *Storage) SaveEvents(evs []*nostr.Event) []string {
 		// The policy can then be used to sanitize lots of input and it is safe to use the policy in multiple goroutines
 		ev.Content = p.Sanitize(ev.Content)
 		ev.Content = strings.ReplaceAll(ev.Content, "&#39;", "'")
+		ev.Content = strings.ReplaceAll(ev.Content, "&#34;", "\"")
 		log.Println("Add to transaction")
+		ev.Content = strings.ReplaceAll(ev.Content, "\u0000", "")
+		ptagsSliceSize := ptagsNum
+		if ptagsNum > 8 {
+			ptagsSliceSize = 8
+		}
+		etagsSliceSize := etagsNum
+		if etagsNum > 8 {
+			etagsSliceSize = 8
+		}
+		ptags = ptags[0:ptagsSliceSize] // Idiots who put a lot of ptags in it. Bad clients
+		etags = etags[0:etagsSliceSize] // Same store as with ptags.
 		if _, err := stmt.Exec(ev.ID, ev.PubKey, ev.Kind, ev.CreatedAt, ev.Content, string(tagJson), ev.Sig, ev.String(), pq.Array(ptags), pq.Array(etags)); err != nil {
+			log.Fatal(ev.String(), err)
 			panic(err)
 		}
 	}
@@ -147,8 +163,8 @@ func (db *Storage) GetEvents(limit int) (*[]Event, error) {
 
 	rows, err := tx.Query(`SELECT e.id, e.pubkey, e.kind, e.created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
 	u.website, u.nip05, u.lud16, u.display_name
-	FROM events e LEFT JOIN users u ON (u.pubkey = e.pubkey ) LEFT JOIN blockusers b on (b.pubkey = e.pubkey) 
-	WHERE e.kind = 1 AND b.pubkey IS NULL ORDER BY e.created_at DESC LIMIT $1`, limit)
+	FROM events e LEFT JOIN users u ON (u.pubkey = e.pubkey ) LEFT JOIN blockusers b on (b.pubkey = e.pubkey) LEFT JOIN seen s on (s.event_id = e.id)
+	WHERE e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL ORDER BY e.created_at DESC LIMIT $1`, limit)
 	if err != nil {
 		log.Fatal(err)
 		return nil, err

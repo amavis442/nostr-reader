@@ -124,6 +124,13 @@ CREATE TABLE IF NOT EXISTS followusers (
 	created_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS followusers_by_pubkey ON followusers (pubkey);
+
+CREATE TABLE IF NOT EXISTS seen (
+	id Integer Primary Key Generated Always as Identity, 
+	event_id VARCHAR UNIQUE, 
+	created_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS seen_by_event_id ON seen (event_id);
 `
 
 var EventsQueue = make([]nostr.Event, 0)
