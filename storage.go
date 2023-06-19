@@ -140,7 +140,7 @@ func (db *Storage) SaveEvents(evs []*nostr.Event) []string {
 
 		tagJson, err := json.Marshal(ev.Tags)
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
 		}
 
 		p := bluemonday.StrictPolicy()
@@ -177,7 +177,7 @@ func (db *Storage) SaveEvents(evs []*nostr.Event) []string {
 		ptags = ptags[0:ptagsSliceSize] // Idiots who put a lot of ptags in it. Bad clients
 		etags = etags[0:etagsSliceSize] // Same store as with ptags.
 		if _, err := stmt.Exec(ev.ID, ev.PubKey, ev.Kind, ev.CreatedAt, ev.Content, string(tagJson), ev.Sig, ev.String(), pq.Array(ptags), pq.Array(etags), Garbage); err != nil {
-			log.Fatal(ev.String(), err)
+			log.Println(ev.String(), err)
 			panic(err)
 		}
 
@@ -206,7 +206,7 @@ func (db *Storage) GetEvents(limit int) (*[]Event, error) {
 	FROM events e LEFT JOIN users u ON (u.pubkey = e.pubkey ) LEFT JOIN blockusers b on (b.pubkey = e.pubkey) LEFT JOIN seen s on (s.event_id = e.id)
 	WHERE e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false ORDER BY e.created_at DESC LIMIT $1`, limit)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -225,7 +225,7 @@ func (db *Storage) GetEvents(limit int) (*[]Event, error) {
 
 		if err := rows.Scan(&event.ID, &event.Pubkey, &event.Kind, &event.CreatedAt, &event.Content, &event.Tags_full, pq.Array(&event.Etags), pq.Array(&event.Ptags), &event.Sig,
 			&name, &about, &picture, &website, &nip05, &lud16, &displayname); err != nil {
-			log.Fatal(err)
+			panic(err)
 		}
 		if name.Valid {
 			event.Profile.Name = name.String
@@ -262,7 +262,7 @@ func (db *Storage) GetEvents(limit int) (*[]Event, error) {
 	}
 	// Check for errors from iterating over rows.
 	if err := rows.Err(); err != nil {
-		log.Fatal(err)
+		log.Println(err)
 		return nil, err
 	}
 
@@ -304,7 +304,7 @@ func (db *Storage) FindEvent(id string) Event {
 func (db *Storage) BlockUser(pubkey string) error {
 	_, err := db.Db.Exec(`INSERT INTO "blockusers" (pubkey, created_at) VALUES ($1, $2) ON CONFLICT (pubkey) DO NOTHING;`, pubkey, time.Now().Unix())
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 		return err
 	}
 
@@ -314,7 +314,7 @@ func (db *Storage) BlockUser(pubkey string) error {
 func (db *Storage) FollowUser(pubkey string) error {
 	_, err := db.Db.Exec(`INSERT INTO "followusers" (pubkey, created_at) VALUES ($1, $2) ON CONFLICT (pubkey) DO NOTHING;`, pubkey, time.Now().Unix())
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 		return err
 	}
 

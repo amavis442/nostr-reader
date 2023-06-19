@@ -156,12 +156,13 @@ func (cfg *Config) Do(f func(*nostr.Relay)) {
 
 	for _, v := range cfg.Relays {
 		wg.Add(1)
+
 		go func(wg *sync.WaitGroup, v string) {
 			defer wg.Done()
 			ctx := context.WithValue(context.Background(), "url", v)
 			relay, err := nostr.RelayConnect(ctx, v)
 			if err != nil {
-				log.Fatal(err)
+				log.Println(err)
 				return
 			}
 			f(relay)
@@ -181,11 +182,6 @@ func (cfg *Config) getEvents(filter nostr.Filter) {
 		}
 		for _, ev := range evs {
 			if _, ok := m.Load(ev.ID); !ok {
-				/* if ev.Kind == nostr.KindEncryptedDirectMessage {
-					if err := cfg.Decode(ev); err != nil {
-						continue
-					}
-				} */
 				m.LoadOrStore(ev.ID, ev)
 			}
 		}
@@ -285,7 +281,8 @@ func (cfg *Config) getLast(w http.ResponseWriter, r *http.Request) {
 
 	events, err := cfg.Storage.GetEvents(30)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return
 	}
 
 	json.NewEncoder(w).Encode(events)
@@ -294,7 +291,7 @@ func (cfg *Config) getLast(w http.ResponseWriter, r *http.Request) {
 func (cfg *Config) blockUser(user *BlockUser) {
 	_, err := cfg.Storage.Db.Exec(`INSERT INTO "blockusers" (pubkey, created_at) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING;`, user.Pubkey, time.Now().Unix())
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 }
 
@@ -304,13 +301,13 @@ func loadConfig() (*Config, error) {
 	content, err := ioutil.ReadFile("./config.json")
 	if err != nil {
 		fmt.Println("Done", err)
-		log.Fatal("Error when opening file: ", err)
+		log.Println("Error when opening file: ", err)
 		return nil, err
 	}
 
 	err = json.Unmarshal(content, &cfg)
 	if err != nil {
-		log.Fatal("Error during Unmarshal(): ", err)
+		log.Println("Error during Unmarshal(): ", err)
 		return nil, err
 	}
 
@@ -338,7 +335,7 @@ func main() {
 
 	_, err = st.Db.Exec(CreateQuery)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
 	myDb = st.Db
