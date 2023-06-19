@@ -37,6 +37,7 @@ type Event struct {
 	Ptags     []string `json:"ptags"`
 	Sig       string   `json:"sig"`
 	Profile   Profile  `json:"profile"`
+	Garbage   bool     `json:"gargabe"`
 }
 
 type User struct {
@@ -75,6 +76,7 @@ type Config struct {
 	Npub     string
 	Pk       string
 	Nsec     string
+	Filter   []string
 	Storage  *Storage
 }
 
@@ -89,7 +91,8 @@ CREATE TABLE IF NOT EXISTS events (
 	ptags text[],
 	etags text[],
 	sig TEXT,
-	raw TEXT
+	raw TEXT,
+	garbage boolean DEFAULT false
 );
 CREATE INDEX IF NOT EXISTS events_by_kind ON events (kind, created_at);
 CREATE INDEX IF NOT EXISTS events_by_ptags ON events (ptags, created_at);
@@ -327,6 +330,7 @@ func main() {
 	var st Storage
 	st.Connect(cfg)
 
+	st.Filter = cfg.Filter
 	cfg.Storage = &st
 
 	// close database

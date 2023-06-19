@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 	"time"
 
@@ -16,7 +17,8 @@ import (
 )
 
 type Storage struct {
-	Db *sql.DB
+	Db     *sql.DB
+	Filter []string
 }
 
 func (db *Storage) CheckError(err error) {
@@ -73,8 +75,8 @@ func (db *Storage) SaveProfiles(evs []*nostr.Event) {
 }
 
 func (db *Storage) SaveEvents(evs []*nostr.Event) []string {
-	var qry = `INSERT INTO "events" ("id", "pubkey", "kind", "created_at", "content" , "tags_full" , "sig" , "raw" , "ptags" , "etags") 
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO NOTHING;`
+	var qry = `INSERT INTO "events" ("id", "pubkey", "kind", "created_at", "content" , "tags_full" , "sig" , "raw" , "ptags" , "etags", "garbage") 
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (id) DO NOTHING;`
 
 	var treeQry = `INSERT INTO tree ("event_id","root_event_id", "reply_event_id", "created_at") VALUES ($1, $2, $3, $4)`
 
@@ -153,6 +155,15 @@ func (db *Storage) SaveEvents(evs []*nostr.Event) []string {
 		ev.Content = strings.ReplaceAll(ev.Content, "<br>", "\n")
 		ev.Content = strings.ReplaceAll(ev.Content, "<br/>", "\n")
 
+		var Garbage bool = false
+		for _, f := range db.Filter {
+			matched, _ := regexp.MatchString(f, ev.Content)
+			if matched == true {
+				Garbage = true
+				log.Println("Got a match", ev.Content)
+			}
+		}
+
 		log.Println("Add to transaction")
 		ev.Content = strings.ReplaceAll(ev.Content, "\u0000", "")
 		ptagsSliceSize := ptagsNum
@@ -165,7 +176,7 @@ func (db *Storage) SaveEvents(evs []*nostr.Event) []string {
 		}
 		ptags = ptags[0:ptagsSliceSize] // Idiots who put a lot of ptags in it. Bad clients
 		etags = etags[0:etagsSliceSize] // Same store as with ptags.
-		if _, err := stmt.Exec(ev.ID, ev.PubKey, ev.Kind, ev.CreatedAt, ev.Content, string(tagJson), ev.Sig, ev.String(), pq.Array(ptags), pq.Array(etags)); err != nil {
+		if _, err := stmt.Exec(ev.ID, ev.PubKey, ev.Kind, ev.CreatedAt, ev.Content, string(tagJson), ev.Sig, ev.String(), pq.Array(ptags), pq.Array(etags), Garbage); err != nil {
 			log.Fatal(ev.String(), err)
 			panic(err)
 		}
@@ -193,7 +204,7 @@ func (db *Storage) GetEvents(limit int) (*[]Event, error) {
 	rows, err := tx.Query(`SELECT e.id, e.pubkey, e.kind, e.created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
 	u.website, u.nip05, u.lud16, u.display_name
 	FROM events e LEFT JOIN users u ON (u.pubkey = e.pubkey ) LEFT JOIN blockusers b on (b.pubkey = e.pubkey) LEFT JOIN seen s on (s.event_id = e.id)
-	WHERE e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL ORDER BY e.created_at DESC LIMIT $1`, limit)
+	WHERE e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false ORDER BY e.created_at DESC LIMIT $1`, limit)
 	if err != nil {
 		log.Fatal(err)
 		return nil, err
