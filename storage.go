@@ -19,36 +19,37 @@ import (
 type Storage struct {
 	Db     *sql.DB
 	Filter []string
+	Count  int64
 }
 
-func (db *Storage) CheckError(err error) {
+func (st *Storage) CheckError(err error) {
 	if err != nil {
 		panic(err)
 	}
 }
 
-func (db *Storage) Connect(cfg *Config) {
+func (st *Storage) Connect(cfg *Config) {
 	// connection string
-	psqlconn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", cfg.Database.Host, cfg.Database.Port, cfg.Database.User, cfg.Database.Password, cfg.Database.Dbname)
+	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", cfg.Database.Host, cfg.Database.Port, cfg.Database.User, cfg.Database.Password, cfg.Database.Dbname)
 
 	var err error
 	// open database
-	db.Db, err = sql.Open("postgres", psqlconn)
-	db.CheckError(err)
+	st.Db, err = sql.Open("postgres", dsn)
+	st.CheckError(err)
 
 	fmt.Println("Connected!")
 }
 
-func (db *Storage) SaveProfiles(evs []*nostr.Event) {
-	var qry = `INSERT INTO "users" ("pubkey", "name","about", "picture",  "website", "nip05",
-	"lud16", "display_name", "raw", "created_at")
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (pubkey) DO NOTHING;`
+func (st *Storage) SaveProfiles(evs []*nostr.Event) {
+	var qry = `INSERT INTO "profiles" ("pubkey", "name","about", "picture",  "website", "nip05",
+	"lud16", "display_name", "raw", "profile_created_at", "created_at")
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()) ON CONFLICT (pubkey) DO NOTHING;`
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
 	var tx *sql.Tx
-	tx, err := db.Db.Begin()
+	tx, err := st.Db.Begin()
 	if err != nil {
 		panic(err)
 	}
@@ -59,30 +60,30 @@ func (db *Storage) SaveProfiles(evs []*nostr.Event) {
 			panic(err)
 		}
 
-		_, err = tx.Exec(qry, ev.PubKey, data.Name, data.About, data.Picture, data.Website, data.Nip05, data.Lud16, data.DisplayName, ev.String(), time.Now().Unix())
+		_, err = tx.Exec(qry, ev.PubKey, data.Name, data.About, data.Picture, data.Website, data.Nip05, data.Lud16, data.DisplayName, ev.String(), ev.CreatedAt)
 		if err != nil {
 			if rollbackErr := tx.Rollback(); rollbackErr != nil {
-				log.Fatalf("update users: unable to rollback: %v", rollbackErr)
+				log.Printf("update profile: unable to rollback: %v", rollbackErr)
 			}
-			log.Fatal(err)
+			log.Println(err)
 			ctx.Done()
 		}
-		log.Println("User: ", data.Name)
+		log.Println("Profile: ", data.Name)
 	}
 	if err := tx.Commit(); err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 }
 
-func (db *Storage) SaveEvents(evs []*nostr.Event) []string {
-	var qry = `INSERT INTO "events" ("id", "pubkey", "kind", "created_at", "content" , "tags_full" , "sig" , "raw" , "ptags" , "etags", "garbage") 
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (id) DO NOTHING;`
+func (st *Storage) SaveEvents(evs []*nostr.Event) []string {
+	var qry = `INSERT INTO "events" ("event_id", "pubkey", "kind", "event_created_at", "content", "tags_full" , "sig" , "raw" , "ptags" , "etags", "garbage", "created_at") 
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW()) ON CONFLICT (event_id) DO NOTHING;`
 
-	var treeQry = `INSERT INTO tree ("event_id","root_event_id", "reply_event_id", "created_at") VALUES ($1, $2, $3, $4)`
+	var treeQry = `INSERT INTO tree ("event_id","root_event_id", "reply_event_id", "created_at") VALUES ($1, $2, $3, NOW())`
 
 	var pubkeys = make([]string, 0)
 
-	tx, err := db.Db.Begin()
+	tx, err := st.Db.Begin()
 	if err != nil {
 		panic(err)
 	}
@@ -156,7 +157,7 @@ func (db *Storage) SaveEvents(evs []*nostr.Event) []string {
 		ev.Content = strings.ReplaceAll(ev.Content, "<br/>", "\n")
 
 		var Garbage bool = false
-		for _, f := range db.Filter {
+		for _, f := range st.Filter {
 			matched, _ := regexp.MatchString(f, ev.Content)
 			if matched == true {
 				Garbage = true
@@ -184,7 +185,7 @@ func (db *Storage) SaveEvents(evs []*nostr.Event) []string {
 		if len(tree.RootTag) > 0 {
 			log.Println("Roottag is ", tree.RootTag)
 
-			tx.Exec(treeQry, ev.ID, tree.RootTag, tree.ReplyTag, time.Now().Unix())
+			tx.Exec(treeQry, ev.ID, tree.RootTag, tree.ReplyTag)
 		}
 	}
 
@@ -195,16 +196,16 @@ func (db *Storage) SaveEvents(evs []*nostr.Event) []string {
 	return pubkeys
 }
 
-func (db *Storage) GetEvents(limit int) (*[]Event, error) {
-	tx, err := db.Db.Begin()
+func (st *Storage) GetEvents(limit int) (*[]Event, error) {
+	tx, err := st.Db.Begin()
 	if err != nil {
 		panic(err)
 	}
 
-	rows, err := tx.Query(`SELECT e.id, e.pubkey, e.kind, e.created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
+	rows, err := tx.Query(`SELECT e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
 	u.website, u.nip05, u.lud16, u.display_name
-	FROM events e LEFT JOIN users u ON (u.pubkey = e.pubkey ) LEFT JOIN blockusers b on (b.pubkey = e.pubkey) LEFT JOIN seen s on (s.event_id = e.id)
-	WHERE e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false ORDER BY e.created_at DESC LIMIT $1`, limit)
+	FROM events e LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) LEFT JOIN seen s on (s.event_id = e.event_id)
+	WHERE e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false ORDER BY e.event_created_at DESC LIMIT $1`, limit)
 	if err != nil {
 		log.Println(err)
 		return nil, err
@@ -223,7 +224,7 @@ func (db *Storage) GetEvents(limit int) (*[]Event, error) {
 		var lud16 sql.NullString
 		var displayname sql.NullString
 
-		if err := rows.Scan(&event.ID, &event.Pubkey, &event.Kind, &event.CreatedAt, &event.Content, &event.Tags_full, pq.Array(&event.Etags), pq.Array(&event.Ptags), &event.Sig,
+		if err := rows.Scan(&event.EventID, &event.Pubkey, &event.Kind, &event.EventCreatedAt, &event.Content, &event.TagsFull, pq.Array(&event.Etags), pq.Array(&event.Ptags), &event.Sig,
 			&name, &about, &picture, &website, &nip05, &lud16, &displayname); err != nil {
 			panic(err)
 		}
@@ -269,11 +270,11 @@ func (db *Storage) GetEvents(limit int) (*[]Event, error) {
 	return &events, nil
 }
 
-func (db *Storage) FindEvent(id string) Event {
-	var qry = `SELECT e.id, e.pubkey, e.kind, e.created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
+func (st *Storage) FindEvent(id string) Event {
+	var qry = `SELECT e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
 	u.website, u.nip05, u.lud16, u.display_name
-	FROM events e LEFT JOIN users u ON (u.pubkey = e.pubkey ) LEFT JOIN blockusers b on (b.pubkey = e.pubkey) 
-	WHERE e.id = $1`
+	FROM events e LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
+	WHERE e.event_id = $1`
 	//qry = qry + "'" + id + "'"
 	log.Println(qry)
 
@@ -287,7 +288,7 @@ func (db *Storage) FindEvent(id string) Event {
 	var lud16 sql.NullString
 	var displayname sql.NullString
 
-	err := db.Db.QueryRow(qry, id).Scan(&event.ID, &event.Pubkey, &event.Kind, &event.CreatedAt, &event.Content, &event.Tags_full, pq.Array(&event.Etags), pq.Array(&event.Ptags), &event.Sig,
+	err := st.Db.QueryRow(qry, id).Scan(&event.EventID, &event.Pubkey, &event.Kind, &event.EventCreatedAt, &event.Content, &event.TagsFull, pq.Array(&event.Etags), pq.Array(&event.Ptags), &event.Sig,
 		&name, &about, &picture, &website, &nip05, &lud16, &displayname)
 	switch {
 	case err == sql.ErrNoRows:
@@ -301,8 +302,8 @@ func (db *Storage) FindEvent(id string) Event {
 	return event
 }
 
-func (db *Storage) BlockUser(pubkey string) error {
-	_, err := db.Db.Exec(`INSERT INTO "blockusers" (pubkey, created_at) VALUES ($1, $2) ON CONFLICT (pubkey) DO NOTHING;`, pubkey, time.Now().Unix())
+func (st *Storage) BlockPubkey(pubkey string) error {
+	_, err := st.Db.Exec(`INSERT INTO "block_pubkeys" (pubkey, created_at) VALUES ($1, NOW()) ON CONFLICT (pubkey) DO NOTHING;`, pubkey)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -311,8 +312,8 @@ func (db *Storage) BlockUser(pubkey string) error {
 	return nil
 }
 
-func (db *Storage) FollowUser(pubkey string) error {
-	_, err := db.Db.Exec(`INSERT INTO "followusers" (pubkey, created_at) VALUES ($1, $2) ON CONFLICT (pubkey) DO NOTHING;`, pubkey, time.Now().Unix())
+func (st *Storage) FollowPubkey(pubkey string) error {
+	_, err := st.Db.Exec(`INSERT INTO "follow_pubkeys" (pubkey, created_at) VALUES ($1, NOW()) ON CONFLICT (pubkey) DO NOTHING;`, pubkey)
 	if err != nil {
 		log.Println(err)
 		return err

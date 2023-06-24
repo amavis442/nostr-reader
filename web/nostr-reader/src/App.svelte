@@ -12,7 +12,7 @@
   });
 
 async function refreshView() {
-  const json = await fetch("/api/follow", {
+  const json = await fetch("/api/events", {
       method: "POST",
       //body: JSON.stringify({ pubkey: note.pubkey }),
       headers: {

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -24,33 +23,28 @@ type Profile struct {
 	Nip05       string `json:"nip05"`
 	Lud16       string `json:"lud16"`
 	DisplayName string `json:"display_name"`
+	Pubkey      string `json:"pubkey"`
 }
 
 type Event struct {
-	ID        string   `json:"id"`
-	Pubkey    string   `json:"pubkey"`
-	Kind      int      `json:"kind"`
-	CreatedAt int64    `json:"created_at"`
-	Content   string   `json:"content"`
-	Tags_full string   `json:"tags"`
-	Etags     []string `json:"etags"`
-	Ptags     []string `json:"ptags"`
-	Sig       string   `json:"sig"`
-	Profile   Profile  `json:"profile"`
-	Garbage   bool     `json:"gargabe"`
+	EventID        string   `json:"id"`
+	Pubkey         string   `json:"pubkey"`
+	Kind           int      `json:"kind"`
+	EventCreatedAt int64    `json:"created_at"`
+	Content        string   `json:"content"`
+	TagsFull       string   `json:"tags"`
+	Etags          []string `json:"etags"`
+	Ptags          []string `json:"ptags"`
+	Sig            string   `json:"sig"`
+	Profile        Profile  `json:"profile"`
+	Garbage        bool     `json:"gargabe"`
 }
 
-type User struct {
-	Name    string `json:"name"`
-	About   string `json:"about"`
-	Picture string `json:"picture"`
-}
-
-type BlockUser struct {
+type BlockPubkey struct {
 	Pubkey string `json:"pubkey"`
 }
 
-type FollowUser struct {
+type FollowPubkey struct {
 	Pubkey string `json:"pubkey"`
 }
 
@@ -82,25 +76,24 @@ type Config struct {
 
 const CreateQuery string = `
 CREATE TABLE IF NOT EXISTS events (
-	id TEXT PRIMARY KEY, 
+	id SERIAL Primary Key,
+	event_id TEXT UNIQUE, 
 	pubkey TEXT, 
 	kind INTEGER, 
-	created_at INTEGER, 
+	event_created_at INTEGER, 
 	content TEXT, 
 	tags_full TEXT, 
 	ptags text[],
 	etags text[],
 	sig TEXT,
 	raw TEXT,
-	garbage boolean DEFAULT false
+	garbage boolean DEFAULT false,
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS events_by_kind ON events (kind, created_at);
-CREATE INDEX IF NOT EXISTS events_by_ptags ON events (ptags, created_at);
-CREATE INDEX IF NOT EXISTS events_by_etags ON events (etags, created_at);
-CREATE INDEX IF NOT EXISTS events_by_pubkey_kind ON events (pubkey, kind, created_at);
+CREATE INDEX IF NOT EXISTS idx_events_pubkey ON events (pubkey);
 
-CREATE TABLE IF NOT EXISTS users (
-	id Integer Primary Key Generated Always as Identity, 
+CREATE TABLE IF NOT EXISTS profiles (
+	id SERIAL Primary Key,
 	pubkey VARCHAR UNIQUE, 
 	name TEXT,
 	about TEXT,
@@ -110,42 +103,42 @@ CREATE TABLE IF NOT EXISTS users (
 	lud16 TEXT,
 	display_name TEXT,
 	raw TEXT,
-	created_at INTEGER 	
+	profile_created_at INTEGER,
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS users_by_pubkey ON users (pubkey);
+CREATE INDEX IF NOT EXISTS idx_profile_pubkey ON profiles (pubkey);
 
-CREATE TABLE IF NOT EXISTS blockusers (
-	id Integer Primary Key Generated Always as Identity, 
+CREATE TABLE IF NOT EXISTS block_pubkeys (
+	id SERIAL Primary Key, 
 	pubkey VARCHAR UNIQUE, 
-	created_at INTEGER
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS blockusers_by_pubkey ON blockusers (pubkey);
+CREATE INDEX IF NOT EXISTS idx_block_pubkeys_pubkey ON block_pubkeys (pubkey);
 
-CREATE TABLE IF NOT EXISTS followusers (
-	id Integer Primary Key Generated Always as Identity, 
+CREATE TABLE IF NOT EXISTS follow_pubkeys (
+	id SERIAL Primary Key,
 	pubkey VARCHAR UNIQUE, 
-	created_at INTEGER
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS followusers_by_pubkey ON followusers (pubkey);
+CREATE INDEX IF NOT EXISTS idx_follow_pubkeys_pubkey ON follow_pubkeys (pubkey);
 
 CREATE TABLE IF NOT EXISTS seen (
-	id Integer Primary Key Generated Always as Identity, 
+	id SERIAL Primary Key,
 	event_id VARCHAR UNIQUE, 
-	created_at INTEGER
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS seen_by_event_id ON seen (event_id);
 
 CREATE TABLE IF NOT EXISTS tree (
-	id Integer Primary Key Generated Always as Identity, 
+	id SERIAL Primary Key,
 	event_id VARCHAR,
 	root_event_id VARCHAR,
 	reply_event_id VARCHAR, 
-	created_at INTEGER
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 `
 
 var EventsQueue = make([]nostr.Event, 0)
-var myDb *sql.DB
 var ptagsQueue = make([]string, 0)
 
 /*
@@ -197,7 +190,7 @@ func (cfg *Config) getEvents(filter nostr.Filter) {
 	var pubkeys = make([]string, 0)
 	pubkeys = cfg.Storage.SaveEvents(evs)
 
-	cfg.updateUsers(pubkeys)
+	cfg.updateProfiles(pubkeys)
 
 	defer func() {
 		log.Println("Done receiving and closed ralay connections")
@@ -243,7 +236,7 @@ func (cfg *Config) getEventData() {
 	}()
 }
 
-func (cfg *Config) updateUsers(pubkeys []string) {
+func (cfg *Config) updateProfiles(pubkeys []string) {
 	filter := nostr.Filter{
 		Kinds:   []int{nostr.KindSetMetadata},
 		Authors: pubkeys,
@@ -271,7 +264,7 @@ func (cfg *Config) updateUsers(pubkeys []string) {
 	})
 
 	cfg.Storage.SaveProfiles(evs)
-	log.Println("Done for users")
+	log.Println("Done for profiles")
 }
 
 func (cfg *Config) getLast(w http.ResponseWriter, r *http.Request) {
@@ -288,8 +281,8 @@ func (cfg *Config) getLast(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(events)
 }
 
-func (cfg *Config) blockUser(user *BlockUser) {
-	_, err := cfg.Storage.Db.Exec(`INSERT INTO "blockusers" (pubkey, created_at) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING;`, user.Pubkey, time.Now().Unix())
+func (cfg *Config) blockPubkey(user *BlockPubkey) {
+	_, err := cfg.Storage.Db.Exec(`INSERT INTO "block_pubkeys" (pubkey, created_at) VALUES ($1, NOW()) ON CONFLICT (id) DO NOTHING;`, user.Pubkey)
 	if err != nil {
 		log.Println(err)
 	}
@@ -338,11 +331,9 @@ func main() {
 		panic(err)
 	}
 
-	myDb = st.Db
-
 	// Windows may be missing this
 	mime.AddExtensionType(".js", "application/javascript")
-	http.HandleFunc("/api/follow", cfg.getLast)
+	http.HandleFunc("/api/events", cfg.getLast)
 	http.HandleFunc("/api/getnext", func(w http.ResponseWriter, r *http.Request) {
 
 		EventsQueue = EventsQueue[:0]
@@ -360,13 +351,13 @@ func main() {
 	http.HandleFunc("/api/blockuser", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
-		var j BlockUser
+		var j BlockPubkey
 		err = json.NewDecoder(r.Body).Decode(&j)
 		if err != nil {
 			panic(err)
 		}
 
-		cfg.blockUser(&j)
+		cfg.blockPubkey(&j)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -380,13 +371,13 @@ func main() {
 	http.HandleFunc("/api/followuser", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
-		var user FollowUser
+		var user FollowPubkey
 		err = json.NewDecoder(r.Body).Decode(&user)
 		if err != nil {
 			panic(err)
 		}
 
-		cfg.Storage.FollowUser(user.Pubkey)
+		cfg.Storage.FollowPubkey(user.Pubkey)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -410,7 +401,7 @@ func main() {
 		}
 		log.Println("Searching event with Id: ", j.ID)
 		ev := cfg.Storage.FindEvent(j.ID)
-		if ev.ID == "" {
+		if ev.EventID == "" {
 			var tagMap nostr.TagMap
 			if tagMap == nil {
 				tagMap = make(nostr.TagMap)
@@ -442,7 +433,7 @@ func main() {
 			})
 
 			pubkeys := cfg.Storage.SaveEvents(evs)
-			cfg.updateUsers(pubkeys)
+			cfg.updateProfiles(pubkeys)
 
 		}
 		ev = cfg.Storage.FindEvent(j.ID)
