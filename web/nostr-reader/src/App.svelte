@@ -4,17 +4,27 @@
   import placeholder from './assets/profile-picture.jpg';
   import { toHtml, findLink } from "./lib/util/html";
   import Preview from "./lib/partials/Preview/Preview.svelte";
+  import Pagination from './lib/partials/Pagination.svelte';
 
   let page = writable([]);
-  let test = []
+  let pageData = []
+
+  let current_page = 1;
+  let from = 1;
+  let to = 1;
+  let per_page = 1;
+  let last_page = 1;
+  let total = 0;
+  let loading = true;
+
   onMount(async () => {
-    await refreshView();
+    await refreshView({page:1});
   });
 
-async function refreshView() {
-  const json = await fetch("/api/events", {
+async function refreshView(params) {
+  await fetch("/api/events", {
       method: "POST",
-      //body: JSON.stringify({ pubkey: note.pubkey }),
+      body: JSON.stringify(params),
       headers: {
         "Content-Type": "application/json",
       },
@@ -24,14 +34,20 @@ async function refreshView() {
       })
       .then((data) => {
         console.log("Json is ", data);
-        return data;
+
+
+        current_page = data.current_page;
+        from = data.from;
+        to = data.to;
+        per_page = data.per_page;
+        last_page = data.last_page;
+        total = data.total;
+
+        pageData = data.data
       })
       .catch((err) => {
         console.error("error", err);
       });
-
-      console.log(json)
-      test = json
 }
 
 
@@ -51,7 +67,7 @@ async function refreshView() {
       })
       .then((data) => {
         console.log("Json is ", data);
-        refreshView();
+        refreshView({page:current_page});
         return data;
       })
       .catch((err) => {
@@ -111,8 +127,20 @@ async function refreshView() {
   <button on:click="{refresh}" class="btn btn-blue">Sync</button>
   <button on:click="{refreshView}" class="btn btn-blue">refreshView</button>
   
+  {#if total > per_page}
+  <Pagination
+    {current_page}
+    {last_page}
+    {per_page}
+    {from}
+    {to}
+    {total}
+    on:change="{(ev) => refreshView({page: ev.detail})}">
+  </Pagination>
+{/if}
+
   <div class="p-10 mb-10">  
-    {#each test ? test : [] as note (note.id)}
+    {#each pageData ? pageData : [] as note (note.id)}
     <div class="rounded-t-lg overflow-hidden border-t border-l border-r border-gray-400 p-10 flex justify-center">
       <div class="max-w-sm w-full lg:max-w-full lg:flex">
         <div class="h-48 lg:h-auto lg:w-48 flex-none bg-cover rounded-t lg:rounded-t-none lg:rounded-l text-center overflow-hidden" style="background-image: url('https://images.alphacoders.com/188/188121.jpg')" title="Mountain">

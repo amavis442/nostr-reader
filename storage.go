@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -201,11 +203,10 @@ func (st *Storage) GetEvents(limit int) (*[]Event, error) {
 	if err != nil {
 		panic(err)
 	}
-
 	rows, err := tx.Query(`SELECT e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
-	u.website, u.nip05, u.lud16, u.display_name
-	FROM events e LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) LEFT JOIN seen s on (s.event_id = e.event_id)
+	u.website, u.nip05, u.lud16, u.display_name FROM events e LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) LEFT JOIN seen s on (s.event_id = e.event_id)
 	WHERE e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false ORDER BY e.event_created_at DESC LIMIT $1`, limit)
+
 	if err != nil {
 		log.Println(err)
 		return nil, err
@@ -268,6 +269,129 @@ func (st *Storage) GetEvents(limit int) (*[]Event, error) {
 	}
 
 	return &events, nil
+}
+
+type Pagination struct {
+	Data        []Event `json:"data"`
+	Pages       int64   `json:"pages"`
+	Total       int64   `json:"total"`
+	Limit       int     `json:"limit"`
+	PerPage     int     `json:"per_page"`
+	Offset      int     `json:"offset"`
+	CurrentPage int     `json:"current_page"`
+	LastPage    int64   `json:"last_page"`
+	From        int     `json:"from"`
+	To          int     `json:"to"`
+}
+
+func (st *Storage) GetEventPagination(offset int, limit int) (*Pagination, error) {
+	tx, err := st.Db.Begin()
+	if err != nil {
+		panic(err)
+	}
+
+	var (
+		recordCount int64
+		recordId    int64
+	)
+
+	mainQry := `SELECT e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
+	u.website, u.nip05, u.lud16, u.display_name FROM events e LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) LEFT JOIN seen s on (s.event_id = e.event_id)
+	WHERE e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false`
+
+	countQry := `SELECT COUNT(*) AS cnt FROM (SELECT DISTINCT id, event_id, event_created_at FROM (` + mainQry + `) resultTable) tbl`
+	log.Println(countQry)
+
+	selectIdQry := `SELECT id FROM (SELECT DISTINCT id, event_id, event_created_at FROM ( ` + mainQry + `) resultInnerTable ORDER BY event_created_at DESC) tbl  LIMIT ` + strconv.Itoa(limit)
+	if offset > 0 {
+		selectIdQry = selectIdQry + ` OFFSET ` + fmt.Sprintf("%d", offset)
+	}
+	selectIdQry = selectIdQry + `;`
+	log.Println(selectIdQry)
+
+	selectQry := mainQry + ` AND e.id IN (`
+
+	tx.QueryRow(countQry).Scan(&recordCount)
+	pages := int64(math.Floor(float64(recordCount) / float64(limit)))
+
+	rowsIds, err := tx.Query(selectIdQry)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for rowsIds.Next() {
+		rowsIds.Scan(&recordId)
+		selectQry = selectQry + fmt.Sprintf("%d", recordId) + ","
+	}
+	rowsIds.Close()
+
+	finalQry := selectQry[:len(selectQry)-1]
+	finalQry = finalQry + ") ORDER BY event_created_at DESC;"
+	log.Println(finalQry)
+	rows, err := tx.Query(finalQry)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	events := make([]Event, 0)
+	for rows.Next() {
+		var event Event
+		var id int
+		var name sql.NullString
+		var about sql.NullString
+		var picture sql.NullString
+
+		var website sql.NullString
+		var nip05 sql.NullString
+		var lud16 sql.NullString
+		var displayname sql.NullString
+
+		if err := rows.Scan(&id, &event.EventID, &event.Pubkey, &event.Kind, &event.EventCreatedAt, &event.Content, &event.TagsFull, pq.Array(&event.Etags), pq.Array(&event.Ptags), &event.Sig,
+			&name, &about, &picture, &website, &nip05, &lud16, &displayname); err != nil {
+			panic(err)
+		}
+		if name.Valid {
+			event.Profile.Name = name.String
+		} else {
+			event.Profile.Name = event.Pubkey
+		}
+		if about.Valid {
+			event.Profile.About = about.String
+		}
+		if picture.Valid {
+			event.Profile.Picture = picture.String
+		}
+
+		if website.Valid {
+			event.Profile.Website = website.String
+		}
+		if nip05.Valid {
+			event.Profile.Nip05 = nip05.String
+		}
+		if lud16.Valid {
+			event.Profile.Lud16 = lud16.String
+		}
+		if displayname.Valid {
+			event.Profile.DisplayName = displayname.String
+		}
+
+		/* WIP
+		var tags nostr.Tags = json.Unmarshal(event.Tags_full.(nostr.Tag))
+		if tags.GetFirst("e") != nil {
+			continue
+		}
+		*/
+		events = append(events, event)
+	}
+	// Check for errors from iterating over rows.
+	if err := rows.Err(); err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	page := &Pagination{Data: events, Total: recordCount, Pages: pages, Limit: limit, Offset: offset}
+	return page, nil
 }
 
 func (st *Storage) FindEvent(id string) Event {

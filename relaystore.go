@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math"
 	"mime"
 	"net/http"
 	"strings"
@@ -333,7 +334,37 @@ func main() {
 
 	// Windows may be missing this
 	mime.AddExtensionType(".js", "application/javascript")
-	http.HandleFunc("/api/events", cfg.getLast)
+	//http.HandleFunc("/api/events", cfg.getLast)
+	http.HandleFunc("/api/events", func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		type Page struct {
+			Page int
+		}
+		var p Page
+		err = json.NewDecoder(r.Body).Decode(&p)
+		if err != nil {
+			panic(err)
+		}
+		page := p.Page
+
+		offset := page*20 - 1
+		pagination, err := cfg.Storage.GetEventPagination(offset, 20)
+		pagination.PerPage = 20
+		pagination.CurrentPage = page
+		pagination.LastPage = int64(math.Floor(float64(pagination.Total) / 20.0))
+		pagination.From = (page - 1) * 20
+		pagination.To = (page-1)*20 + 20 // Not correct at end
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
+		w.WriteHeader(http.StatusOK)
+
+		if err != nil {
+			log.Println(err)
+		}
+		json.NewEncoder(w).Encode(pagination)
+	})
+
 	http.HandleFunc("/api/getnext", func(w http.ResponseWriter, r *http.Request) {
 
 		EventsQueue = EventsQueue[:0]
