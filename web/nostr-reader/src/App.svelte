@@ -125,7 +125,6 @@ async function refreshView(params) {
 
 <main>
   <button on:click="{refresh}" class="btn btn-blue">Sync</button>
-  <button on:click="{refreshView}" class="btn btn-blue">refreshView</button>
   
   {#if total > per_page}
   <Pagination

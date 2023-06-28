@@ -22,7 +22,7 @@
   </script>
   
   <p>
-    Page <code>{current_page}</code> of <code>{last_page}</code> (<code>{from + 1}</code> - <code>{to}</code> on <code>{total}</code> items)
+    Page <code>{current_page}</code> of <code>{last_page}</code> (<code>{from + 1}</code> - <code>{to}</code> on <code>{total}</code> items (per page {per_page}))
   </p>
   
   <nav class="pagination">
