@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -271,20 +270,7 @@ func (st *Storage) GetEvents(limit int) (*[]Event, error) {
 	return &events, nil
 }
 
-type Pagination struct {
-	Data        []Event `json:"data"`
-	Pages       int64   `json:"pages"`
-	Total       int64   `json:"total"`
-	Limit       int     `json:"limit"`
-	PerPage     int     `json:"per_page"`
-	Offset      int     `json:"offset"`
-	CurrentPage int     `json:"current_page"`
-	LastPage    int64   `json:"last_page"`
-	From        int     `json:"from"`
-	To          int     `json:"to"`
-}
-
-func (st *Storage) GetEventPagination(offset int, limit int) (*Pagination, error) {
+func (st *Storage) GetEventPagination(p *Pagination) error {
 	tx, err := st.Db.Begin()
 	if err != nil {
 		panic(err)
@@ -302,9 +288,9 @@ func (st *Storage) GetEventPagination(offset int, limit int) (*Pagination, error
 	countQry := `SELECT COUNT(*) AS cnt FROM (SELECT DISTINCT id, event_id, event_created_at FROM (` + mainQry + `) resultTable) tbl`
 	log.Println(countQry)
 
-	selectIdQry := `SELECT id FROM (SELECT DISTINCT id, event_id, event_created_at FROM ( ` + mainQry + `) resultInnerTable ORDER BY event_created_at DESC) tbl  LIMIT ` + strconv.Itoa(limit)
-	if offset > 0 {
-		selectIdQry = selectIdQry + ` OFFSET ` + fmt.Sprintf("%d", offset)
+	selectIdQry := `SELECT id FROM (SELECT DISTINCT id, event_id, event_created_at FROM ( ` + mainQry + `) resultInnerTable ORDER BY event_created_at DESC) tbl  LIMIT ` + strconv.Itoa(p.Limit)
+	if p.Offset > 0 {
+		selectIdQry = selectIdQry + ` OFFSET ` + fmt.Sprintf("%d", p.Offset)
 	}
 	selectIdQry = selectIdQry + `;`
 	log.Println(selectIdQry)
@@ -312,7 +298,7 @@ func (st *Storage) GetEventPagination(offset int, limit int) (*Pagination, error
 	selectQry := mainQry + ` AND e.id IN (`
 
 	tx.QueryRow(countQry).Scan(&recordCount)
-	pages := int64(math.Floor(float64(recordCount) / float64(limit)))
+	p.SetTotal(recordCount)
 
 	rowsIds, err := tx.Query(selectIdQry)
 	if err != nil {
@@ -330,7 +316,7 @@ func (st *Storage) GetEventPagination(offset int, limit int) (*Pagination, error
 	rows, err := tx.Query(finalQry)
 	if err != nil {
 		log.Println(err)
-		return nil, err
+		return nil
 	}
 	defer rows.Close()
 
@@ -387,11 +373,12 @@ func (st *Storage) GetEventPagination(offset int, limit int) (*Pagination, error
 	// Check for errors from iterating over rows.
 	if err := rows.Err(); err != nil {
 		log.Println(err)
-		return nil, err
+		return nil
 	}
 
-	page := &Pagination{Data: events, Total: recordCount, Pages: pages, Limit: limit, Offset: offset}
-	return page, nil
+	p.Data = events
+	return nil
+	//page := &Pagination{Data: events, Total: recordCount, Pages: pages}
 }
 
 func (st *Storage) FindEvent(id string) Event {

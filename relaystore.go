@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"math"
 	"mime"
 	"net/http"
 	"strings"
@@ -345,15 +344,17 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		page := p.Page
 
-		offset := page*20 - 1
-		pagination, err := cfg.Storage.GetEventPagination(offset, 20)
-		pagination.PerPage = 20
-		pagination.CurrentPage = page
-		pagination.LastPage = int64(math.Floor(float64(pagination.Total) / 20.0))
-		pagination.From = (page - 1) * 20
-		pagination.To = (page-1)*20 + 20 // Not correct at end
+		pagination := Pagination{}
+		pagination.SetLimit(20)
+		pagination.SetCurrentPage(p.Page)
+		err := cfg.Storage.GetEventPagination(&pagination)
+
+		//pagination.PerPage = 20
+		//pagination.CurrentPage = page
+		//pagination.LastPage = int64(math.Floor(float64(pagination.Total) / 20.0))
+		//pagination.From = (page - 1) * 20
+		//pagination.To = (page-1)*20 + 20 // Not correct at end
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -362,7 +363,7 @@ func main() {
 		if err != nil {
 			log.Println(err)
 		}
-		json.NewEncoder(w).Encode(pagination)
+		json.NewEncoder(w).Encode(&pagination)
 	})
 
 	http.HandleFunc("/api/getnext", func(w http.ResponseWriter, r *http.Request) {

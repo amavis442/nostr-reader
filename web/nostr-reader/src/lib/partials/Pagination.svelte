@@ -25,8 +25,8 @@
     Page <code>{current_page}</code> of <code>{last_page}</code> (<code>{from + 1}</code> - <code>{to}</code> on <code>{total}</code> items)
   </p>
   
-  <nav>
-    <ul class="flex">
+  <nav class="pagination">
+    <ul>
       <li class="{current_page === 1 ? 'disabled' : ''}">
         <a href={'#'} on:click="{() => changePage(current_page - 1)}" aria-label="Previous" class="mx-1 flex h-9 w-9 items-center justify-center rounded-full border border-blue-gray-100 bg-transparent p-0 text-sm text-blue-gray-500 transition duration-150 ease-in-out hover:bg-light-300">
           <span aria-hidden="true">«</span>
@@ -46,3 +46,35 @@
       </li>
     </ul>
   </nav>
+
+  <style>
+    .pagination {
+      display: flex;
+      justify-content: center;
+    }
+    .pagination ul {
+      display: flex;
+      padding-left: 0;
+      list-style: none;
+    }
+    .pagination li a {
+      position: relative;
+      display: block;
+      padding: .5rem .75rem;
+      margin-left: -1px;
+      line-height: 1.25;
+      background-color: #fff;
+      border: 1px solid #dee2e6;
+    }
+    .pagination li.active a {
+      color: #fff;
+      background-color: #007bff;
+      border-color: #007bff;
+    }
+    .pagination li.disabled a {
+      color: #6c757d;
+      pointer-events: none;
+      cursor: auto;
+      border-color: #dee2e6;
+    }
+  </style>
