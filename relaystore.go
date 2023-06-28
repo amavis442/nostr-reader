@@ -337,7 +337,8 @@ func main() {
 	http.HandleFunc("/api/events", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 		type Page struct {
-			Page int
+			Page  int
+			Limit int
 		}
 		var p Page
 		err = json.NewDecoder(r.Body).Decode(&p)
@@ -346,7 +347,7 @@ func main() {
 		}
 
 		pagination := Pagination{}
-		pagination.SetLimit(20)
+		pagination.SetLimit(p.Limit)
 		pagination.SetCurrentPage(p.Page)
 		err := cfg.Storage.GetEventPagination(&pagination)
 

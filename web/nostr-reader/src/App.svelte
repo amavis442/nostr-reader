@@ -16,9 +16,10 @@
   let last_page = 1;
   let total = 0;
   let loading = true;
+  let limit = 30
 
   onMount(async () => {
-    await refreshView({page:1});
+    await refreshView({page:1,limit:limit});
   });
 
 async function refreshView(params) {
@@ -134,7 +135,7 @@ async function refreshView(params) {
     {from}
     {to}
     {total}
-    on:change="{(ev) => refreshView({page: ev.detail})}">
+    on:change="{(ev) => refreshView({page: ev.detail, limit: limit})}">
   </Pagination>
 {/if}
 
