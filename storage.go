@@ -284,6 +284,10 @@ func (st *Storage) GetEventPagination(p *Pagination) error {
 	mainQry := `SELECT e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
 	u.website, u.nip05, u.lud16, u.display_name FROM events e LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) LEFT JOIN seen s on (s.event_id = e.event_id)
 	WHERE e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false`
+	if p.Since != 0 {
+		since := time.Now().Unix() - int64(p.Since*60*60*24)
+		mainQry = mainQry + ` AND e.event_created_at > ` + fmt.Sprintf("%d", since)
+	}
 
 	countQry := `SELECT COUNT(*) AS cnt FROM (SELECT DISTINCT id, event_id, event_created_at FROM (` + mainQry + `) resultTable) tbl`
 	log.Println(countQry)
@@ -299,6 +303,9 @@ func (st *Storage) GetEventPagination(p *Pagination) error {
 
 	tx.QueryRow(countQry).Scan(&recordCount)
 	p.SetTotal(recordCount)
+	if recordCount < 1 {
+		return nil
+	}
 
 	rowsIds, err := tx.Query(selectIdQry)
 	if err != nil {

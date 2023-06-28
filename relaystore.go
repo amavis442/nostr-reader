@@ -339,6 +339,7 @@ func main() {
 		type Page struct {
 			Page  int
 			Limit int
+			Since int
 		}
 		var p Page
 		err = json.NewDecoder(r.Body).Decode(&p)
@@ -349,6 +350,7 @@ func main() {
 		pagination := Pagination{}
 		pagination.SetLimit(p.Limit)
 		pagination.SetCurrentPage(p.Page)
+		pagination.SetSince(p.Since)
 		err := cfg.Storage.GetEventPagination(&pagination)
 
 		//pagination.PerPage = 20
@@ -367,7 +369,7 @@ func main() {
 		json.NewEncoder(w).Encode(&pagination)
 	})
 
-	http.HandleFunc("/api/getnext", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/sync", func(w http.ResponseWriter, r *http.Request) {
 
 		EventsQueue = EventsQueue[:0]
 		cfg.getEventData()

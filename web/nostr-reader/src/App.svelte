@@ -17,9 +17,10 @@
   let total = 0;
   let loading = true;
   let limit = 30
+  let since = 1 // 1 day
 
   onMount(async () => {
-    await refreshView({page:1,limit:limit});
+    await refreshView({page:1,limit:limit, since:since});
   });
 
 async function refreshView(params) {
@@ -53,7 +54,7 @@ async function refreshView(params) {
 
 
   async function refresh() {
-    fetch("/api/getnext")
+    fetch("/api/sync")
   }
 
   function blockUser(pubkey) {
@@ -68,7 +69,7 @@ async function refreshView(params) {
       })
       .then((data) => {
         console.log("Json is ", data);
-        refreshView({page:current_page});
+        refreshView({page:current_page, limit: limit, since:since});
         return data;
       })
       .catch((err) => {
@@ -125,14 +126,23 @@ async function refreshView(params) {
 </script>
 
 <main>
-  <button on:click="{refresh}" class="btn btn-blue">Sync</button><select bind:value={limit} on:change={() => (refreshView({page:current_page,limit:limit}))} class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500">
+  <button on:click="{refresh}" class="btn btn-blue">Sync</button>
+  <select id="limit" bind:value={limit} on:change={() => (refreshView({page:current_page,limit:limit, since:since }))} class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500">
 		{#each [10,15,20,25,30] as limitValue}
 			<option value={limitValue}>
 				{limitValue}
 			</option>
 		{/each}
-	</select>
+	</select><label for="limit">Items Per Page</label>
   
+  <select id="since" bind:value={since} on:change={() => (refreshView({page:current_page,limit:limit, since:since }))} class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500">
+		{#each [1,2,3,4,5,6,7] as sinceValue}
+			<option value={sinceValue}>
+				{sinceValue}
+			</option>
+		{/each}
+	</select> <label for="since"> Days (since)</label>
+
   {#if total > per_page}
   <Pagination
     {current_page}
@@ -141,7 +151,7 @@ async function refreshView(params) {
     {from}
     {to}
     {total}
-    on:change="{(ev) => refreshView({page: ev.detail, limit: limit})}">
+    on:change="{(ev) => refreshView({page: ev.detail, limit: limit, since: since})}">
   </Pagination>
 {/if}
 

@@ -13,6 +13,7 @@ type Pagination struct {
 	LastPage    int64   `json:"last_page"`
 	From        int     `json:"from"`
 	To          int     `json:"to"`
+	Since       int     `json:"since"`
 }
 
 func (p *Pagination) SetTotal(recordCount int64) {
@@ -23,6 +24,10 @@ func (p *Pagination) SetTotal(recordCount int64) {
 func (p *Pagination) SetLimit(limit int) {
 	p.Limit = limit
 	p.PerPage = limit
+}
+
+func (p *Pagination) SetSince(since int) {
+	p.Since = since
 }
 
 func (p *Pagination) SetCurrentPage(current_page int) {
