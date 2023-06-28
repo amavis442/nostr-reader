@@ -125,7 +125,13 @@ async function refreshView(params) {
 </script>
 
 <main>
-  <button on:click="{refresh}" class="btn btn-blue">Sync</button>
+  <button on:click="{refresh}" class="btn btn-blue">Sync</button><select bind:value={limit} on:change={() => (refreshView({page:current_page,limit:limit}))} class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500">
+		{#each [10,15,20,25,30] as limitValue}
+			<option value={limitValue}>
+				{limitValue}
+			</option>
+		{/each}
+	</select>
   
   {#if total > per_page}
   <Pagination
