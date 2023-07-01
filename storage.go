@@ -303,6 +303,7 @@ func (st *Storage) GetEventPagination(p *Pagination) error {
 
 	tx.QueryRow(countQry).Scan(&recordCount)
 	p.SetTotal(recordCount)
+	p.SetTo()
 	if recordCount < 1 {
 		return nil
 	}

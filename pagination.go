@@ -35,11 +35,11 @@ func (p *Pagination) SetCurrentPage(current_page int) {
 	p.SetOffset()
 	p.SetLastPage()
 	p.setFrom()
-	p.SetTo()
+	//p.SetTo()
 }
 
 func (p *Pagination) SetPages(recordCount int64) {
-	p.Pages = int64(math.Floor(float64(recordCount) / float64(p.Limit)))
+	p.Pages = int64(math.Ceil(float64(recordCount) / float64(p.Limit)))
 	p.LastPage = p.Pages
 }
 
@@ -48,7 +48,7 @@ func (p *Pagination) SetOffset() {
 }
 
 func (p *Pagination) SetLastPage() {
-	p.LastPage = int64(math.Floor(float64(p.Total) / float64(p.Limit)))
+	p.LastPage = int64(math.Ceil(float64(p.Total) / float64(p.Limit)))
 }
 
 func (p *Pagination) setFrom() {
@@ -56,5 +56,9 @@ func (p *Pagination) setFrom() {
 }
 
 func (p *Pagination) SetTo() {
-	p.To = (p.CurrentPage-1)*p.Limit + p.Limit // Not correct at end
+	if p.CurrentPage == int(p.LastPage) {
+		p.To = int(p.Total)
+	} else {
+		p.To = (p.CurrentPage-1)*p.Limit + p.Limit // Not correct at end
+	}
 }

@@ -6,6 +6,9 @@
   import Preview from "./lib/partials/Preview/Preview.svelte";
   import Pagination from './lib/partials/Pagination.svelte';
 
+  import NoteEvent from './lib/partials/Note.svelte';
+  
+
   let page = writable([]);
   let pageData = []
 
@@ -144,62 +147,42 @@ async function refreshView(params) {
 	</select> <label for="since"> Days (since)</label>
 
   {#if total > per_page}
-  <Pagination
-    {current_page}
-    {last_page}
-    {per_page}
-    {from}
-    {to}
-    {total}
-    on:change="{(ev) => refreshView({page: ev.detail, limit: limit, since: since})}">
-  </Pagination>
-{/if}
+    <Pagination
+      {current_page}
+      {last_page}
+      {per_page}
+      {from}
+      {to}
+      {total}
+      on:change="{(ev) => refreshView({page: ev.detail, limit: limit, since: since})}">
+    </Pagination>
+  {/if}
 
   <div class="p-10 mb-10">  
-    {#each pageData ? pageData : [] as note (note.id)}
-    <div class="rounded-t-lg overflow-hidden border-t border-l border-r border-gray-400 p-10 flex justify-center">
-      <div class="max-w-sm w-full lg:max-w-full lg:flex">
-        <div class="h-48 lg:h-auto lg:w-48 flex-none bg-cover rounded-t lg:rounded-t-none lg:rounded-l text-center overflow-hidden" style="background-image: url('https://images.alphacoders.com/188/188121.jpg')" title="Mountain">
-        </div>
-        <div class="border-r border-b border-l border-gray-400 lg:border-l-0 lg:border-t lg:border-gray-400 bg-white rounded-b lg:rounded-b-none lg:rounded-r p-4 flex flex-col justify-between leading-normal">
-          <div class="mb-8 text-left">
-            <small>Event id: {note.id}</small>
-            <hr/>
-            <p class="text-gray-700 text-base">
-              {@html toHtml(note.content)}
-              {#if findLink(note.content)}
-              <!-- svelte-ignore a11y-click-events-have-key-events -->
-              <div class="mt-2" on:click={(e) => e.stopPropagation()}>
-                <Preview
-                  endpoint={`${
-                    import.meta.env.VITE_PREVIEW_LINK
-                  }/api/preview/link`}
-                  url={findLink(note.content)}
-                />
-              </div>
-            {/if}
-            </p>
-            {#if note.etags && note.etags.length > 0}
-              Response to:
-              {#each note.etags as etag}
-                <p><small><button on:click="{searchEvents(note.id, etag)}">{etag}</button></small></p>
-                <div id="search_{note.id}_{etag}" class="border-t border-l border-r border-gray-400 p-10"></div>
-              {/each}
-            {/if}
-          </div>
-          <div class="flex items-center">
-            <img class="w-10 h-10 rounded-full mr-4" src="{ note.profile.picture ? note.profile.picture : placeholder}" alt="Placeholder" title="{ note.profile.about ? note.profile.about : ''}">
-            <div class="text-sm text-left">
-              <p class="text-gray-900 leading-none">{ note.profile.display_name ? note.profile.display_name : note.profile.name.slice(0, 20) } <button on:click="{followUser(note.pubkey)}">Follow</button>| <button on:click="{blockUser(note.pubkey)}">Block</button></p>
-              <p class="text-gray-600"><small>{ (new Date(note.created_at  * 1000)).toLocaleString('nl-NL') }</small></p>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div class="flex flex-col gap-4 h-screen">
+      <div class="h-screen">
+        <div
+          id="Notes"
+          class="flex flex-col relative mx-auto bg-gray-800
+                dark:highlight-white/5 shadow-lg ring-1 ring-black/5
+                divide-y ml-4 mr-4
+                space-y-0 place-content-start
+                h-full max-h-full w-11/12"
+        >
+            <div class="h-full w-full overflow-y-auto">
+      {#each pageData ? pageData : [] as note (note.id)}
+        <NoteEvent {note}
+        on:searchEvent="{(ev) => searchEvents(ev.detail.id, ev.detail.etag)}"
+        on:followUser="{(ev) => followUser(ev.detail)}"
+        on:blockUser="{(ev) => blockUser(ev.detail)}"
+        ></NoteEvent>
+      {/each}
     </div>
-    {/each}
   </div>
+</div>
+</div>
 </main>
+
 
 <style>
   .btn {
