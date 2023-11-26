@@ -140,6 +140,7 @@ CREATE TABLE IF NOT EXISTS tree (
 
 var EventsQueue = make([]nostr.Event, 0)
 var ptagsQueue = make([]string, 0)
+var syncHash string = ""
 
 /*
  * Please see https://github.com/mattn/algia/blob/main/main.go for the code i shamelessly copied
@@ -238,7 +239,7 @@ func (cfg *Config) getEventData() {
 
 func (cfg *Config) updateProfiles(pubkeys []string) {
 	filter := nostr.Filter{
-		Kinds:   []int{nostr.KindSetMetadata},
+		Kinds:   []int{nostr.KindProfileMetadata},
 		Authors: pubkeys,
 	}
 
@@ -377,9 +378,12 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
 		w.WriteHeader(http.StatusOK)
+
+		syncHash = fmt.Sprint(time.Now().Unix())
+
 		test := make(map[string]string)
 		test["status"] = "ok"
-		test["message"] = "This will take a while"
+		test["message"] = syncHash
 		json.NewEncoder(w).Encode(test)
 	})
 

@@ -57,7 +57,16 @@ async function refreshView(params) {
 
 
   async function refresh() {
-    fetch("/api/sync")
+    fetch("/api/sync").then((res) => {
+        return res.json();
+      }).then((data) => {
+        console.log("Json is ", data);
+        refreshView({page:current_page, limit: limit, since:since});
+        return data;
+      })
+      .catch((err) => {
+        console.error("error", err);
+      });
   }
 
   function blockUser(pubkey) {
