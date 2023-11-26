@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"mime"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -292,7 +292,7 @@ func (cfg *Config) blockPubkey(user *BlockPubkey) {
 func loadConfig() (*Config, error) {
 	var cfg Config
 
-	content, err := ioutil.ReadFile("./config.json")
+	content, err := os.ReadFile("./config.json")
 	if err != nil {
 		fmt.Println("Done", err)
 		log.Println("Error when opening file: ", err)
