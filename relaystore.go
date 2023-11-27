@@ -139,7 +139,8 @@ CREATE TABLE IF NOT EXISTS tree (
 `
 
 var EventsQueue = make([]nostr.Event, 0)
-var ptagsQueue = make([]string, 0)
+
+// var ptagsQueue = make([]string, 0)
 var syncHash string = ""
 
 /*
@@ -201,18 +202,20 @@ func (cfg *Config) getEvents(filter nostr.Filter) {
 	}()
 }
 
+/*
 func getFilters(createdAt int64) nostr.Filters {
 	//var timeStamp nostr.Timestamp = nostr.Timestamp(time.Now().Unix() - 60)
 	var timeStamp nostr.Timestamp = nostr.Timestamp(createdAt + 1)
 
-	var filters nostr.Filters
-	filters = []nostr.Filter{{
+	//var filters nostr.Filters
+	filters := []nostr.Filter{{
 		Kinds: []int{nostr.KindTextNote, nostr.KindReaction, nostr.KindArticle},
 		Since: &timeStamp,
 	}}
 
 	return filters
 }
+*/
 
 func (cfg *Config) getEventData() {
 	var createdAt int64
@@ -444,13 +447,15 @@ func main() {
 		log.Println("Searching event with Id: ", j.ID)
 		ev := cfg.Storage.FindEvent(j.ID)
 		if ev.EventID == "" {
-			var tagMap nostr.TagMap
-			if tagMap == nil {
-				tagMap = make(nostr.TagMap)
-			}
-			tagMap["e"] = append(tagMap["e"], j.ID)
+			/*
+				var tagMap nostr.TagMap
+				if tagMap == nil {
+					tagMap = make(nostr.TagMap)
+				}
+				tagMap["e"] = append(tagMap["e"], j.ID)
+			*/
 			filter := nostr.Filter{
-				Tags:  tagMap,
+				IDs:   []string{j.ID},
 				Limit: 1,
 			}
 			log.Println(filter)
