@@ -190,8 +190,11 @@ func (cfg *Config) getEvents(filter nostr.Filter) {
 
 	var pubkeys = make([]string, 0)
 	pubkeys = cfg.Storage.SaveEvents(evs)
+	for i, pubkey := range pubkeys {
+		log.Println(i, pubkey)
+	}
 
-	cfg.updateProfiles(pubkeys)
+	defer cfg.updateProfiles(pubkeys)
 
 	defer func() {
 		log.Println("Done receiving and closed ralay connections")

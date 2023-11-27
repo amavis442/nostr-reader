@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -105,8 +104,11 @@ func (st *Storage) SaveEvents(evs []*nostr.Event) []string {
 	var tree Tree
 	for _, ev := range evs {
 		log.Println("Event ID: ", ev.ID)
-		pubkeys = append(pubkeys, fmt.Sprintf("%x", ev.PubKey))
-
+		if len(ev.PubKey) == 64 {
+			pubkeys = append(pubkeys, ev.PubKey)
+		} else {
+			log.Println("Incorrect pubkey to long max 64: ", ev.PubKey)
+		}
 		ptags = ptags[:0]
 		etags = etags[:0]
 		ptagsNum := 0
@@ -117,10 +119,10 @@ func (st *Storage) SaveEvents(evs []*nostr.Event) []string {
 		for _, tag := range ev.Tags {
 			switch {
 			case tag[0] == "e":
-				if b, e := hex.DecodeString(tag[1]); e != nil || len(b) != 32 {
+				if len(tag) < 1 || len(tag[1]) != 64 {
 					continue
 				} else {
-					etags = append(etags, fmt.Sprintf("%x", b))
+					etags = append(etags, tag[1])
 					etagsNum = etagsNum + 1
 				}
 				if len(tag) == 4 && tag[3] == "root" {
@@ -130,11 +132,13 @@ func (st *Storage) SaveEvents(evs []*nostr.Event) []string {
 					tree.ReplyTag = tag[1]
 				}
 			case tag[0] == "p":
-				if b, e := hex.DecodeString(tag[1]); e != nil || len(b) != 32 {
+				if len(tag) < 1 || len(tag[1]) != 64 {
+					log.Println("P# tag not valid: ", tag)
 					continue
 				} else {
-					ptags = append(ptags, fmt.Sprintf("%x", b))
-					pubkeys = append(pubkeys, fmt.Sprintf("%x", b))
+					log.Println("Adding pubkey from p# tag: ", tag[1])
+					ptags = append(ptags, tag[1])
+					pubkeys = append(pubkeys, tag[1])
 					ptagsNum = ptagsNum + 1
 				}
 			}
@@ -160,7 +164,7 @@ func (st *Storage) SaveEvents(evs []*nostr.Event) []string {
 		var Garbage bool = false
 		for _, f := range st.Filter {
 			matched, _ := regexp.MatchString(f, ev.Content)
-			if matched == true {
+			if matched {
 				Garbage = true
 				log.Println("Got a match", ev.Content)
 			}
@@ -177,14 +181,14 @@ func (st *Storage) SaveEvents(evs []*nostr.Event) []string {
 			etagsSliceSize = 8
 		}
 		ptags = ptags[0:ptagsSliceSize] // Idiots who put a lot of ptags in it. Bad clients
-		etags = etags[0:etagsSliceSize] // Same store as with ptags.
+		etags = etags[0:etagsSliceSize] // Same story as with ptags.
 		if _, err := stmt.Exec(ev.ID, ev.PubKey, ev.Kind, ev.CreatedAt, ev.Content, string(tagJson), ev.Sig, ev.String(), pq.Array(ptags), pq.Array(etags), Garbage); err != nil {
 			log.Println(ev.String(), err)
 			panic(err)
 		}
 
 		if len(tree.RootTag) > 0 {
-			log.Println("Roottag is ", tree.RootTag)
+			log.Println("Roottag is: ", tree.RootTag)
 
 			tx.Exec(treeQry, ev.ID, tree.RootTag, tree.ReplyTag)
 		}
@@ -194,6 +198,7 @@ func (st *Storage) SaveEvents(evs []*nostr.Event) []string {
 	if err := tx.Commit(); err != nil {
 		panic(err)
 	}
+
 	return pubkeys
 }
 
