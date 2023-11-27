@@ -57,7 +57,9 @@ func (st *Storage) SaveProfiles(evs []*nostr.Event) {
 		var data Profile
 		err = json.Unmarshal([]byte(ev.Content), &data)
 		if err != nil {
-			panic(err)
+			log.Println(err.Error(), ev.Content)
+			//panic(err)
+			continue
 		}
 
 		_, err = tx.Exec(qry, ev.PubKey, data.Name, data.About, data.Picture, data.Website, data.Nip05, data.Lud16, data.DisplayName, ev.String(), ev.CreatedAt)
