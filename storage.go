@@ -16,6 +16,10 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
+/**
+ * We neede an active database connection object.
+ * The filter is used for certain words in de posts we want to filter out, because they can be spam
+ */
 type Storage struct {
 	Db     *sql.DB
 	Filter []string
@@ -28,6 +32,9 @@ func (st *Storage) CheckError(err error) {
 	}
 }
 
+/**
+ * Connect to postgresql database
+ */
 func (st *Storage) Connect(cfg *Config) {
 	// connection string
 	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", cfg.Database.Host, cfg.Database.Port, cfg.Database.User, cfg.Database.Password, cfg.Database.Dbname)
@@ -40,6 +47,9 @@ func (st *Storage) Connect(cfg *Config) {
 	fmt.Println("Connected!")
 }
 
+/**
+ * Save user profiles for easy lookup
+ */
 func (st *Storage) SaveProfiles(evs []*nostr.Event) {
 	var qry = `INSERT INTO "profiles" ("pubkey", "name","about", "picture",  "website", "nip05",
 	"lud16", "display_name", "raw", "profile_created_at", "created_at")
@@ -77,6 +87,10 @@ func (st *Storage) SaveProfiles(evs []*nostr.Event) {
 	}
 }
 
+/**
+ * Save the events, mostly notes. Ignore duplicate events based on unique event id
+ * This will normalize the content tag of the events with all the unwanted markup (Myaby put this in a helper function)
+ */
 func (st *Storage) SaveEvents(evs []*nostr.Event) []string {
 	var qry = `INSERT INTO "events" ("event_id", "pubkey", "kind", "event_created_at", "content", "tags_full" , "sig" , "raw" , "ptags" , "etags", "garbage", "created_at") 
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW()) ON CONFLICT (event_id) DO NOTHING;`
@@ -204,6 +218,9 @@ func (st *Storage) SaveEvents(evs []*nostr.Event) []string {
 	return pubkeys
 }
 
+/**
+ * Get a limitted amount of stored events
+ */
 func (st *Storage) GetEvents(limit int) (*[]Event, error) {
 	tx, err := st.Db.Begin()
 	if err != nil {
@@ -277,6 +294,10 @@ func (st *Storage) GetEvents(limit int) (*[]Event, error) {
 	return &events, nil
 }
 
+/**
+ * Do not show all data in an endless scrol page, but paginate it for easy access
+ * and ignore the garbage tagged posts
+ */
 func (st *Storage) GetEventPagination(p *Pagination) error {
 	tx, err := st.Db.Begin()
 	if err != nil {
@@ -396,6 +417,9 @@ func (st *Storage) GetEventPagination(p *Pagination) error {
 	//page := &Pagination{Data: events, Total: recordCount, Pages: pages}
 }
 
+/**
+ * Find an event based on an unique event id
+ */
 func (st *Storage) FindEvent(id string) Event {
 	var qry = `SELECT e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
 	u.website, u.nip05, u.lud16, u.display_name
@@ -428,6 +452,9 @@ func (st *Storage) FindEvent(id string) Event {
 	return event
 }
 
+/**
+ * Some users just posting garbage, so we try to block those by putting them on the naugthy list
+ */
 func (st *Storage) BlockPubkey(pubkey string) error {
 	_, err := st.Db.Exec(`INSERT INTO "block_pubkeys" (pubkey, created_at) VALUES ($1, NOW()) ON CONFLICT (pubkey) DO NOTHING;`, pubkey)
 	if err != nil {
@@ -438,6 +465,9 @@ func (st *Storage) BlockPubkey(pubkey string) error {
 	return nil
 }
 
+/**
+ * And there are user we like, so put them on the good list
+ */
 func (st *Storage) FollowPubkey(pubkey string) error {
 	_, err := st.Db.Exec(`INSERT INTO "follow_pubkeys" (pubkey, created_at) VALUES ($1, NOW()) ON CONFLICT (pubkey) DO NOTHING;`, pubkey)
 	if err != nil {
@@ -446,4 +476,12 @@ func (st *Storage) FollowPubkey(pubkey string) error {
 	}
 
 	return nil
+}
+
+func (st *Storage) getLastTimeStamp() int64 {
+	var createdAt int64
+	row := st.Db.QueryRow("SELECT MAX(created_at) as MaxCreated FROM events")
+	row.Scan(&createdAt)
+
+	return createdAt
 }

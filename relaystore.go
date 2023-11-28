@@ -15,6 +15,14 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
+/**
+ * Main app
+ * This file is used from processing http requests from the frontend
+ */
+
+/**
+ * I put this here because this will be returned as json for the api
+ */
 type Profile struct {
 	Name        string `json:"name"`
 	About       string `json:"about"`
@@ -63,6 +71,10 @@ type Relay struct {
 	Write bool
 }
 
+/**
+ * Used to store the config.json file and some database related stuff for easy access
+ *
+ */
 type Config struct {
 	Database *DbConfig
 	Relays   []string
@@ -74,6 +86,11 @@ type Config struct {
 	Storage  *Storage
 }
 
+/**
+ * Since the above structs should be in sync with the database tables they represent.
+ * I put the create statement of the database here even when it more a database thing which is storage.go.
+ * Maybe change it later.
+ */
 const CreateQuery string = `
 CREATE TABLE IF NOT EXISTS events (
 	id SERIAL Primary Key,
@@ -138,6 +155,9 @@ CREATE TABLE IF NOT EXISTS tree (
 );
 `
 
+/**
+ * Not all events are processed at once and we do not want to miss out on events, so put them in a queque and use FIFO to process.
+ */
 var EventsQueue = make([]nostr.Event, 0)
 
 // var ptagsQueue = make([]string, 0)
@@ -145,6 +165,11 @@ var syncHash string = ""
 
 /*
  * Please see https://github.com/mattn/algia/blob/main/main.go for the code i shamelessly copied
+ *
+ * Fire off calls to relays for getting new posts, user metadata etc. Each relay is operated in it's own thread
+ * The f function is used to process the data we get from the relays.
+ *
+ * It just makes sure all available relays are called
  */
 func (cfg *Config) Do(f func(*nostr.Relay)) {
 	var wg sync.WaitGroup
@@ -160,13 +185,17 @@ func (cfg *Config) Do(f func(*nostr.Relay)) {
 				log.Println(err)
 				return
 			}
-			f(relay)
+			f(relay) // Custom function call that takes nostr.Relay as an argument. The function f will probally be an anonymous function
 			relay.Close()
 		}(&wg, v)
 	}
 	wg.Wait()
 }
 
+/**
+ * Send a request over a websocket to get new events (notes) and after processing the events
+ * try to get all the usernames metadata from who posted the note.
+ */
 func (cfg *Config) getEvents(filter nostr.Filter) {
 	log.Println("Get Event data from relays")
 	var m sync.Map
@@ -175,6 +204,10 @@ func (cfg *Config) getEvents(filter nostr.Filter) {
 		if err != nil {
 			return
 		}
+		/**
+		 * Deduplicate
+		 * Make sure we only have 1 copy of the event even when we have multiple relays that have this event stored.
+		 */
 		for _, ev := range evs {
 			if _, ok := m.Load(ev.ID); !ok {
 				m.LoadOrStore(ev.ID, ev)
@@ -182,6 +215,9 @@ func (cfg *Config) getEvents(filter nostr.Filter) {
 		}
 	})
 
+	/**
+	 * Turn the sync map into an array we can process
+	 */
 	var evs []*nostr.Event
 	m.Range(func(k, v any) bool {
 		log.Println(k)
@@ -189,12 +225,16 @@ func (cfg *Config) getEvents(filter nostr.Filter) {
 		return true
 	})
 
+	/**
+	 * Array of all the pubkeys in the event also the #p tags
+	 */
 	var pubkeys = make([]string, 0)
 	pubkeys = cfg.Storage.SaveEvents(evs)
 	for i, pubkey := range pubkeys {
 		log.Println(i, pubkey)
 	}
 
+	// Last but not least, try to get the user metadata
 	defer cfg.updateProfiles(pubkeys)
 
 	defer func() {
@@ -202,31 +242,24 @@ func (cfg *Config) getEvents(filter nostr.Filter) {
 	}()
 }
 
-/*
-func getFilters(createdAt int64) nostr.Filters {
-	//var timeStamp nostr.Timestamp = nostr.Timestamp(time.Now().Unix() - 60)
-	var timeStamp nostr.Timestamp = nostr.Timestamp(createdAt + 1)
-
-	//var filters nostr.Filters
-	filters := []nostr.Filter{{
-		Kinds: []int{nostr.KindTextNote, nostr.KindReaction, nostr.KindArticle},
-		Since: &timeStamp,
-	}}
-
-	return filters
-}
-*/
-
+/**
+ * Before we try to get events, first get the last timestamp so we do not query all the events all the time but only the lastests.
+ * We do not want to spam the relays when we just synced, so wait 60 seconds before we accept a new sync
+ */
 func (cfg *Config) getEventData() {
 	var createdAt int64
-	row := cfg.Storage.Db.QueryRow("SELECT MAX(created_at) as MaxCreated FROM events")
-	row.Scan(&createdAt)
+	var createdAtOffset int64 = time.Now().Unix() - 60
+
+	//row := cfg.Storage.Db.QueryRow("SELECT MAX(created_at) as MaxCreated FROM events")
+	//row.Scan(&createdAt)
+	createdAt = cfg.Storage.getLastTimeStamp()
+
 	log.Println(createdAt)
 	if createdAt < 1 {
-		createdAt = time.Now().Unix() - 60
+		createdAt = createdAtOffset
 	}
-	if createdAt > time.Now().Unix()-60 {
-		log.Printf("Time lapse is to short for getting new data %d %d", createdAt, time.Now().Unix()-60)
+	if createdAt > createdAtOffset {
+		log.Printf("Time lapse is to short for getting new data %d %d", createdAt, createdAtOffset)
 		return
 	}
 
@@ -243,6 +276,9 @@ func (cfg *Config) getEventData() {
 	}()
 }
 
+/**
+ * Get the metadata of a bunch of Pubkeys and store them.
+ */
 func (cfg *Config) updateProfiles(pubkeys []string) {
 	filter := nostr.Filter{
 		Kinds:   []int{nostr.KindProfileMetadata},
@@ -274,27 +310,19 @@ func (cfg *Config) updateProfiles(pubkeys []string) {
 	log.Println("Done for profiles")
 }
 
-func (cfg *Config) getLast(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
-	w.WriteHeader(http.StatusOK)
-
-	events, err := cfg.Storage.GetEvents(30)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
-	json.NewEncoder(w).Encode(events)
-}
-
+/**
+ * Put a user on the naugthy list.
+ */
 func (cfg *Config) blockPubkey(user *BlockPubkey) {
-	_, err := cfg.Storage.Db.Exec(`INSERT INTO "block_pubkeys" (pubkey, created_at) VALUES ($1, NOW()) ON CONFLICT (id) DO NOTHING;`, user.Pubkey)
+	err := cfg.Storage.BlockPubkey(user.Pubkey)
 	if err != nil {
 		log.Println(err)
 	}
 }
 
+/**
+ * Get the content of config.json file
+ */
 func loadConfig() (*Config, error) {
 	var cfg Config
 
@@ -318,6 +346,9 @@ func loadConfig() (*Config, error) {
 	return &cfg, nil
 }
 
+/**
+ * Process all the http calls
+ */
 func main() {
 	cfg, err := loadConfig()
 	if err != nil {
@@ -340,7 +371,11 @@ func main() {
 
 	// Windows may be missing this
 	mime.AddExtensionType(".js", "application/javascript")
-	//http.HandleFunc("/api/events", cfg.getLast)
+
+	/*
+	 * Get events that already are stored in the database
+	 * This will not SYNC the local database with that of the relays.
+	 */
 	http.HandleFunc("/api/events", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 		type Page struct {
@@ -360,12 +395,6 @@ func main() {
 		pagination.SetSince(p.Since)
 		err := cfg.Storage.GetEventPagination(&pagination)
 
-		//pagination.PerPage = 20
-		//pagination.CurrentPage = page
-		//pagination.LastPage = int64(math.Floor(float64(pagination.Total) / 20.0))
-		//pagination.From = (page - 1) * 20
-		//pagination.To = (page-1)*20 + 20 // Not correct at end
-
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
 		w.WriteHeader(http.StatusOK)
@@ -376,6 +405,9 @@ func main() {
 		json.NewEncoder(w).Encode(&pagination)
 	})
 
+	/**
+	 * This will sync the local database with that of the relays (Only public events and not channels and such)
+	 */
 	http.HandleFunc("/api/sync", func(w http.ResponseWriter, r *http.Request) {
 
 		EventsQueue = EventsQueue[:0]
@@ -393,6 +425,9 @@ func main() {
 		json.NewEncoder(w).Encode(test)
 	})
 
+	/**
+	 * Put a user on the naughty list
+	 */
 	http.HandleFunc("/api/blockuser", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
@@ -413,6 +448,10 @@ func main() {
 		json.NewEncoder(w).Encode(test)
 	})
 
+	/**
+	 * Put a user on the follow list
+	 * This is all local and will not send an event for followlist
+	 */
 	http.HandleFunc("/api/followuser", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
@@ -433,6 +472,9 @@ func main() {
 		json.NewEncoder(w).Encode(test)
 	})
 
+	/**
+	 * Find an event based on event id. This can be a reply
+	 */
 	http.HandleFunc("/api/searchevent", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
@@ -447,13 +489,6 @@ func main() {
 		log.Println("Searching event with Id: ", j.ID)
 		ev := cfg.Storage.FindEvent(j.ID)
 		if ev.EventID == "" {
-			/*
-				var tagMap nostr.TagMap
-				if tagMap == nil {
-					tagMap = make(nostr.TagMap)
-				}
-				tagMap["e"] = append(tagMap["e"], j.ID)
-			*/
 			filter := nostr.Filter{
 				IDs:   []string{j.ID},
 				Limit: 1,
@@ -491,6 +526,9 @@ func main() {
 		json.NewEncoder(w).Encode(ev)
 	})
 
+	/**
+	 * Sometimes it is nice to see pictures in the post and not just a link
+	 */
 	http.HandleFunc("/api/preview/link", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
