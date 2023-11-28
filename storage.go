@@ -26,7 +26,90 @@ type Storage struct {
 	Count  int64
 }
 
+type DbConfig struct {
+	User     string
+	Password string
+	Dbname   string
+	Port     int
+	Host     string
+}
+
+/**
+ * Since the above structs should be in sync with the database tables they represent.
+ * I put the create statement of the database here even when it more a database thing which is storage.go.
+ * Maybe change it later.
+ */
+const CreateQuery string = `
+ CREATE TABLE IF NOT EXISTS events (
+	 id SERIAL Primary Key,
+	 event_id TEXT UNIQUE, 
+	 pubkey TEXT, 
+	 kind INTEGER, 
+	 event_created_at INTEGER, 
+	 content TEXT, 
+	 tags_full TEXT, 
+	 ptags text[],
+	 etags text[],
+	 sig TEXT,
+	 raw TEXT,
+	 garbage boolean DEFAULT false,
+	 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+ );
+ CREATE INDEX IF NOT EXISTS idx_events_pubkey ON events (pubkey);
+ 
+ CREATE TABLE IF NOT EXISTS profiles (
+	 id SERIAL Primary Key,
+	 pubkey VARCHAR UNIQUE, 
+	 name TEXT,
+	 about TEXT,
+	 picture TEXT,
+	 website TEXT,
+	 nip05 TEXT,
+	 lud16 TEXT,
+	 display_name TEXT,
+	 raw TEXT,
+	 profile_created_at INTEGER,
+	 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+ );
+ CREATE INDEX IF NOT EXISTS idx_profile_pubkey ON profiles (pubkey);
+ 
+ CREATE TABLE IF NOT EXISTS block_pubkeys (
+	 id SERIAL Primary Key, 
+	 pubkey VARCHAR UNIQUE, 
+	 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+ );
+ CREATE INDEX IF NOT EXISTS idx_block_pubkeys_pubkey ON block_pubkeys (pubkey);
+ 
+ CREATE TABLE IF NOT EXISTS follow_pubkeys (
+	 id SERIAL Primary Key,
+	 pubkey VARCHAR UNIQUE, 
+	 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+ );
+ CREATE INDEX IF NOT EXISTS idx_follow_pubkeys_pubkey ON follow_pubkeys (pubkey);
+ 
+ CREATE TABLE IF NOT EXISTS seen (
+	 id SERIAL Primary Key,
+	 event_id VARCHAR UNIQUE, 
+	 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+ );
+ CREATE INDEX IF NOT EXISTS seen_by_event_id ON seen (event_id);
+ 
+ CREATE TABLE IF NOT EXISTS tree (
+	 id SERIAL Primary Key,
+	 event_id VARCHAR,
+	 root_event_id VARCHAR,
+	 reply_event_id VARCHAR, 
+	 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+ );
+ `
+
 func (st *Storage) CheckError(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+func (st *Storage) CreateTables() {
+	_, err := st.Db.Exec(CreateQuery)
 	if err != nil {
 		panic(err)
 	}
@@ -45,6 +128,10 @@ func (st *Storage) Connect(cfg *Config) {
 	st.CheckError(err)
 
 	fmt.Println("Connected!")
+}
+
+func (st *Storage) Close() {
+	st.Db.Close()
 }
 
 /**
