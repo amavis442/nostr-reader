@@ -19,7 +19,7 @@ You will need go 1.20 and npm 9.1
 
 `go build .`
 
-this will getthe packages and build relaystore.exe on windows and will be the server 
+this will get the packages and build relaystore.exe on windows and will be the server 
 
 ```
 cd web/nostr-reader
