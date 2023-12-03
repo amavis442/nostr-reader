@@ -169,7 +169,13 @@ func (req *Requests) SearchEvent(w http.ResponseWriter, r *http.Request) {
 	log.Println("Searching event with Id: ", j.ID)
 	ev := req.Cfg.Storage.FindEvent(j.ID)
 	if ev.EventID == "" {
-		req.Nostr.GetEventById(j.ID)
+		filter := nostrHandler.Filter{
+			IDs:   []string{j.ID},
+			Limit: 1,
+		}
+		req.Nostr.GetEvents(filter)
+
+		log.Println("Need to get it", j.ID, filter)
 	}
 	ev = req.Cfg.Storage.FindEvent(j.ID)
 

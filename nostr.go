@@ -101,7 +101,7 @@ func (nostr *Nostr) Post(content string) {
  * Send a request over a websocket to get new events (notes) and after processing the events
  * try to get all the usernames metadata from who posted the note.
  */
-func (nostr *Nostr) getEvents(filter nostrHandler.Filter) {
+func (nostr *Nostr) GetEvents(filter nostrHandler.Filter) {
 	log.Println("Get Event data from relays")
 	var m sync.Map
 	var mu sync.Mutex
@@ -119,6 +119,10 @@ func (nostr *Nostr) getEvents(filter nostrHandler.Filter) {
 		for _, ev := range evs {
 			if _, ok := m.Load(ev.ID); !ok {
 				m.LoadOrStore(ev.ID, ev)
+				if len(filter.IDs) == 1 {
+					ctx.Done()
+					break
+				}
 			}
 		}
 		mu.Unlock()
@@ -128,50 +132,6 @@ func (nostr *Nostr) getEvents(filter nostrHandler.Filter) {
 	/**
 	 * Turn the sync map into an array we can process
 	 */
-	var evs []*nostrHandler.Event
-	m.Range(func(k, v any) bool {
-		log.Println(k)
-		evs = append(evs, v.(*nostrHandler.Event))
-		return true
-	})
-
-	/**
-	 * Array of all the pubkeys in the event also the #p tags
-	 */
-	var pubkeys = make([]string, 0)
-	pubkeys = nostr.Storage.SaveEvents(evs)
-	for i, pubkey := range pubkeys {
-		log.Println(i, pubkey)
-	}
-
-	// Last but not least, try to get the user metadata
-	defer nostr.updateProfiles(pubkeys)
-
-	defer func() {
-		log.Println("Done receiving and closed ralay connections")
-	}()
-}
-
-func (nostr *Nostr) GetEventById(id string) {
-	filter := nostrHandler.Filter{
-		IDs:   []string{id},
-		Limit: 1,
-	}
-	log.Println(filter)
-	var m sync.Map
-	nostr.Do(func(ctx context.Context, relay *nostrHandler.Relay) bool {
-		evs, err := relay.QuerySync(context.Background(), filter)
-		if err != nil {
-			return false
-		}
-		for _, ev := range evs {
-			if _, ok := m.Load(ev.ID); !ok {
-				m.LoadOrStore(ev.ID, ev)
-			}
-		}
-		return true
-	})
-
 	var evs []*nostrHandler.Event
 	m.Range(func(k, v any) bool {
 		log.Println(k)
@@ -223,7 +183,7 @@ func (nostr *Nostr) getEventData() {
 		Since: &timeStamp,
 	}
 
-	nostr.getEvents(filter)
+	nostr.GetEvents(filter)
 
 	defer func() {
 		log.Println("Closing shop")
