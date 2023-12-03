@@ -73,7 +73,7 @@ export function toHtml(content: string): string {
     content = content.replace(match[0], 'lightning invoice: ' + amount + ' sats (Amount: ' + rawAmount + ', Unit: ' + rawUnit +', Unit number: ' +  unitNumber + ')')
     content = content.replace("&#39;", "'")
   
-    return content
+    return content 
   }
 
   return escapeHtml(content)

@@ -1,13 +1,11 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	nostrHandler "github.com/nbd-wtf/go-nostr"
@@ -140,13 +138,19 @@ func (req *Requests) FollowUser(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	req.Cfg.Storage.FollowPubkey(user.Pubkey)
+	err = req.Cfg.Storage.FollowPubkey(user.Pubkey)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
 	w.WriteHeader(http.StatusOK)
 	test := map[string]string{}
 	test["status"] = "ok"
+	test["msg"] = ""
+	if err != nil {
+		test["status"] = "error"
+		test["msg"] = err.Error()
+	}
+
 	test["followed"] = user.Pubkey
 	json.NewEncoder(w).Encode(test)
 }
@@ -165,34 +169,7 @@ func (req *Requests) SearchEvent(w http.ResponseWriter, r *http.Request) {
 	log.Println("Searching event with Id: ", j.ID)
 	ev := req.Cfg.Storage.FindEvent(j.ID)
 	if ev.EventID == "" {
-		filter := nostrHandler.Filter{
-			IDs:   []string{j.ID},
-			Limit: 1,
-		}
-		log.Println(filter)
-		var m sync.Map
-		req.Nostr.Do(func(relay *nostrHandler.Relay) {
-			evs, err := relay.QuerySync(context.Background(), filter)
-			if err != nil {
-				return
-			}
-			for _, ev := range evs {
-				if _, ok := m.Load(ev.ID); !ok {
-					m.LoadOrStore(ev.ID, ev)
-				}
-			}
-		})
-
-		var evs []*nostrHandler.Event
-		m.Range(func(k, v any) bool {
-			log.Println(k)
-			evs = append(evs, v.(*nostrHandler.Event))
-			return true
-		})
-
-		pubkeys := req.Cfg.Storage.SaveEvents(evs)
-		req.Nostr.updateProfiles(pubkeys)
-
+		req.Nostr.GetEventById(j.ID)
 	}
 	ev = req.Cfg.Storage.FindEvent(j.ID)
 
@@ -230,4 +207,31 @@ func (req *Requests) PreviewLink(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Println("Preview result: ", result)
 	json.NewEncoder(w).Encode(result)
+}
+
+func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	type Msg struct {
+		Msg string
+	}
+	var msg Msg
+	err := json.NewDecoder(r.Body).Decode(&msg)
+	if err != nil {
+		panic(err)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept")
+
+	w.WriteHeader(http.StatusOK)
+	log.Println("Msg to publish: ", msg.Msg)
+
+	req.Nostr.Post(msg.Msg)
+
+	test := map[string]string{}
+	test["status"] = "ok"
+	test["msg"] = msg.Msg
+	json.NewEncoder(w).Encode(test)
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -29,25 +30,71 @@ type Relay struct {
  *
  * It just makes sure all available relays are called
  */
-func (nostr *Nostr) Do(f func(*nostrHandler.Relay)) {
+func (nostr *Nostr) Do(f func(context.Context, *nostrHandler.Relay) bool) {
 	var wg sync.WaitGroup
 
-	for _, v := range nostr.Cfg.Relays {
+	for _, relayUrl := range nostr.Cfg.Relays {
 		wg.Add(1)
 
-		go func(wg *sync.WaitGroup, v string) {
+		go func(wg *sync.WaitGroup, relayUrl string) {
 			defer wg.Done()
-			ctx := context.WithValue(context.Background(), "url", v)
-			relay, err := nostrHandler.RelayConnect(ctx, v)
+			ctx := context.WithValue(context.Background(), "relayUrl", relayUrl)
+			relay, err := nostrHandler.RelayConnect(ctx, relayUrl)
 			if err != nil {
 				log.Println(err)
 				return
 			}
-			f(relay) // Custom function call that takes nostr.Relay as an argument. The function f will probally be an anonymous function
+			if !f(ctx, relay) { // Custom function call that takes nostr.Relay as an argument. The function f will probally be an anonymous function
+				ctx.Done()
+			}
 			relay.Close()
-		}(&wg, v)
+		}(&wg, relayUrl)
 	}
 	wg.Wait()
+}
+
+func (nostr *Nostr) Publish(f func(context.Context, *nostrHandler.Relay) bool) {
+	var wg sync.WaitGroup
+
+	for _, relayUrl := range nostr.Cfg.Relays {
+		wg.Add(1)
+
+		go func(wg *sync.WaitGroup, relayUrl string) {
+			defer wg.Done()
+			ctx := context.WithValue(context.Background(), "url", relayUrl)
+			relay, err := nostrHandler.RelayConnect(ctx, relayUrl)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			f(ctx, relay) // Custom function call that takes nostr.Relay as an argument. The function f will probally be an anonymous function
+			fmt.Printf("published to %s\n", relayUrl)
+			relay.Close()
+		}(&wg, relayUrl)
+	}
+	wg.Wait()
+}
+
+func (nostr *Nostr) Post(content string) {
+	ev := nostrHandler.Event{
+		PubKey:    nostr.Cfg.Pubkey,
+		CreatedAt: nostrHandler.Now(),
+		Kind:      nostrHandler.KindTextNote,
+		Tags:      nil,
+		Content:   content,
+	}
+
+	// calling Sign sets the event ID field and the event Sig field
+	ev.Sign(nostr.Cfg.Pk)
+
+	nostr.Publish(func(ctx context.Context, relay *nostrHandler.Relay) bool {
+		_, err := relay.Publish(ctx, ev)
+		if err != nil {
+			fmt.Println(err)
+			return false
+		}
+		return true
+	})
 }
 
 /**
@@ -57,10 +104,13 @@ func (nostr *Nostr) Do(f func(*nostrHandler.Relay)) {
 func (nostr *Nostr) getEvents(filter nostrHandler.Filter) {
 	log.Println("Get Event data from relays")
 	var m sync.Map
-	nostr.Do(func(relay *nostrHandler.Relay) {
-		evs, err := relay.QuerySync(context.Background(), filter)
+	var mu sync.Mutex
+	nostr.Do(func(ctx context.Context, relay *nostrHandler.Relay) bool {
+		mu.Lock()
+		evs, err := relay.QuerySync(ctx, filter)
 		if err != nil {
-			return
+			mu.Unlock()
+			return false
 		}
 		/**
 		 * Deduplicate
@@ -71,11 +121,57 @@ func (nostr *Nostr) getEvents(filter nostrHandler.Filter) {
 				m.LoadOrStore(ev.ID, ev)
 			}
 		}
+		mu.Unlock()
+		return true
 	})
 
 	/**
 	 * Turn the sync map into an array we can process
 	 */
+	var evs []*nostrHandler.Event
+	m.Range(func(k, v any) bool {
+		log.Println(k)
+		evs = append(evs, v.(*nostrHandler.Event))
+		return true
+	})
+
+	/**
+	 * Array of all the pubkeys in the event also the #p tags
+	 */
+	var pubkeys = make([]string, 0)
+	pubkeys = nostr.Storage.SaveEvents(evs)
+	for i, pubkey := range pubkeys {
+		log.Println(i, pubkey)
+	}
+
+	// Last but not least, try to get the user metadata
+	defer nostr.updateProfiles(pubkeys)
+
+	defer func() {
+		log.Println("Done receiving and closed ralay connections")
+	}()
+}
+
+func (nostr *Nostr) GetEventById(id string) {
+	filter := nostrHandler.Filter{
+		IDs:   []string{id},
+		Limit: 1,
+	}
+	log.Println(filter)
+	var m sync.Map
+	nostr.Do(func(ctx context.Context, relay *nostrHandler.Relay) bool {
+		evs, err := relay.QuerySync(context.Background(), filter)
+		if err != nil {
+			return false
+		}
+		for _, ev := range evs {
+			if _, ok := m.Load(ev.ID); !ok {
+				m.LoadOrStore(ev.ID, ev)
+			}
+		}
+		return true
+	})
+
 	var evs []*nostrHandler.Event
 	m.Range(func(k, v any) bool {
 		log.Println(k)
@@ -145,16 +241,17 @@ func (nostr *Nostr) updateProfiles(pubkeys []string) {
 
 	log.Println("Get user data from relays")
 	var m sync.Map
-	nostr.Do(func(relay *nostrHandler.Relay) {
-		evs, err := relay.QuerySync(context.Background(), filter)
+	nostr.Do(func(ctx context.Context, relay *nostrHandler.Relay) bool {
+		evs, err := relay.QuerySync(ctx, filter)
 		if err != nil {
-			return
+			return false
 		}
 		for _, ev := range evs {
 			if _, ok := m.Load(ev.ID); !ok {
 				m.LoadOrStore(ev.ID, ev)
 			}
 		}
+		return true
 	})
 
 	var evs []*nostrHandler.Event

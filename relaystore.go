@@ -73,6 +73,11 @@ func main() {
 	 */
 	http.HandleFunc("/api/preview/link", req.PreviewLink)
 
+	/**
+	 * Sometimes it is nice to see pictures in the post and not just a link
+	 */
+	http.HandleFunc("/api/publish", req.Publish)
+
 	http.Handle("/", http.FileServer(http.Dir("web/nostr-reader/dist")))
 
 	log.Fatal(http.ListenAndServe(":8080", nil))

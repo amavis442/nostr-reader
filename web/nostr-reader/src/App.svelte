@@ -7,7 +7,9 @@
   import Pagination from './lib/partials/Pagination.svelte';
 
   import NoteEvent from './lib/partials/Note.svelte';
-  
+  import Modal from './lib/partials/Modal.svelte';
+  import TextArea from './lib/partials/TextArea.svelte';
+  import Button from './lib/partials/Button.svelte';
 
   let page = writable([]);
   let pageData = []
@@ -107,6 +109,25 @@ async function refreshView(params) {
         console.error("error", err);
       });
   }
+  
+  function publish(msg) {
+    fetch("/api/publish", {
+      method: "POST",
+      body: JSON.stringify({ msg: msg }),
+      headers: {
+        "Content-Type": "application/json",
+      }
+    }).then((res) => {
+        return res.json();
+      })
+      .then((data) => {
+        console.log("Json is ", data);
+        return data;
+      })
+      .catch((err) => {
+        console.error("error", err);
+      });
+  }
 
   let searchEvent = writable({})
   function searchEvents(noteId, etag) 
@@ -123,7 +144,7 @@ async function refreshView(params) {
       .then((data) => {
         console.log("Json is ", data);
         if (data.content) {
-          document.getElementById('search_' + noteId + '_' + etag).innerHTML = toHtml(data.content) + '<br/>' + data.profile.name;
+          document.getElementById('search_' + noteId + '_' + etag).innerHTML = "<p class=\"truncate hover:text-clip; width: 100%\">" + toHtml(data.content) + '</p><br/><hr/>' + (data.profile.name ? data.profile.name : data.pubkey);
         }
         if (!data.content) {
           document.getElementById('search_' + noteId + '_' + etag).innerHTML = "No event data available";
@@ -135,9 +156,39 @@ async function refreshView(params) {
         console.error("error", err);
       });
   }
+
+  let showModal = false;
+  async function onSubmit(e:Event) {
+    const target = e.target as HTMLFormElement;
+    const formData = new FormData(target);
+
+    const data:{replyText?: string} = {};
+    //@ts-ignore
+    for (let field of formData) {
+      const [key, value] = field;
+      data[key] = value;
+    }
+
+    publish(data.replyText)
+    showModal = false;
+  }
 </script>
 
+<Modal bind:showModal>
+	<h2 slot="header">
+		Create Note
+	</h2>
+
+	<form on:submit|preventDefault={onSubmit}>
+    <p><TextArea id="replyText" rows="5" /></p>
+    <div class="actions">
+      <Button type="submit">Send</Button>
+    </div>
+  </form>
+</Modal>
+
 <main>
+  
   <button on:click="{refresh}" class="btn btn-blue">Sync</button>
   <select id="limit" bind:value={limit} on:change={() => (refreshView({page:current_page,limit:limit, since:since }))} class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500">
 		{#each [10,15,20,25,30] as limitValue}
@@ -154,7 +205,7 @@ async function refreshView(params) {
 			</option>
 		{/each}
 	</select> <label for="since"> Days (since)</label>
-
+  <button on:click={() => (showModal = true)} class="btn btn-blue"> Msg </button>
   {#if total > per_page}
     <Pagination
       {current_page}
@@ -166,6 +217,7 @@ async function refreshView(params) {
       on:change="{(ev) => refreshView({page: ev.detail, limit: limit, since: since})}">
     </Pagination>
   {/if}
+  
 
   <div class="p-10 mb-10">  
     <div class="flex flex-col gap-4 h-screen">
@@ -176,7 +228,7 @@ async function refreshView(params) {
                 dark:highlight-white/5 shadow-lg ring-1 ring-black/5
                 divide-y ml-4 mr-4
                 space-y-0 place-content-start
-                h-full max-h-full w-11/12"
+                h-full max-h-full w-10/12"
         >
             <div class="h-full w-full overflow-y-auto">
       {#each pageData ? pageData : [] as note (note.id)}
