@@ -4,6 +4,7 @@ package main
  * Based on https://github.com/sbabashahi/urlPreviewGo/blob/master/main.go
  */
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -66,7 +67,7 @@ func Respond(w http.ResponseWriter, data map[string]interface{}) {
 }
 
 // URLPreview function for main page
-func URLPreview(url string) (map[string]interface{}, error) {
+func URLPreview(ctx context.Context, url string) (map[string]interface{}, error) {
 	meta := HTMLMeta{}
 
 	resp, err := http.Get(url)

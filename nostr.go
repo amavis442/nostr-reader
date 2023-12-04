@@ -101,7 +101,7 @@ func (nostr *Nostr) Post(content string) {
  * Send a request over a websocket to get new events (notes) and after processing the events
  * try to get all the usernames metadata from who posted the note.
  */
-func (nostr *Nostr) GetEvents(filter nostrHandler.Filter) {
+func (nostr *Nostr) GetEvents(ctx context.Context, filter nostrHandler.Filter) {
 	log.Println("Get Event data from relays")
 	var m sync.Map
 	var mu sync.Mutex
@@ -143,13 +143,13 @@ func (nostr *Nostr) GetEvents(filter nostrHandler.Filter) {
 	 * Array of all the pubkeys in the event also the #p tags
 	 */
 	var pubkeys = make([]string, 0)
-	pubkeys = nostr.Storage.SaveEvents(evs)
+	pubkeys = nostr.Storage.SaveEvents(ctx, evs)
 	for i, pubkey := range pubkeys {
 		log.Println(i, pubkey)
 	}
 
 	// Last but not least, try to get the user metadata
-	defer nostr.updateProfiles(pubkeys)
+	defer nostr.updateProfiles(ctx, pubkeys)
 
 	defer func() {
 		log.Println("Done receiving and closed ralay connections")
@@ -160,13 +160,13 @@ func (nostr *Nostr) GetEvents(filter nostrHandler.Filter) {
  * Before we try to get events, first get the last timestamp so we do not query all the events all the time but only the lastests.
  * We do not want to spam the relays when we just synced, so wait 60 seconds before we accept a new sync
  */
-func (nostr *Nostr) getEventData() {
+func (nostr *Nostr) getEventData(ctx context.Context) {
 	var createdAt int64
 	var createdAtOffset int64 = time.Now().Unix() - 60
 
 	//row := cfg.Storage.Db.QueryRow("SELECT MAX(created_at) as MaxCreated FROM events")
 	//row.Scan(&createdAt)
-	createdAt = nostr.Storage.getLastTimeStamp()
+	createdAt = nostr.Storage.getLastTimeStamp(ctx)
 
 	log.Println(createdAt)
 	if createdAt < 1 {
@@ -183,7 +183,7 @@ func (nostr *Nostr) getEventData() {
 		Since: &timeStamp,
 	}
 
-	nostr.GetEvents(filter)
+	nostr.GetEvents(ctx, filter)
 
 	defer func() {
 		log.Println("Closing shop")
@@ -193,7 +193,7 @@ func (nostr *Nostr) getEventData() {
 /**
  * Get the metadata of a bunch of Pubkeys and store them.
  */
-func (nostr *Nostr) updateProfiles(pubkeys []string) {
+func (nostr *Nostr) updateProfiles(ctx context.Context, pubkeys []string) {
 	filter := nostrHandler.Filter{
 		Kinds:   []int{nostrHandler.KindProfileMetadata},
 		Authors: pubkeys,
@@ -221,15 +221,15 @@ func (nostr *Nostr) updateProfiles(pubkeys []string) {
 		return true
 	})
 
-	nostr.Storage.SaveProfiles(evs)
+	nostr.Storage.SaveProfiles(ctx, evs)
 	log.Println("Done for profiles")
 }
 
 /**
  * Put a user on the naugthy list.
  */
-func (nostr *Nostr) blockPubkey(user *BlockPubkey) {
-	err := nostr.Storage.BlockPubkey(user.Pubkey)
+func (nostr *Nostr) blockPubkey(ctx context.Context, user *BlockPubkey) {
+	err := nostr.Storage.BlockPubkey(ctx, user.Pubkey)
 	if err != nil {
 		log.Println(err)
 	}

@@ -109,8 +109,7 @@ func (st *Storage) CheckError(err error) {
 		panic(err)
 	}
 }
-func (st *Storage) CreateTables() {
-	var ctx context.Context = context.Background()
+func (st *Storage) CreateTables(ctx context.Context) {
 	_, err := st.DbPool.Exec(ctx, CreateQuery)
 	if err != nil {
 		panic(err)
@@ -120,13 +119,13 @@ func (st *Storage) CreateTables() {
 /**
  * Connect to postgresql database
  */
-func (st *Storage) Connect(cfg *Config) {
+func (st *Storage) Connect(ctx context.Context, cfg *Config) {
 	// connection string
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s", cfg.Database.User, cfg.Database.Password, cfg.Database.Host, cfg.Database.Port, cfg.Database.Dbname)
 
 	var err error
 	// open database
-	var ctx context.Context = context.Background()
+	//var ctx context.Context = context.Background()
 	st.DbPool, err = pgxpool.New(ctx, connStr)
 	st.CheckError(err)
 	fmt.Println("Connected!")
@@ -139,13 +138,10 @@ func (st *Storage) Close() {
 /**
  * Save user profiles for easy lookup
  */
-func (st *Storage) SaveProfiles(evs []*nostr.Event) {
+func (st *Storage) SaveProfiles(ctx context.Context, evs []*nostr.Event) {
 	var qry = `INSERT INTO "profiles" ("pubkey", "name","about", "picture",  "website", "nip05",
 	"lud16", "display_name", "raw", "profile_created_at", "created_at")
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()) ON CONFLICT (pubkey) DO NOTHING;`
-
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
 
 	var tx pgx.Tx
 	tx, err := st.DbPool.Begin(ctx)
@@ -180,9 +176,7 @@ func (st *Storage) SaveProfiles(evs []*nostr.Event) {
  * Save the events, mostly notes. Ignore duplicate events based on unique event id
  * This will normalize the content tag of the events with all the unwanted markup (Myaby put this in a helper function)
  */
-func (st *Storage) SaveEvents(evs []*nostr.Event) []string {
-	var ctx context.Context = context.Background()
-
+func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string {
 	var qry = `INSERT INTO "events" ("event_id", "pubkey", "kind", "event_created_at", "content", "tags_full" , "sig" , "raw" , "ptags" , "etags", "garbage", "created_at") 
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW()) ON CONFLICT (event_id) DO NOTHING;`
 
@@ -305,8 +299,7 @@ func (st *Storage) SaveEvents(evs []*nostr.Event) []string {
 /**
  * Get a limitted amount of stored events
  */
-func (st *Storage) GetEvents(limit int) (*[]Event, error) {
-	var ctx context.Context = context.Background()
+func (st *Storage) GetEvents(ctx context.Context, limit int) (*[]Event, error) {
 	tx, err := st.DbPool.Begin(ctx)
 	defer func() {
 		if err != nil {
@@ -388,8 +381,7 @@ func (st *Storage) GetEvents(limit int) (*[]Event, error) {
  * Do not show all data in an endless scrol page, but paginate it for easy access
  * and ignore the garbage tagged posts
  */
-func (st *Storage) GetEventPagination(p *Pagination) error {
-	var ctx context.Context = context.Background()
+func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination) error {
 	tx, err := st.DbPool.Begin(ctx)
 	defer func() {
 		if err != nil {
@@ -518,8 +510,7 @@ func (st *Storage) GetEventPagination(p *Pagination) error {
 /**
  * Find an event based on an unique event id
  */
-func (st *Storage) FindEvent(id string) Event {
-	var ctx context.Context = context.Background()
+func (st *Storage) FindEvent(ctx context.Context, id string) Event {
 	var qry = `SELECT e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
 	u.website, u.nip05, u.lud16, u.display_name
 	FROM events e LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
@@ -554,8 +545,7 @@ func (st *Storage) FindEvent(id string) Event {
 /**
  * Some users just posting garbage, so we try to block those by putting them on the naugthy list
  */
-func (st *Storage) BlockPubkey(pubkey string) error {
-	var ctx context.Context = context.Background()
+func (st *Storage) BlockPubkey(ctx context.Context, pubkey string) error {
 	_, err := st.DbPool.Exec(ctx, `INSERT INTO "block_pubkeys" (pubkey, created_at) VALUES ($1, NOW()) ON CONFLICT (pubkey) DO NOTHING;`, pubkey)
 	if err != nil {
 		log.Println(err)
@@ -568,8 +558,7 @@ func (st *Storage) BlockPubkey(pubkey string) error {
 /**
  * And there are user we like, so put them on the good list
  */
-func (st *Storage) FollowPubkey(pubkey string) error {
-	var ctx context.Context = context.Background()
+func (st *Storage) FollowPubkey(ctx context.Context, pubkey string) error {
 	_, err := st.DbPool.Exec(ctx, `INSERT INTO "follow_pubkeys" (pubkey, created_at) VALUES ($1, NOW()) ON CONFLICT (pubkey) DO NOTHING;`, pubkey)
 	if err != nil {
 		log.Println(err)
@@ -579,9 +568,8 @@ func (st *Storage) FollowPubkey(pubkey string) error {
 	return nil
 }
 
-func (st *Storage) getLastTimeStamp() int64 {
+func (st *Storage) getLastTimeStamp(ctx context.Context) int64 {
 	var createdAt int64
-	var ctx context.Context = context.Background()
 	row := st.DbPool.QueryRow(ctx, "SELECT MAX(created_at) as MaxCreated FROM events")
 	row.Scan(&createdAt)
 

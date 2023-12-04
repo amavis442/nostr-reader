@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -65,6 +66,9 @@ var syncHash string = ""
  */
 func (req *Requests) getRoot(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
 	type Page struct {
 		Page  int
 		Limit int
@@ -80,7 +84,7 @@ func (req *Requests) getRoot(w http.ResponseWriter, r *http.Request) {
 	pagination.SetLimit(p.Limit)
 	pagination.SetCurrentPage(p.Page)
 	pagination.SetSince(p.Since)
-	err = req.Cfg.Storage.GetEventPagination(&pagination)
+	err = req.Cfg.Storage.GetEventPagination(ctx, &pagination)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -93,9 +97,11 @@ func (req *Requests) getRoot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (req *Requests) StartSync(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
 
 	EventsQueue = EventsQueue[:0]
-	req.Nostr.getEventData()
+	req.Nostr.getEventData(ctx)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -111,6 +117,8 @@ func (req *Requests) StartSync(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) BlockUser(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
 
 	var j BlockPubkey
 	err := json.NewDecoder(r.Body).Decode(&j)
@@ -118,7 +126,7 @@ func (req *Requests) BlockUser(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	req.Nostr.blockPubkey(&j)
+	req.Nostr.blockPubkey(ctx, &j)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -131,6 +139,8 @@ func (req *Requests) BlockUser(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) FollowUser(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
 
 	var user FollowPubkey
 	err := json.NewDecoder(r.Body).Decode(&user)
@@ -138,7 +148,7 @@ func (req *Requests) FollowUser(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	err = req.Cfg.Storage.FollowPubkey(user.Pubkey)
+	err = req.Cfg.Storage.FollowPubkey(ctx, user.Pubkey)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -157,6 +167,8 @@ func (req *Requests) FollowUser(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) SearchEvent(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
 
 	type Request struct {
 		ID string
@@ -167,17 +179,18 @@ func (req *Requests) SearchEvent(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 	log.Println("Searching event with Id: ", j.ID)
-	ev := req.Cfg.Storage.FindEvent(j.ID)
+	ev := req.Cfg.Storage.FindEvent(ctx, j.ID)
 	if ev.EventID == "" {
 		filter := nostrHandler.Filter{
 			IDs:   []string{j.ID},
 			Limit: 1,
 		}
-		req.Nostr.GetEvents(filter)
+
+		req.Nostr.GetEvents(ctx, filter)
 
 		log.Println("Need to get it", j.ID, filter)
 	}
-	ev = req.Cfg.Storage.FindEvent(j.ID)
+	ev = req.Cfg.Storage.FindEvent(ctx, j.ID)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -187,6 +200,8 @@ func (req *Requests) SearchEvent(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) PreviewLink(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
 
 	type Url struct {
 		Url string
@@ -206,7 +221,7 @@ func (req *Requests) PreviewLink(w http.ResponseWriter, r *http.Request) {
 	s := strings.Split(t, "\n")
 	log.Println("Url to preview: ", s[0])
 
-	result, err := URLPreview(s[0])
+	result, err := URLPreview(ctx, s[0])
 	if err != nil {
 		log.Println(err)
 

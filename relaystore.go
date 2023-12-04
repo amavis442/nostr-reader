@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"mime"
 	"net/http"
@@ -19,10 +20,10 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
+	var ctx context.Context = context.Background()
 	var st Storage
-	st.Connect(cfg)
-	st.CreateTables()
+	st.Connect(ctx, cfg)
+	st.CreateTables(ctx)
 
 	st.Filter = cfg.Filter
 	cfg.Storage = &st
