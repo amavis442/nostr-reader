@@ -106,29 +106,26 @@ const CreateQuery string = `
 
 func (st *Storage) CheckError(err error) {
 	if err != nil {
+		log.Println(err.Error())
 		panic(err)
 	}
 }
-func (st *Storage) CreateTables(ctx context.Context) {
+func (st *Storage) CreateTables(ctx context.Context) error {
 	_, err := st.DbPool.Exec(ctx, CreateQuery)
-	if err != nil {
-		panic(err)
-	}
+	return err
 }
 
 /**
  * Connect to postgresql database
  */
-func (st *Storage) Connect(ctx context.Context, cfg *Config) {
+func (st *Storage) Connect(ctx context.Context, cfg *Config) error {
 	// connection string
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s", cfg.Database.User, cfg.Database.Password, cfg.Database.Host, cfg.Database.Port, cfg.Database.Dbname)
 
 	var err error
-	// open database
-	//var ctx context.Context = context.Background()
 	st.DbPool, err = pgxpool.New(ctx, connStr)
-	st.CheckError(err)
 	fmt.Println("Connected!")
+	return err
 }
 
 func (st *Storage) Close() {
@@ -146,6 +143,7 @@ func (st *Storage) SaveProfiles(ctx context.Context, evs []*nostr.Event) {
 	var tx pgx.Tx
 	tx, err := st.DbPool.Begin(ctx)
 	if err != nil {
+		log.Println(err.Error())
 		panic(err)
 	}
 	for _, ev := range evs {
@@ -165,9 +163,10 @@ func (st *Storage) SaveProfiles(ctx context.Context, evs []*nostr.Event) {
 			log.Println(err)
 			ctx.Done()
 		}
-		log.Println("Profile: ", data.Name)
+		fmt.Println("Profile: ", data.Name)
 	}
 	if err := tx.Commit(ctx); err != nil {
+		log.Println(err.Error())
 		panic(err)
 	}
 }
@@ -187,7 +186,7 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string 
 		if err != nil {
 			tx.Rollback(ctx)
 		} else {
-			log.Println("Ready to save events")
+			fmt.Println("Ready to save events")
 
 			tx.Commit(ctx)
 		}
@@ -202,11 +201,11 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string 
 	}
 	var tree Tree
 	for _, ev := range evs {
-		log.Println("Event ID: ", ev.ID)
+		fmt.Println("Event ID: ", ev.ID)
 		if len(ev.PubKey) == 64 {
 			pubkeys = append(pubkeys, ev.PubKey)
 		} else {
-			log.Println("Incorrect pubkey to long max 64: ", ev.PubKey)
+			fmt.Println("Incorrect pubkey to long max 64: ", ev.PubKey)
 		}
 		ptags = ptags[:0]
 		etags = etags[:0]
@@ -232,10 +231,10 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string 
 				}
 			case tag[0] == "p":
 				if len(tag) < 1 || len(tag[1]) != 64 {
-					log.Println("P# tag not valid: ", tag)
+					fmt.Println("P# tag not valid: ", tag)
 					continue
 				} else {
-					log.Println("Adding pubkey from p# tag: ", tag[1])
+					fmt.Println("Adding pubkey from p# tag: ", tag[1])
 					ptags = append(ptags, tag[1])
 					pubkeys = append(pubkeys, tag[1])
 					ptagsNum = ptagsNum + 1
@@ -265,11 +264,11 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string 
 			matched, _ := regexp.MatchString(f, ev.Content)
 			if matched {
 				Garbage = true
-				log.Println("Got a match", ev.Content)
+				fmt.Println("Got a match", ev.Content)
 			}
 		}
 
-		log.Println("Add to transaction")
+		fmt.Println("Add to transaction")
 		ev.Content = strings.ReplaceAll(ev.Content, "\u0000", "")
 		ptagsSliceSize := ptagsNum
 		if ptagsNum > 8 {
@@ -282,12 +281,12 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string 
 		ptags = ptags[0:ptagsSliceSize] // Idiots who put a lot of ptags in it. Bad clients
 		etags = etags[0:etagsSliceSize] // Same story as with ptags.
 		if _, err := tx.Exec(ctx, qry, ev.ID, ev.PubKey, ev.Kind, ev.CreatedAt, ev.Content, string(tagJson), ev.Sig, ev.String(), ptags, etags, Garbage); err != nil {
-			log.Println(ev.String(), err)
+			log.Println(err.Error(), ev.String())
 			panic(err)
 		}
 
 		if len(tree.RootTag) > 0 {
-			log.Println("Roottag is: ", tree.RootTag)
+			fmt.Println("Roottag is: ", tree.RootTag)
 
 			tx.Exec(ctx, treeQry, ev.ID, tree.RootTag, tree.ReplyTag)
 		}
@@ -333,6 +332,7 @@ func (st *Storage) GetEvents(ctx context.Context, limit int) (*[]Event, error) {
 
 		if err := rows.Scan(&event.EventID, &event.Pubkey, &event.Kind, &event.EventCreatedAt, &event.Content, &event.TagsFull, &event.Etags, &event.Ptags, &event.Sig,
 			&name, &about, &picture, &website, &nip05, &lud16, &displayname); err != nil {
+			log.Println((err.Error()))
 			panic(err)
 		}
 		if name.Valid {
@@ -360,12 +360,6 @@ func (st *Storage) GetEvents(ctx context.Context, limit int) (*[]Event, error) {
 			event.Profile.DisplayName = displayname.String
 		}
 
-		/* WIP
-		var tags nostr.Tags = json.Unmarshal(event.Tags_full.(nostr.Tag))
-		if tags.GetFirst("e") != nil {
-			continue
-		}
-		*/
 		events = append(events, event)
 	}
 	// Check for errors from iterating over rows.
@@ -447,6 +441,7 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination) error 
 	defer rows.Close()
 
 	events := make([]Event, 0)
+	eventMap := make(map[string]Event)
 	for rows.Next() {
 		var event Event
 		var id int
@@ -461,6 +456,7 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination) error 
 
 		if err := rows.Scan(&id, &event.EventID, &event.Pubkey, &event.Kind, &event.EventCreatedAt, &event.Content, &event.TagsFull, &event.Etags, &event.Ptags, &event.Sig,
 			&name, &about, &picture, &website, &nip05, &lud16, &displayname); err != nil {
+			log.Println(err.Error())
 			panic(err)
 		}
 		if name.Valid {
@@ -488,12 +484,22 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination) error 
 			event.Profile.DisplayName = displayname.String
 		}
 
-		/* WIP
-		var tags nostr.Tags = json.Unmarshal(event.Tags_full.(nostr.Tag))
-		if tags.GetFirst("e") != nil {
-			continue
-		}
+		/*
+			childrenQry := `SELECT e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig
+			FROM events e,tree t WHERE t.root_event_id = '` + event.EventID + `';`
+			var childEvent Event
+			childRow := tx.QueryRow(ctx, childrenQry)
+
+			if err := childRow.Scan(&id, &childEvent.EventID, &childEvent.Pubkey, &childEvent.Kind, &childEvent.EventCreatedAt, &childEvent.Content, &childEvent.TagsFull,
+				&childEvent.Etags, &childEvent.Ptags, &childEvent.Sig); err != nil {
+				if err != nil {
+					log.Println(err)
+					return nil
+				}
+				event.Children = append(event.Children, childEvent)
+			}
 		*/
+		eventMap[event.EventID] = event
 		events = append(events, event)
 	}
 	// Check for errors from iterating over rows.
@@ -502,9 +508,14 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination) error 
 		return nil
 	}
 
+	treeQry := `select * from tree where root_event_id IN (`
+	for k := range eventMap {
+		treeQry = treeQry + `'` + k + `',`
+	}
+	treeQry = treeQry[:len(treeQry)-1] + `)`
+	log.Println("Tree query: ", treeQry)
 	p.Data = events
 	return nil
-	//page := &Pagination{Data: events, Total: recordCount, Pages: pages}
 }
 
 /**

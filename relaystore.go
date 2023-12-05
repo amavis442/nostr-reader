@@ -5,6 +5,7 @@ import (
 	"log"
 	"mime"
 	"net/http"
+	"os"
 )
 
 /**
@@ -16,14 +17,33 @@ import (
  * Process all the http calls
  */
 func main() {
+	f, err := os.OpenFile("relaystore.log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+	log.SetOutput(f)
+
 	cfg, err := LoadConfig()
 	if err != nil {
-		panic(err)
+		log.Println(err.Error())
+		os.Exit(0)
 	}
 	var ctx context.Context = context.Background()
 	var st Storage
-	st.Connect(ctx, cfg)
-	st.CreateTables(ctx)
+	err = st.Connect(ctx, cfg) // Does not make a connection immediatly but prepares so it does not yet know if the pg server is available.
+	if err != nil {
+		log.Println(err.Error())
+		os.Exit(0)
+	}
+	// close database
+	defer st.Close()
+
+	err = st.CreateTables(ctx) // Here it knows if the pg database is available.
+	if err != nil {
+		log.Println(err.Error())
+		os.Exit(0)
+	}
 
 	st.Filter = cfg.Filter
 	cfg.Storage = &st
@@ -35,9 +55,6 @@ func main() {
 	var req Requests
 	req.Cfg = cfg
 	req.Nostr = &nostr
-
-	// close database
-	defer st.Close()
 
 	// Windows may be missing this
 	mime.AddExtensionType(".js", "application/javascript")

@@ -43,6 +43,7 @@ type Event struct {
 	Sig            string   `json:"sig"`
 	Profile        Profile  `json:"profile"`
 	Garbage        bool     `json:"gargabe"`
+	Children       []Event  `json:"children"`
 }
 
 type BlockPubkey struct {
@@ -93,7 +94,10 @@ func (req *Requests) getRoot(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Println(err)
 	}
-	json.NewEncoder(w).Encode(&pagination)
+	err = json.NewEncoder(w).Encode(&pagination)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (req *Requests) StartSync(w http.ResponseWriter, r *http.Request) {
@@ -112,7 +116,10 @@ func (req *Requests) StartSync(w http.ResponseWriter, r *http.Request) {
 	test := make(map[string]string)
 	test["status"] = "ok"
 	test["message"] = syncHash
-	json.NewEncoder(w).Encode(test)
+	err := json.NewEncoder(w).Encode(test)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (req *Requests) BlockUser(w http.ResponseWriter, r *http.Request) {
@@ -134,7 +141,10 @@ func (req *Requests) BlockUser(w http.ResponseWriter, r *http.Request) {
 	test := map[string]string{}
 	test["status"] = "ok"
 	test["blocked"] = j.Pubkey
-	json.NewEncoder(w).Encode(test)
+	err = json.NewEncoder(w).Encode(test)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (req *Requests) FollowUser(w http.ResponseWriter, r *http.Request) {
@@ -148,8 +158,9 @@ func (req *Requests) FollowUser(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	err = req.Cfg.Storage.FollowPubkey(ctx, user.Pubkey)
+	err = req.Nostr.FollowPubkey(ctx, &user)
 
+	fmt.Println("Follow user: ", user.Pubkey)
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
 	w.WriteHeader(http.StatusOK)
@@ -162,7 +173,10 @@ func (req *Requests) FollowUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	test["followed"] = user.Pubkey
-	json.NewEncoder(w).Encode(test)
+	err = json.NewEncoder(w).Encode(test)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (req *Requests) SearchEvent(w http.ResponseWriter, r *http.Request) {
@@ -195,7 +209,10 @@ func (req *Requests) SearchEvent(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(ev)
+	err = json.NewEncoder(w).Encode(ev)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (req *Requests) PreviewLink(w http.ResponseWriter, r *http.Request) {
@@ -227,7 +244,10 @@ func (req *Requests) PreviewLink(w http.ResponseWriter, r *http.Request) {
 
 	}
 	log.Println("Preview result: ", result)
-	json.NewEncoder(w).Encode(result)
+	err = json.NewEncoder(w).Encode(result)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
@@ -254,5 +274,8 @@ func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
 	test := map[string]string{}
 	test["status"] = "ok"
 	test["msg"] = msg.Msg
-	json.NewEncoder(w).Encode(test)
+	err = json.NewEncoder(w).Encode(test)
+	if err != nil {
+		panic(err)
+	}
 }

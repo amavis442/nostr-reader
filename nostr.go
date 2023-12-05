@@ -102,7 +102,7 @@ func (nostr *Nostr) Post(content string) {
  * try to get all the usernames metadata from who posted the note.
  */
 func (nostr *Nostr) GetEvents(ctx context.Context, filter nostrHandler.Filter) {
-	log.Println("Get Event data from relays")
+	fmt.Println("Get Event data from relays")
 	var m sync.Map
 	var mu sync.Mutex
 	nostr.Do(func(ctx context.Context, relay *nostrHandler.Relay) bool {
@@ -152,7 +152,7 @@ func (nostr *Nostr) GetEvents(ctx context.Context, filter nostrHandler.Filter) {
 	defer nostr.updateProfiles(ctx, pubkeys)
 
 	defer func() {
-		log.Println("Done receiving and closed ralay connections")
+		fmt.Println("Done receiving and closed ralay connections")
 	}()
 }
 
@@ -168,12 +168,12 @@ func (nostr *Nostr) getEventData(ctx context.Context) {
 	//row.Scan(&createdAt)
 	createdAt = nostr.Storage.getLastTimeStamp(ctx)
 
-	log.Println(createdAt)
+	fmt.Println(createdAt)
 	if createdAt < 1 {
 		createdAt = createdAtOffset
 	}
 	if createdAt > createdAtOffset {
-		log.Printf("Time lapse is to short for getting new data %d %d", createdAt, createdAtOffset)
+		fmt.Printf("Time lapse is to short for getting new data %d %d", createdAt, createdAtOffset)
 		return
 	}
 
@@ -186,7 +186,7 @@ func (nostr *Nostr) getEventData(ctx context.Context) {
 	nostr.GetEvents(ctx, filter)
 
 	defer func() {
-		log.Println("Closing shop")
+		fmt.Println("Closing shop")
 	}()
 }
 
@@ -199,7 +199,7 @@ func (nostr *Nostr) updateProfiles(ctx context.Context, pubkeys []string) {
 		Authors: pubkeys,
 	}
 
-	log.Println("Get user data from relays")
+	fmt.Println("Get user data from relays")
 	var m sync.Map
 	nostr.Do(func(ctx context.Context, relay *nostrHandler.Relay) bool {
 		evs, err := relay.QuerySync(ctx, filter)
@@ -222,15 +222,28 @@ func (nostr *Nostr) updateProfiles(ctx context.Context, pubkeys []string) {
 	})
 
 	nostr.Storage.SaveProfiles(ctx, evs)
-	log.Println("Done for profiles")
+	fmt.Println("Done for profiles")
 }
 
 /**
  * Put a user on the naugthy list.
  */
-func (nostr *Nostr) blockPubkey(ctx context.Context, user *BlockPubkey) {
+func (nostr *Nostr) blockPubkey(ctx context.Context, user *BlockPubkey) error {
 	err := nostr.Storage.BlockPubkey(ctx, user.Pubkey)
 	if err != nil {
 		log.Println(err)
+		return err
 	}
+	fmt.Println("Blocked: ", user.Pubkey)
+	return nil
+}
+
+func (nostr *Nostr) FollowPubkey(ctx context.Context, user *FollowPubkey) error {
+	err := nostr.Storage.FollowPubkey(ctx, user.Pubkey)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	fmt.Println("Followed: ", user.Pubkey)
+	return nil
 }

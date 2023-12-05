@@ -43,7 +43,7 @@ func LoadConfig() (*Config, error) {
 
 	//log.Println("Content nieuw", *settings)
 	// Let's print the unmarshalled data!
-	log.Printf("dbName: %s\n", cfg.Database.Dbname)
-	log.Printf("Pubkey: %s\n", cfg.Pubkey)
+	fmt.Printf("dbName: %s\n", cfg.Database.Dbname)
+	fmt.Printf("Pubkey: %s\n", cfg.Pubkey)
 	return &cfg, nil
 }

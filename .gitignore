@@ -25,3 +25,5 @@ build
 *.sw?
 config.json
 *.exe
+*~
+*.log
