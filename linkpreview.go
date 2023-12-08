@@ -33,8 +33,9 @@ type HTMLMeta struct {
 
 // HandleURL check it and validations
 func HandleURL(url string) (string, error) {
+	var msg string
 	if url == "" {
-		msg := "You missed to set url query param."
+		msg = "you missed to set url query param"
 		return msg, errors.New(msg)
 	}
 	u, err := parse.Parse(url)
@@ -44,7 +45,7 @@ func HandleURL(url string) (string, error) {
 	if u.Scheme == "" {
 		url = fmt.Sprintf("%s%s", "http://", url)
 	} else if !strings.HasPrefix(u.Scheme, "http") {
-		msg := "URL schema must be http or https."
+		msg = "URL schema must be http or https"
 		return msg, errors.New(msg)
 	}
 	_, err = parse.ParseRequestURI(url)
