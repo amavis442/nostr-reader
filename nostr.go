@@ -22,6 +22,10 @@ type Relay struct {
 	Write bool
 }
 
+type RelayUrl string
+
+var KeyUrl RelayUrl = "relayUrl"
+
 /*
  * Please see https://github.com/mattn/algia/blob/main/main.go for the code i shamelessly copied
  *
@@ -38,7 +42,7 @@ func (nostr *Nostr) Do(f func(context.Context, *nostrHandler.Relay) bool) {
 
 		go func(wg *sync.WaitGroup, relayUrl string) {
 			defer wg.Done()
-			ctx := context.WithValue(context.Background(), "relayUrl", relayUrl)
+			ctx := context.WithValue(context.Background(), KeyUrl, relayUrl)
 			relay, err := nostrHandler.RelayConnect(ctx, relayUrl)
 			if err != nil {
 				log.Println(err)
@@ -61,7 +65,7 @@ func (nostr *Nostr) Publish(f func(context.Context, *nostrHandler.Relay) bool) {
 
 		go func(wg *sync.WaitGroup, relayUrl string) {
 			defer wg.Done()
-			ctx := context.WithValue(context.Background(), "url", relayUrl)
+			ctx := context.WithValue(context.Background(), KeyUrl, relayUrl)
 			relay, err := nostrHandler.RelayConnect(ctx, relayUrl)
 			if err != nil {
 				log.Println(err)
