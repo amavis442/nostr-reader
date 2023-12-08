@@ -442,6 +442,7 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination) error 
 
 	events := make([]Event, 0)
 	eventMap := make(map[string]Event)
+	var keys []string
 	for rows.Next() {
 		var event Event
 		var id int
@@ -499,21 +500,97 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination) error 
 				event.Children = append(event.Children, childEvent)
 			}
 		*/
+		event.Children = make([]Event, 0)
 		eventMap[event.EventID] = event
-		events = append(events, event)
+		keys = append(keys, event.EventID) // Make sure the order stays the same @see https://go.dev/blog/maps
+		//events = append(events, event)
 	}
 	// Check for errors from iterating over rows.
 	if err := rows.Err(); err != nil {
 		log.Println(err)
 		return nil
 	}
+	rows.Close()
 
-	treeQry := `select * from tree where root_event_id IN (`
+	treeQry := `select t.root_event_id, t.reply_event_id, e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
+	u.website, u.nip05, u.lud16, u.display_name FROM tree t, events e 
+	LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
+	LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
+	LEFT JOIN seen s on (s.event_id = e.event_id)
+	WHERE root_event_id IN (`
 	for k := range eventMap {
 		treeQry = treeQry + `'` + k + `',`
 	}
-	treeQry = treeQry[:len(treeQry)-1] + `)`
+	treeQry = treeQry[:len(treeQry)-1] + `) AND e.event_id = t.event_id
+	AND e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false;`
 	log.Println("Tree query: ", treeQry)
+	var treeRows pgx.Rows
+	treeRows, err = tx.Query(ctx, treeQry)
+	if err != nil {
+		log.Println(err)
+	}
+	for treeRows.Next() {
+		var event Event
+		var id int
+		var root_event_id string
+		var reply_event_id sql.NullString
+		var name sql.NullString
+		var about sql.NullString
+		var picture sql.NullString
+
+		var website sql.NullString
+		var nip05 sql.NullString
+		var lud16 sql.NullString
+		var displayname sql.NullString
+
+		if err := treeRows.Scan(&root_event_id, &reply_event_id, &id, &event.EventID, &event.Pubkey,
+			&event.Kind, &event.EventCreatedAt, &event.Content, &event.TagsFull, &event.Etags,
+			&event.Ptags, &event.Sig, &name, &about, &picture,
+			&website, &nip05, &lud16, &displayname); err != nil {
+			log.Println(err.Error())
+			panic(err)
+		}
+
+		if name.Valid {
+			event.Profile.Name = name.String
+		} else {
+			event.Profile.Name = event.Pubkey
+		}
+		if about.Valid {
+			event.Profile.About = about.String
+		}
+		if picture.Valid {
+			event.Profile.Picture = picture.String
+		}
+
+		if website.Valid {
+			event.Profile.Website = website.String
+		}
+		if nip05.Valid {
+			event.Profile.Nip05 = nip05.String
+		}
+		if lud16.Valid {
+			event.Profile.Lud16 = lud16.String
+		}
+		if displayname.Valid {
+			event.Profile.DisplayName = displayname.String
+		}
+		event.Children = make([]Event, 0)
+		if item, ok := eventMap[root_event_id]; ok {
+			item.Children = append(item.Children, event)
+			eventMap[root_event_id] = item
+		}
+	}
+	if err := treeRows.Err(); err != nil {
+		log.Println(err)
+	}
+	treeRows.Close()
+
+	// Make sure the order stays the same
+	for _, k := range keys {
+		events = append(events, eventMap[k])
+	}
+
 	p.Data = events
 	return nil
 }
