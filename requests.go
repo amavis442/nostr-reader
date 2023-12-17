@@ -32,18 +32,18 @@ type Profile struct {
 }
 
 type Event struct {
-	EventID        string   `json:"id"`
-	Pubkey         string   `json:"pubkey"`
-	Kind           int      `json:"kind"`
-	EventCreatedAt int64    `json:"created_at"`
-	Content        string   `json:"content"`
-	TagsFull       string   `json:"tags"`
-	Etags          []string `json:"etags"`
-	Ptags          []string `json:"ptags"`
-	Sig            string   `json:"sig"`
-	Profile        Profile  `json:"profile"`
-	Garbage        bool     `json:"gargabe"`
-	Children       []Event  `json:"children"`
+	EventID        string            `json:"id"`
+	Pubkey         string            `json:"pubkey"`
+	Kind           int               `json:"kind"`
+	EventCreatedAt int64             `json:"created_at"`
+	Content        string            `json:"content"`
+	TagsFull       nostrHandler.Tags `json:"tags"`
+	Etags          []string          `json:"etags"`
+	Ptags          []string          `json:"ptags"`
+	Sig            string            `json:"sig"`
+	Profile        Profile           `json:"profile"`
+	Garbage        bool              `json:"gargabe"`
+	Children       []Event           `json:"children"`
 }
 
 type BlockPubkey struct {
@@ -193,7 +193,7 @@ func (req *Requests) SearchEvent(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 	log.Println("Searching event with Id: ", j.ID)
-	ev := req.Cfg.Storage.FindEvent(ctx, j.ID)
+	ev, _ := req.Cfg.Storage.FindEvent(ctx, j.ID)
 	if ev.EventID == "" {
 		filter := nostrHandler.Filter{
 			IDs:   []string{j.ID},
@@ -204,7 +204,7 @@ func (req *Requests) SearchEvent(w http.ResponseWriter, r *http.Request) {
 
 		log.Println("Need to get it", j.ID, filter)
 	}
-	ev = req.Cfg.Storage.FindEvent(ctx, j.ID)
+	ev, _ = req.Cfg.Storage.FindEvent(ctx, j.ID)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -252,9 +252,12 @@ func (req *Requests) PreviewLink(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
 
 	type Msg struct {
-		Msg string
+		Msg      string
+		Event_id string // If it is a reply
 	}
 	var msg Msg
 	err := json.NewDecoder(r.Body).Decode(&msg)
@@ -268,12 +271,19 @@ func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	log.Println("Msg to publish: ", msg.Msg)
-
-	req.Nostr.Post(msg.Msg)
-
+	err = req.Nostr.Post(ctx, msg.Msg, msg.Event_id)
 	test := map[string]string{}
+
 	test["status"] = "ok"
 	test["msg"] = msg.Msg
+	test["reply_to_event_id"] = msg.Event_id
+
+	if err != nil {
+		log.Println(err)
+		test["status"] = "error"
+		test["msg"] = err.Error()
+	}
+
 	err = json.NewEncoder(w).Encode(test)
 	if err != nil {
 		panic(err)

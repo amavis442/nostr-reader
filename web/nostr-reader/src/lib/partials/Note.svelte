@@ -20,6 +20,10 @@
     function blockUser(pubkey) {
         dispatch('blockUser', pubkey)
     }
+    
+    function reply(note) {
+        dispatch('reply', note)
+    }
 </script>
 <div class="rounded-t-lg overflow-y-auto border-t border-l border-r border-gray-400 p-10 flex justify-center">
     <div class="max-w-sm w-full lg:max-w-full lg:flex">
@@ -54,7 +58,10 @@
         <div class="flex items-center">
           <img class="w-10 h-10 rounded-full mr-4" src="{ note.profile.picture ? note.profile.picture : placeholder}" alt="Placeholder" title="{ note.profile.about ? note.profile.about : ''}">
           <div class="text-sm text-left">
-            <p class="text-gray-900 leading-none">{ note.profile.display_name ? note.profile.display_name : note.profile.name.slice(0, 20) } <button on:click="{followUser(note.pubkey)}">Follow</button>| <button on:click="{blockUser(note.pubkey)}">Block</button></p>
+            <p class="text-gray-900 leading-none">{ note.profile.display_name ? note.profile.display_name : note.profile.name.slice(0, 20) } 
+              <button on:click="{followUser(note.pubkey)}">Follow</button>| 
+              <button on:click="{blockUser(note.pubkey)}">Block</button>| 
+              <button on:click="{reply(note)}">Reply</button></p>
             <p class="text-gray-600"><small>{ (new Date(note.created_at  * 1000)).toLocaleString('nl-NL') }</small></p>
           </div>
         </div>

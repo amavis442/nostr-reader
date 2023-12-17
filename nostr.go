@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
@@ -57,48 +58,106 @@ func (nostr *Nostr) Do(f func(context.Context, *nostrHandler.Relay) bool) {
 	wg.Wait()
 }
 
-func (nostr *Nostr) Publish(f func(context.Context, *nostrHandler.Relay) bool) {
-	var wg sync.WaitGroup
+func (nostr *Nostr) Post(ctx context.Context, content string, event_id string) error {
+	ev := nostrHandler.Event{}
+	ev.Tags = nostrHandler.Tags{}
+	var numEtags int = 0
+	var replyETags nostrHandler.Tags
+	var replyEv nostrHandler.Event
+	var err error
 
-	for _, relayUrl := range nostr.Cfg.Relays {
-		wg.Add(1)
+	ctx, cancel := context.WithTimeout(ctx, time.Second*15) // It has 15 seconds to complete or else it will cancel itself.
+	defer cancel()
 
-		go func(wg *sync.WaitGroup, relayUrl string) {
-			defer wg.Done()
-			ctx := context.WithValue(context.Background(), KeyUrl, relayUrl)
-			relay, err := nostrHandler.RelayConnect(ctx, relayUrl)
-			if err != nil {
-				log.Println(err)
-				return
+	if event_id != "" { // It is a reply to an Event
+		replyEv, err = nostr.Storage.FindRawEvent(ctx, event_id)
+		if err != nil {
+			return err
+		}
+		replyETags = replyEv.Tags.GetAll([]string{"e"})
+		numEtags = len(replyETags)
+		if numEtags > 0 {
+			fmt.Println(replyETags)
+			fmt.Println("--------------------------------")
+			fmt.Println(replyETags[0][1])
+			fmt.Println(event_id)
+			fmt.Println("********************************")
+		}
+	}
+
+	ev.PubKey = nostr.Cfg.Pubkey
+	ev.CreatedAt = nostrHandler.Now()
+	ev.Kind = nostrHandler.KindTextNote
+	ev.Content = content
+
+	fmt.Println(replyEv)
+	log.Println(replyEv)
+	log.Println(replyETags)
+	log.Println(len(replyETags))
+
+	if event_id != "" && len(replyETags) == 0 {
+		ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"e", event_id, "", "root"})
+		log.Println("Response to event id [", event_id, "]. Added root marker. ", ev.Tags)
+	}
+	ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"p", replyEv.PubKey})
+	var hasRootTag bool = false
+
+	if len(replyEv.Tags) > 0 {
+		for _, tag := range replyEv.Tags {
+			log.Println("Walking the tags if it works...", tag)
+
+			if tag[0] == "e" && len(tag) > 2 {
+				if tag[3] == "reply" {
+					log.Println("Remove reply marker from ", tag[1])
+					ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{tag[0], tag[1], tag[2], ""})
+				}
+				if tag[3] != "reply" {
+					log.Println("No markers", tag[1])
+					ev.Tags = ev.Tags.AppendUnique(tag)
+				}
+				if tag[3] == "root" {
+					log.Println("Thread has no root marker but has #e tags: ", replyEv.Tags)
+					hasRootTag = true
+				}
 			}
-			f(ctx, relay) // Custom function call that takes nostr.Relay as an argument. The function f will probally be an anonymous function
-			fmt.Printf("published to %s\n", relayUrl)
-			relay.Close()
-		}(&wg, relayUrl)
-	}
-	wg.Wait()
-}
-
-func (nostr *Nostr) Post(content string) {
-	ev := nostrHandler.Event{
-		PubKey:    nostr.Cfg.Pubkey,
-		CreatedAt: nostrHandler.Now(),
-		Kind:      nostrHandler.KindTextNote,
-		Tags:      nil,
-		Content:   content,
+			/* if tag[0] != "e" {
+				ev.Tags = ev.Tags.AppendUnique(tag)
+			} */
+			if tag[0] == "p" {
+				ev.Tags = ev.Tags.AppendUnique(tag)
+			}
+		}
+		if !hasRootTag && len(replyETags) > 0 {
+			log.Println("Thread has no root marker but has #e tags so we add the root marker")
+			ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"e", event_id, "", "root"})
+		}
 	}
 
-	// calling Sign sets the event ID field and the event Sig field
-	ev.Sign(nostr.Cfg.Pk)
+	var success int
+	nostr.Do(func(ctx context.Context, relay *nostrHandler.Relay) bool {
+		// calling Sign sets the event ID field and the event Sig field
+		if err := ev.Sign(nostr.Cfg.Pk); err != nil {
+			return false
+		}
 
-	nostr.Publish(func(ctx context.Context, relay *nostrHandler.Relay) bool {
-		_, err := relay.Publish(ctx, ev)
+		status, err := relay.Publish(ctx, ev)
 		if err != nil {
 			fmt.Println(err)
 			return false
 		}
+		if err == nil && status != nostrHandler.PublishStatusFailed {
+			success += 1
+		}
+
+		fmt.Println(ev)
 		return true
 	})
+
+	if success == 0 {
+		return errors.New("cannot reply")
+	}
+
+	return nil
 }
 
 /**
@@ -109,6 +168,7 @@ func (nostr *Nostr) GetEvents(ctx context.Context, filter nostrHandler.Filter) {
 	fmt.Println("Get Event data from relays")
 	var m sync.Map
 	var mu sync.Mutex
+
 	nostr.Do(func(ctx context.Context, relay *nostrHandler.Relay) bool {
 		mu.Lock()
 		evs, err := relay.QuerySync(ctx, filter)
@@ -168,11 +228,9 @@ func (nostr *Nostr) getEventData(ctx context.Context) {
 	var createdAt int64
 	var createdAtOffset int64 = time.Now().Unix() - 60
 
-	//row := cfg.Storage.Db.QueryRow("SELECT MAX(created_at) as MaxCreated FROM events")
-	//row.Scan(&createdAt)
 	createdAt = nostr.Storage.getLastTimeStamp(ctx)
 
-	fmt.Println(createdAt)
+	fmt.Println("Last timestamp: ", createdAt)
 	if createdAt < 1 {
 		createdAt = createdAtOffset
 	}
@@ -182,6 +240,7 @@ func (nostr *Nostr) getEventData(ctx context.Context) {
 	}
 
 	var timeStamp nostrHandler.Timestamp = nostrHandler.Timestamp(createdAt + 1)
+	fmt.Println("Nostr Timestamp: ", timeStamp)
 	filter := nostrHandler.Filter{
 		Kinds: []int{nostrHandler.KindTextNote, nostrHandler.KindReaction, nostrHandler.KindArticle},
 		Since: &timeStamp,
@@ -198,6 +257,7 @@ func (nostr *Nostr) getEventData(ctx context.Context) {
  * Get the metadata of a bunch of Pubkeys and store them.
  */
 func (nostr *Nostr) updateProfiles(ctx context.Context, pubkeys []string) {
+	// Todo build check for ttl so user data is not refreshed every time.
 	filter := nostrHandler.Filter{
 		Kinds:   []int{nostrHandler.KindProfileMetadata},
 		Authors: pubkeys,

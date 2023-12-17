@@ -308,7 +308,7 @@ func (st *Storage) GetEvents(ctx context.Context, limit int) (*[]Event, error) {
 		}
 	}()
 
-	rows, err := tx.Query(ctx, `SELECT e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
+	rows, err := tx.Query(ctx, `SELECT e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full::json, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
 	u.website, u.nip05, u.lud16, u.display_name FROM events e LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) LEFT JOIN seen s on (s.event_id = e.event_id)
 	WHERE e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false ORDER BY e.event_created_at DESC LIMIT $1`, limit)
 
@@ -335,6 +335,7 @@ func (st *Storage) GetEvents(ctx context.Context, limit int) (*[]Event, error) {
 			log.Println((err.Error()))
 			panic(err)
 		}
+
 		if name.Valid {
 			event.Profile.Name = name.String
 		} else {
@@ -389,8 +390,9 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination) error 
 		recordCount int64
 		recordId    int64
 	)
+
 	//Only root events.
-	mainQry := `SELECT e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
+	mainQry := `SELECT e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full::json, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
 	u.website, u.nip05, u.lud16, u.display_name FROM events e 
 	LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
 	LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
@@ -460,6 +462,7 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination) error 
 			log.Println(err.Error())
 			panic(err)
 		}
+
 		if name.Valid {
 			event.Profile.Name = name.String
 		} else {
@@ -512,7 +515,7 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination) error 
 	}
 	rows.Close()
 
-	treeQry := `select t.root_event_id, t.reply_event_id, e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
+	treeQry := `select t.root_event_id, t.reply_event_id, e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full::json, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
 	u.website, u.nip05, u.lud16, u.display_name FROM tree t, events e 
 	LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
 	LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
@@ -598,7 +601,7 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination) error 
 /**
  * Find an event based on an unique event id
  */
-func (st *Storage) FindEvent(ctx context.Context, id string) Event {
+func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 	var qry = `SELECT e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
 	u.website, u.nip05, u.lud16, u.display_name
 	FROM events e LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
@@ -627,7 +630,30 @@ func (st *Storage) FindEvent(ctx context.Context, id string) Event {
 		log.Println("200 Event: ", event)
 	}
 
-	return event
+	return event, err
+}
+
+func (st *Storage) FindRawEvent(ctx context.Context, id string) (nostr.Event, error) {
+	var qry = `SELECT e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.sig, e.tags_full::json tags
+	FROM events e 
+	WHERE e.event_id = $1`
+	qryStr := qry[:len(qry)-2] + "'" + id + "'"
+	log.Println(qryStr)
+
+	var event nostr.Event
+
+	err := st.DbPool.QueryRow(ctx, qry, id).Scan(&event.ID, &event.PubKey, &event.Kind, &event.CreatedAt,
+		&event.Content, &event.Sig, &event.Tags)
+	switch {
+	case err == sql.ErrNoRows:
+		log.Printf("404 no event with id %s\n", id)
+	case err != nil:
+		log.Printf("502 query error: %v\n", err)
+	default:
+		log.Println("200 Event: ", event)
+	}
+
+	return event, err
 }
 
 /**
@@ -657,9 +683,10 @@ func (st *Storage) FollowPubkey(ctx context.Context, pubkey string) error {
 }
 
 func (st *Storage) getLastTimeStamp(ctx context.Context) int64 {
-	var createdAt int64
+	var createdAt time.Time
 	row := st.DbPool.QueryRow(ctx, "SELECT MAX(created_at) as MaxCreated FROM events")
 	row.Scan(&createdAt)
 
-	return createdAt
+	fmt.Println("Timestamp from database: ", createdAt)
+	return createdAt.Unix()
 }

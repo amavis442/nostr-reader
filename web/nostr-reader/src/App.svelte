@@ -21,7 +21,7 @@
   let last_page = 1;
   let total = 0;
   let loading = true;
-  let limit = 30;
+  let limit = 60;
   let since = 1; // 1 day
 
   onMount(async () => {
@@ -112,10 +112,10 @@
       });
   }
 
-  function publish(msg) {
+  function publish(msg: string, event_id: string) {
     fetch("/api/publish", {
       method: "POST",
-      body: JSON.stringify({ msg: msg }),
+      body: JSON.stringify({ msg: msg, event_id: event_id }),
       headers: {
         "Content-Type": "application/json",
       },
@@ -133,7 +133,7 @@
   }
 
   let searchEvent = writable({});
-  function searchEvents(noteId, etag) {
+  function searchEvents(noteId: string, etag: string) {
     fetch("/api/searchevent", {
       method: "POST",
       body: JSON.stringify({ id: etag }),
@@ -166,27 +166,31 @@
   }
 
   let showModal = false;
-  async function onSubmit(e: Event) {
+  let replyToEventId = ""; 
+  async function onPublish(e: Event) {
     const target = e.target as HTMLFormElement;
     const formData = new FormData(target);
 
-    const data: { replyText?: string } = {};
+    const data: { replyText?: string, event_id?:string } = {};
     //@ts-ignore
     for (let field of formData) {
       const [key, value] = field;
       data[key] = value;
     }
 
-    publish(data.replyText);
+    publish(data.replyText, data.event_id);
     showModal = false;
+    replyToEventId = "";
   }
+
 </script>
 
 <Modal bind:showModal>
   <h2 slot="header">Create Note</h2>
 
-  <form on:submit|preventDefault={onSubmit}>
-    <p><TextArea id="replyText" rows="5" /></p>
+  <form on:submit|preventDefault={onPublish}>
+    <input type="hidden" name="event_id" value="{replyToEventId}" />
+    <p><TextArea id="replyText" rows="15" cols="30"/></p>
     <div class="actions">
       <Button type="submit">Send</Button>
     </div>
@@ -203,7 +207,7 @@
         refreshView({ page: current_page, limit: limit, since: since })}
       class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
     >
-      {#each [10, 15, 20, 25, 30] as limitValue}
+      {#each [10, 15, 20, 25, 30, 60, 90, 120, 150, 180] as limitValue}
         <option value={limitValue}>
           {limitValue}
         </option>
@@ -261,6 +265,7 @@
                   searchEvents(ev.detail.id, ev.detail.etag)}
                 on:followUser={(ev) => followUser(ev.detail)}
                 on:blockUser={(ev) => blockUser(ev.detail)}
+                on:reply={(ev) => {showModal = true; replyToEventId = ev.detail.id}}
               ></NoteEvent>
             {/each}
           </div>
