@@ -258,6 +258,14 @@ func (nostr *Nostr) getEventData(ctx context.Context) {
  */
 func (nostr *Nostr) updateProfiles(ctx context.Context, pubkeys []string) {
 	// Todo build check for ttl so user data is not refreshed every time.
+	var tresholdTime int64 = time.Now().Unix() - 60*60*24
+
+	pubkeys, _ = nostr.Storage.CheckProfiles(ctx, pubkeys, tresholdTime)
+	if (len(pubkeys)) < 1 {
+		fmt.Println("No profiles to update")
+		return
+	}
+
 	filter := nostrHandler.Filter{
 		Kinds:   []int{nostrHandler.KindProfileMetadata},
 		Authors: pubkeys,

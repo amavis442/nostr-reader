@@ -656,6 +656,41 @@ func (st *Storage) FindRawEvent(ctx context.Context, id string) (nostr.Event, er
 	return event, err
 }
 
+func (st *Storage) CheckProfiles(ctx context.Context, pubkeys []string, epochtime int64) ([]string, error) {
+	qry := `SELECT pubkey FROM profiles WHERE EXTRACT(EPOCH FROM created_at) > $1 AND pubkey in (`
+
+	for _, pubkey := range pubkeys {
+		qry = qry + `'` + pubkey + `',`
+	}
+	qry = qry[:len(qry)-1] + `)`
+
+	log.Println("Ignore these pubkeys for data refreshing: ", qry, epochtime)
+	rows, err := st.DbPool.Query(ctx, qry, epochtime)
+	if err != nil {
+		log.Println(err)
+		return []string{}, err
+	}
+
+	pubkeysMap := make(map[string]string)
+	for _, pk := range pubkeys { // Put all pubkeys in a map
+		pubkeysMap[pk] = pk
+	}
+	log.Println("Map of pubkeys: ", pubkeysMap)
+	for rows.Next() {
+		var pubkey string
+		_ = rows.Scan(&pubkey)
+		delete(pubkeysMap, pubkey) // Ignore all pubkeys from the result
+	}
+	log.Println("Left over pubkeys to get (map): ", pubkeysMap)
+
+	pubkeysFinal := make([]string, 0) // Create empty []string, i think you can also use []string{}
+	for _, pk := range pubkeysMap {
+		pubkeysFinal = append(pubkeysFinal, pk) // Transform it back to a []string
+	}
+	log.Println("Left over pubkeys to get (array): ", pubkeysFinal)
+	return pubkeysFinal, nil
+}
+
 /**
  * Some users just posting garbage, so we try to block those by putting them on the naugthy list
  */
