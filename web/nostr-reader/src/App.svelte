@@ -46,10 +46,11 @@
         from = data.from;
         to = data.to;
         per_page = data.per_page;
-        last_page = data.last_page;
+        last_page = data.last_page > 10 ? 10: data.last_page;
         total = data.total;
 
         pageData = data.data;
+        
       })
       .catch((err) => {
         console.error("error", err);
@@ -64,6 +65,7 @@
       .then((data) => {
         console.log("Json is ", data);
         refreshView({ page: current_page, limit: limit, since: since });
+        document.getElementById("content").scrollTo(0,0);
         return data;
       })
       .catch((err) => {
@@ -239,14 +241,14 @@
         {to}
         {total}
         on:change={(ev) =>
-          refreshView({ page: ev.detail, limit: limit, since: since })}
+          {refreshView({ page: ev.detail, limit: limit, since: since });document.getElementById("content").scrollTo(0,0);}}
       ></Pagination>
     {/if}
   </div>
 
   <hr/>
   
-  <div class="p-10 h-4/5 overflow-x-auto">
+  <div class="p-10 h-4/5 overflow-x-auto"  id="content">
     <div class="flex flex-col gap-4">
       <div>
         <div

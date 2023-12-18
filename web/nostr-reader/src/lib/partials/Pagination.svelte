@@ -5,7 +5,7 @@
     export let from;
     export let to;
     export let total;
-  
+    
     import { createEventDispatcher } from 'svelte';
   
     const dispatch = createEventDispatcher();
