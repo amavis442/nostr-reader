@@ -59,45 +59,46 @@ func main() {
 	// Windows may be missing this
 	mime.AddExtensionType(".js", "application/javascript")
 
+	mux := http.NewServeMux()
 	/*
 	 * Get events that already are stored in the database
 	 * This will not SYNC the local database with that of the relays.
 	 */
-	http.HandleFunc("/api/events", req.getRoot)
+	mux.HandleFunc("/api/events", req.getRoot)
 
 	/**
 	 * This will sync the local database with that of the relays (Only public events and not channels and such)
 	 */
-	http.HandleFunc("/api/sync", req.StartSync)
+	mux.HandleFunc("/api/sync", req.StartSync)
 
 	/**
 	 * Put a user on the naughty list
 	 */
-	http.HandleFunc("/api/blockuser", req.BlockUser)
+	mux.HandleFunc("/api/blockuser", req.BlockUser)
 
 	/**
 	 * Put a user on the follow list
 	 * This is all local and will not send an event for followlist
 	 */
-	http.HandleFunc("/api/followuser", req.FollowUser)
+	mux.HandleFunc("/api/followuser", req.FollowUser)
 
 	/**
 	 * Find an event based on event id. This can be a reply
 	 */
-	http.HandleFunc("/api/searchevent", req.SearchEvent)
+	mux.HandleFunc("/api/searchevent", req.SearchEvent)
 
 	/**
 	 * Sometimes it is nice to see pictures in the post and not just a link
 	 */
-	http.HandleFunc("/api/preview/link", req.PreviewLink)
+	mux.HandleFunc("/api/preview/link", req.PreviewLink)
 
 	/**
 	 * Sometimes it is nice to see pictures in the post and not just a link
 	 */
-	http.HandleFunc("/api/publish", req.Publish)
+	mux.HandleFunc("/api/publish", req.Publish)
 
-	http.Handle("/", http.FileServer(http.Dir("web/nostr-reader/dist")))
+	mux.Handle("/", http.FileServer(http.Dir("web/nostr-reader/dist")))
 
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(":8080", mux))
 
 }

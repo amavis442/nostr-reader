@@ -124,12 +124,13 @@ func (req *Requests) StartSync(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) BlockUser(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	var j BlockPubkey
 	err := json.NewDecoder(r.Body).Decode(&j)
 	if err != nil {
+		log.Println(err)
 		panic(err)
 	}
 
@@ -149,12 +150,13 @@ func (req *Requests) BlockUser(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) FollowUser(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	var user FollowPubkey
 	err := json.NewDecoder(r.Body).Decode(&user)
 	if err != nil {
+		log.Println(err)
 		panic(err)
 	}
 
