@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
+	"net"
 	"net/http"
 	parse "net/url"
 	"strings"
@@ -69,16 +71,42 @@ func Respond(w http.ResponseWriter, data map[string]interface{}) {
 
 // URLPreview function for main page
 func URLPreview(ctx context.Context, url string) (map[string]interface{}, error) {
+	const ConnectMaxWaitTime = 1 * time.Second
+	//const RequestMaxWaitTime = 5 * time.Second
+
 	meta := HTMLMeta{}
 
-	resp, err := http.Get(url)
+	client := http.Client{
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout: ConnectMaxWaitTime,
+			}).DialContext,
+		},
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	// handle the error if there is one
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("request not succesfull " + fmt.Sprintf("%d", resp.StatusCode))
+	resp, err := client.Do(req)
+
+	if resp != nil {
+		defer resp.Body.Close()
 	}
+
+	if e, ok := err.(net.Error); ok && e.Timeout() {
+		log.Printf("Do request timeout: %s\n", err)
+		return nil, fmt.Errorf("do request timeout: %s", err)
+	} else if err != nil {
+		log.Printf("Cannot do request: %s\n", err)
+		return nil, fmt.Errorf("cannot do request: %s", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("request not succesfull %d", resp.StatusCode)
+	}
+
 	contentType := resp.Header.Get("Content-type")
 
 	if contentType == "image/jpeg" || contentType == "image/jpg" || contentType == "image/gif" || contentType == "image/webp" || contentType == "image/png" {
