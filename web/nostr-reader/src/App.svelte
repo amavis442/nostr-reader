@@ -23,13 +23,19 @@
   let loading = true;
   let limit = 60;
   let since = 1; // 1 day
+  let showOnlyFollowNotes = false;
 
   onMount(async () => {
     await refreshView({ page: 1, limit: limit, since: since });
   });
 
   async function refreshView(params) {
-    await fetch("/api/events", {
+    let apiUrl = "/api/events";
+    if (showOnlyFollowNotes) {
+      apiUrl = "/api/getfollownotes"; 
+    }
+    
+    await fetch(apiUrl, {
       method: "POST",
       body: JSON.stringify(params),
       headers: {
@@ -232,6 +238,7 @@
     <button on:click={() => (showModal = true)} class="btn btn-blue">
       Msg
     </button>
+    <input type="checkbox" bind:checked="{showOnlyFollowNotes}"/>Follow notes
     {#if total > per_page}
       <Pagination
         {current_page}

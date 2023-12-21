@@ -376,7 +376,7 @@ func (st *Storage) GetEvents(ctx context.Context, limit int) (*[]Event, error) {
  * Do not show all data in an endless scrol page, but paginate it for easy access
  * and ignore the garbage tagged posts
  */
-func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination) error {
+func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow bool) error {
 	tx, err := st.DbPool.Begin(ctx)
 	defer func() {
 		if err != nil {
@@ -396,8 +396,14 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination) error 
 	u.website, u.nip05, u.lud16, u.display_name FROM events e 
 	LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
 	LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
-	LEFT JOIN seen s on (s.event_id = e.event_id)
-	WHERE e.kind = 1 AND e.etags='{}' AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false`
+	LEFT JOIN seen s on (s.event_id = e.event_id)`
+
+	if follow {
+		mainQry += `
+		JOIN follow_pubkeys f ON (f.pubkey = e.pubkey)
+		`
+	}
+	mainQry += `WHERE e.kind = 1 AND e.etags='{}' AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false`
 	if p.Since != 0 {
 		since := time.Now().Unix() - int64(p.Since*60*60*24)
 		mainQry = mainQry + ` AND e.event_created_at > ` + fmt.Sprintf("%d", since)

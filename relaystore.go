@@ -81,6 +81,7 @@ func main() {
 	 * This is all local and will not send an event for followlist
 	 */
 	mux.HandleFunc("/api/followuser", req.FollowUser)
+	mux.HandleFunc("/api/getfollownotes", req.FollowUserNotes)
 
 	/**
 	 * Find an event based on event id. This can be a reply

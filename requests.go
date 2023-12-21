@@ -62,19 +62,20 @@ var EventsQueue = make([]nostrHandler.Event, 0)
 // var ptagsQueue = make([]string, 0)
 var syncHash string = ""
 
+type Page struct {
+	Page  int
+	Limit int
+	Since int
+}
+
 /**
 * The API requests
  */
 func (req *Requests) getRoot(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	type Page struct {
-		Page  int
-		Limit int
-		Since int
-	}
 	var p Page
 	err := json.NewDecoder(r.Body).Decode(&p)
 	if err != nil {
@@ -85,7 +86,7 @@ func (req *Requests) getRoot(w http.ResponseWriter, r *http.Request) {
 	pagination.SetLimit(p.Limit)
 	pagination.SetCurrentPage(p.Page)
 	pagination.SetSince(p.Since)
-	err = req.Cfg.Storage.GetEventPagination(ctx, &pagination)
+	err = req.Cfg.Storage.GetEventPagination(ctx, &pagination, false)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -181,6 +182,36 @@ func (req *Requests) FollowUser(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (req *Requests) FollowUserNotes(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var p Page
+	err := json.NewDecoder(r.Body).Decode(&p)
+	if err != nil {
+		panic(err)
+	}
+
+	pagination := Pagination{}
+	pagination.SetLimit(p.Limit)
+	pagination.SetCurrentPage(p.Page)
+	pagination.SetSince(p.Since)
+	err = req.Cfg.Storage.GetEventPagination(ctx, &pagination, true)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
+	w.WriteHeader(http.StatusOK)
+
+	if err != nil {
+		log.Println(err)
+	}
+	err = json.NewEncoder(w).Encode(&pagination)
+	if err != nil {
+		panic(err)
+	}
+}
+
 func (req *Requests) SearchEvent(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
@@ -217,9 +248,12 @@ func (req *Requests) SearchEvent(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+/**
+ * Need an easy way to cancel this request when a new nextpage or refreshpage comes in
+ */
 func (req *Requests) PreviewLink(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	type Url struct {
