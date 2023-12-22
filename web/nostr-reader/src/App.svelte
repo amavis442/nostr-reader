@@ -26,7 +26,6 @@
   let loading = true;
   let limit = 60;
   let since = 1; // 1 day
-  let showOnlyFollowNotes = false;
 
   let tabs = ["general", "follow", "settings"];
   let tabItems = [
@@ -42,7 +41,7 @@
 
   async function refreshView(params, pageType = tabs[0]) {
     let apiUrl = "/api/events";
-    if (showOnlyFollowNotes || pageType == tabs[1]) {
+    if (pageType == tabs[1]) {
       apiUrl = "/api/getfollownotes";
     }
 
@@ -247,7 +246,6 @@
     <button on:click={() => (showModal = true)} class="btn btn-blue">
       Msg
     </button>
-    <input type="checkbox" bind:checked={showOnlyFollowNotes} />Follow notes
   </div>
 
   <Tabs
