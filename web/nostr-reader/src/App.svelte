@@ -10,6 +10,9 @@
   import Modal from "./lib/partials/Modal.svelte";
   import TextArea from "./lib/partials/TextArea.svelte";
   import Button from "./lib/partials/Button.svelte";
+  import Tabs from "./lib/partials/Tabs.svelte";
+  import { fade } from "svelte/transition";
+  import Link from "./lib/partials/Link.svelte";
 
   let page = writable([]);
   let pageData = [];
@@ -25,16 +28,24 @@
   let since = 1; // 1 day
   let showOnlyFollowNotes = false;
 
+  let tabs = ["general", "follow", "settings"];
+  let tabItems = [
+    { label: "General", value: 1 },
+    { label: "Follow", value: 2 },
+    { label: "Settings", value: 3 },
+  ];
+  let currentTab;
+
   onMount(async () => {
     await refreshView({ page: 1, limit: limit, since: since });
   });
 
-  async function refreshView(params) {
+  async function refreshView(params, pageType = tabs[0]) {
     let apiUrl = "/api/events";
-    if (showOnlyFollowNotes) {
-      apiUrl = "/api/getfollownotes"; 
+    if (showOnlyFollowNotes || pageType == tabs[1]) {
+      apiUrl = "/api/getfollownotes";
     }
-    
+
     await fetch(apiUrl, {
       method: "POST",
       body: JSON.stringify(params),
@@ -52,11 +63,10 @@
         from = data.from;
         to = data.to;
         per_page = data.per_page;
-        last_page = data.last_page > 10 ? 10: data.last_page;
+        last_page = data.last_page > 10 ? 10 : data.last_page;
         total = data.total;
 
         pageData = data.data;
-        
       })
       .catch((err) => {
         console.error("error", err);
@@ -71,7 +81,7 @@
       .then((data) => {
         console.log("Json is ", data);
         refreshView({ page: current_page, limit: limit, since: since });
-        document.getElementById("content").scrollTo(0,0);
+        document.getElementById("content").scrollTo(0, 0);
         return data;
       })
       .catch((err) => {
@@ -174,12 +184,12 @@
   }
 
   let showModal = false;
-  let replyToEventId = ""; 
+  let replyToEventId = "";
   async function onPublish(e: Event) {
     const target = e.target as HTMLFormElement;
     const formData = new FormData(target);
 
-    const data: { replyText?: string, event_id?:string } = {};
+    const data: { replyText?: string; event_id?: string } = {};
     //@ts-ignore
     for (let field of formData) {
       const [key, value] = field;
@@ -190,15 +200,14 @@
     showModal = false;
     replyToEventId = "";
   }
-
 </script>
 
 <Modal bind:showModal>
   <h2 slot="header">Create Note</h2>
 
   <form on:submit|preventDefault={onPublish}>
-    <input type="hidden" name="event_id" value="{replyToEventId}" />
-    <p><TextArea id="replyText" rows="15" cols="30"/></p>
+    <input type="hidden" name="event_id" value={replyToEventId} />
+    <p><TextArea id="replyText" rows="15" cols="30" /></p>
     <div class="actions">
       <Button type="submit">Send</Button>
     </div>
@@ -238,45 +247,68 @@
     <button on:click={() => (showModal = true)} class="btn btn-blue">
       Msg
     </button>
-    <input type="checkbox" bind:checked="{showOnlyFollowNotes}"/>Follow notes
-    {#if total > per_page}
-      <Pagination
-        {current_page}
-        {last_page}
-        {per_page}
-        {from}
-        {to}
-        {total}
-        on:change={(ev) =>
-          {refreshView({ page: ev.detail, limit: limit, since: since });document.getElementById("content").scrollTo(0,0);}}
-      ></Pagination>
-    {/if}
+    <input type="checkbox" bind:checked={showOnlyFollowNotes} />Follow notes
   </div>
 
-  <hr/>
-  
-  <div class="p-10 h-4/5 overflow-x-auto"  id="content">
-    <div class="flex flex-col gap-4">
-      <div>
-        <div
-          id="Notes"
-          class="flex flex-col relative mx-auto bg-gray-800
+  <Tabs
+    bind:activeTabValue={currentTab}
+    items={tabItems}
+    on:changeTab={(tabValue) => {
+      switch (tabValue.detail) {
+        case 1:
+          refreshView({ page: 1, limit: limit, since: since }, tabs[0]);
+          break;
+        case 2:
+          refreshView({ page: 1, limit: limit, since: since }, tabs[1]);
+          break;
+        default:
+          refreshView({ page: 1, limit: limit, since: since }, tabs[2]);
+          break;
+      }
+    }}
+  />
+
+  {#if total > per_page}
+    <Pagination
+      {current_page}
+      {last_page}
+      {per_page}
+      {from}
+      {to}
+      {total}
+      on:change={(ev) => {
+        refreshView({ page: ev.detail, limit: limit, since: since });
+        document.getElementById("content").scrollTo(0, 0);
+      }}
+    ></Pagination>
+  {/if}
+  <div in:fade>
+    <div class="p-10 h-4/5 overflow-x-auto" id="content">
+      <div class="flex flex-col gap-4">
+        <div>
+          <div
+            id="Notes"
+            class="flex flex-col relative mx-auto bg-gray-800
                 dark:highlight-white/5 shadow-lg ring-1 ring-black/5
                 divide-y ml-4 mr-4
                 space-y-0 place-content-start
                 h-full max-h-full w-10/12"
-        >
-          <div class="h-full w-full overflow-y-auto">
-            {#each pageData ? pageData : [] as note (note.id)}
-              <NoteEvent
-                {note}
-                on:searchEvent={(ev) =>
-                  searchEvents(ev.detail.id, ev.detail.etag)}
-                on:followUser={(ev) => followUser(ev.detail)}
-                on:blockUser={(ev) => blockUser(ev.detail)}
-                on:reply={(ev) => {showModal = true; replyToEventId = ev.detail.id}}
-              ></NoteEvent>
-            {/each}
+          >
+            <div class="h-full w-full overflow-y-auto">
+              {#each pageData ? pageData : [] as note (note.id)}
+                <NoteEvent
+                  {note}
+                  on:searchEvent={(ev) =>
+                    searchEvents(ev.detail.id, ev.detail.etag)}
+                  on:followUser={(ev) => followUser(ev.detail)}
+                  on:blockUser={(ev) => blockUser(ev.detail)}
+                  on:reply={(ev) => {
+                    showModal = true;
+                    replyToEventId = ev.detail.id;
+                  }}
+                ></NoteEvent>
+              {/each}
+            </div>
           </div>
         </div>
       </div>
