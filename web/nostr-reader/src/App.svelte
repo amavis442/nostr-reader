@@ -287,6 +287,7 @@
           refreshView({ page: 1, limit: limit, since: since }, tabs[2]);
           break;
       }
+      document.getElementById("content").scrollTo(0, 0);
     }}
   />
 
