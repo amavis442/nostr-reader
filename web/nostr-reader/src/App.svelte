@@ -11,7 +11,6 @@
   import TextArea from "./lib/partials/TextArea.svelte";
   import Button from "./lib/partials/Button.svelte";
   import Tabs from "./lib/partials/Tabs.svelte";
-  import { fade } from "svelte/transition";
   import Link from "./lib/partials/Link.svelte";
 
   let page = writable([]);
@@ -214,7 +213,7 @@
 </Modal>
 
 <main class="h-full">
-  <div class="p-10 h-1/5">
+  <div class="pb-5">
     <button on:click={refresh} class="btn btn-blue">Sync</button>
     <select
       id="limit"
@@ -279,34 +278,33 @@
         document.getElementById("content").scrollTo(0, 0);
       }}
     ></Pagination>
+
   {/if}
-  <div in:fade>
-    <div class="p-10 h-4/5 overflow-x-auto" id="content">
-      <div class="flex flex-col gap-4">
-        <div>
-          <div
-            id="Notes"
-            class="flex flex-col relative mx-auto bg-gray-800
+  <div class="p-3 h-5/6 overflow-x-auto" id="content">
+    <div class="flex flex-col gap-4">
+      <div>
+        <div
+          id="Notes"
+          class="flex flex-col relative mx-auto bg-gray-800
                 dark:highlight-white/5 shadow-lg ring-1 ring-black/5
                 divide-y ml-4 mr-4
                 space-y-0 place-content-start
                 h-full max-h-full w-10/12"
-          >
-            <div class="h-full w-full overflow-y-auto">
-              {#each pageData ? pageData : [] as note (note.id)}
-                <NoteEvent
-                  {note}
-                  on:searchEvent={(ev) =>
-                    searchEvents(ev.detail.id, ev.detail.etag)}
-                  on:followUser={(ev) => followUser(ev.detail)}
-                  on:blockUser={(ev) => blockUser(ev.detail)}
-                  on:reply={(ev) => {
-                    showModal = true;
-                    replyToEventId = ev.detail.id;
-                  }}
-                ></NoteEvent>
-              {/each}
-            </div>
+        >
+          <div class="h-full w-full overflow-y-auto">
+            {#each pageData ? pageData : [] as note (note.id)}
+              <NoteEvent
+                {note}
+                on:searchEvent={(ev) =>
+                  searchEvents(ev.detail.id, ev.detail.etag)}
+                on:followUser={(ev) => followUser(ev.detail)}
+                on:blockUser={(ev) => blockUser(ev.detail)}
+                on:reply={(ev) => {
+                  showModal = true;
+                  replyToEventId = ev.detail.id;
+                }}
+              ></NoteEvent>
+            {/each}
           </div>
         </div>
       </div>
