@@ -319,3 +319,13 @@ func (nostr *Nostr) FollowPubkey(ctx context.Context, user *FollowPubkey) error 
 	fmt.Println("Followed: ", user.Pubkey)
 	return nil
 }
+
+func (nostr *Nostr) UnfollowPubkey(ctx context.Context, user *FollowPubkey) error {
+	err := nostr.Storage.UnfollowPubkey(ctx, user.Pubkey)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	fmt.Println("Unfollowed: ", user.Pubkey)
+	return nil
+}

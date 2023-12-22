@@ -29,6 +29,7 @@ type Profile struct {
 	Lud16       string `json:"lud16"`
 	DisplayName string `json:"display_name"`
 	Pubkey      string `json:"pubkey"`
+	Followed    bool   `json:"followed"`
 }
 
 type Event struct {
@@ -164,6 +165,39 @@ func (req *Requests) FollowUser(w http.ResponseWriter, r *http.Request) {
 	err = req.Nostr.FollowPubkey(ctx, &user)
 
 	fmt.Println("Follow user: ", user.Pubkey)
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
+	w.WriteHeader(http.StatusOK)
+	test := map[string]string{}
+	test["status"] = "ok"
+	test["msg"] = ""
+	if err != nil {
+		test["status"] = "error"
+		test["msg"] = err.Error()
+	}
+
+	test["followed"] = user.Pubkey
+	err = json.NewEncoder(w).Encode(test)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (req *Requests) UnfollowUser(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var user FollowPubkey
+	err := json.NewDecoder(r.Body).Decode(&user)
+	if err != nil {
+		log.Println(err)
+		panic(err)
+	}
+
+	err = req.Nostr.UnfollowPubkey(ctx, &user)
+
+	fmt.Println("Unfollow user: ", user.Pubkey)
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
 	w.WriteHeader(http.StatusOK)

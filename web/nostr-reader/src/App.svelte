@@ -29,7 +29,7 @@
   let tabs = ["general", "follow", "settings"];
   let tabItems = [
     { label: "General", value: 1 },
-    { label: "Follow", value: 2 },
+    { label: "Followed", value: 2 },
     { label: "Settings", value: 3 },
   ];
   let currentTab;
@@ -78,7 +78,8 @@
       })
       .then((data) => {
         console.log("Json is ", data);
-        refreshView({ page: current_page, limit: limit, since: since });
+        //alert(tabs[currentTab - 1] + ' ' + currentTab)
+        refreshView({ page: current_page, limit: limit, since: since }, tabs[currentTab - 1]);
         document.getElementById("content").scrollTo(0, 0);
         return data;
       })
@@ -121,6 +122,30 @@
       })
       .then((data) => {
         console.log("Json is ", data);
+        return data;
+      })
+      .catch((err) => {
+        console.error("error", err);
+      });
+  }
+
+  function unfollowUser(pubkey) {
+    fetch("/api/unfollowuser", {
+      method: "POST",
+      body: JSON.stringify({ pubkey: pubkey }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+    })
+      .then((res) => {
+        return res.json();
+      })
+      .then((data) => {
+        console.log("Json is ", data);
+        if (currentTab == 2) { 
+          refreshView({ page: 1, limit: limit, since: since }, tabs[1])
+        }
+        
         return data;
       })
       .catch((err) => {
@@ -298,6 +323,7 @@
                 on:searchEvent={(ev) =>
                   searchEvents(ev.detail.id, ev.detail.etag)}
                 on:followUser={(ev) => followUser(ev.detail)}
+                on:unfollowUser={(ev) => unfollowUser(ev.detail)}
                 on:blockUser={(ev) => blockUser(ev.detail)}
                 on:reply={(ev) => {
                   showModal = true;

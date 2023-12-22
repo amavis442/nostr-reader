@@ -17,6 +17,10 @@
         dispatch('followUser', pubkey)
     }
     
+    function unfollowUser(pubkey) {
+        dispatch('unfollowUser', pubkey)
+    }
+
     function blockUser(pubkey) {
         dispatch('blockUser', pubkey)
     }
@@ -54,10 +58,14 @@
           {/if}
         </div>
         <div class="flex items-center">
-          <img class="w-10 h-10 rounded-full mr-4" src="{ note.profile.picture ? note.profile.picture : placeholder}" alt="Placeholder" title="{ note.profile.about ? note.profile.about : ''}">
+          <img class="w-10 h-10 rounded-full mr-4 {note.profile.followed ? 'border-2 border-green-800' : ''}" src="{ note.profile.picture ? note.profile.picture : placeholder}" alt="Placeholder" title="{ note.profile.about ? note.profile.about : ''}">
           <div class="text-sm text-left">
             <p class="text-gray-900 leading-none">{ note.profile.display_name ? note.profile.display_name : note.profile.name.slice(0, 20) } 
+              {#if note.profile.followed}
+              <button on:click="{unfollowUser(note.pubkey)}">Unfollow</button>| 
+              {:else}
               <button on:click="{followUser(note.pubkey)}">Follow</button>| 
+              {/if}
               <button on:click="{blockUser(note.pubkey)}">Block</button>| 
               <button on:click="{reply(note)}">Reply ({note.children.length})</button></p>
             <p class="text-gray-600"><small>{ (new Date(note.created_at  * 1000)).toLocaleString('nl-NL') }</small></p>

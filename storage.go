@@ -375,6 +375,8 @@ func (st *Storage) GetEvents(ctx context.Context, limit int) (*[]Event, error) {
 /**
  * Do not show all data in an endless scrol page, but paginate it for easy access
  * and ignore the garbage tagged posts
+ *
+ * @TODO!: clean up query's. MainQry and TreeQry are much alike and are processed the same. Maybe use a func to process them
  */
 func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow bool) error {
 	tx, err := st.DbPool.Begin(ctx)
@@ -393,7 +395,7 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 
 	//Only root events.
 	mainQry := `SELECT e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full::json, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
-	u.website, u.nip05, u.lud16, u.display_name FROM events e 
+	u.website, u.nip05, u.lud16, u.display_name, f.pubkey FROM events e 
 	LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
 	LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
 	LEFT JOIN seen s on (s.event_id = e.event_id)`
@@ -401,6 +403,10 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 	if follow {
 		mainQry += `
 		JOIN follow_pubkeys f ON (f.pubkey = e.pubkey)
+		`
+	} else {
+		mainQry += `
+		LEFT JOIN follow_pubkeys f ON (f.pubkey = e.pubkey)
 		`
 	}
 	mainQry += `WHERE e.kind = 1 AND e.etags='{}' AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false`
@@ -462,9 +468,10 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 		var nip05 sql.NullString
 		var lud16 sql.NullString
 		var displayname sql.NullString
+		var followed sql.NullString
 
 		if err := rows.Scan(&id, &event.EventID, &event.Pubkey, &event.Kind, &event.EventCreatedAt, &event.Content, &event.TagsFull, &event.Etags, &event.Ptags, &event.Sig,
-			&name, &about, &picture, &website, &nip05, &lud16, &displayname); err != nil {
+			&name, &about, &picture, &website, &nip05, &lud16, &displayname, &followed); err != nil {
 			log.Println(err.Error())
 			panic(err)
 		}
@@ -492,6 +499,11 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 		}
 		if displayname.Valid {
 			event.Profile.DisplayName = displayname.String
+		}
+
+		event.Profile.Followed = false
+		if followed.Valid {
+			event.Profile.Followed = true
 		}
 
 		/*
@@ -522,10 +534,11 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 	rows.Close()
 
 	treeQry := `select t.root_event_id, t.reply_event_id, e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full::json, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
-	u.website, u.nip05, u.lud16, u.display_name FROM tree t, events e 
+	u.website, u.nip05, u.lud16, u.display_name, f.pubkey FROM tree t, events e 
 	LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
 	LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
 	LEFT JOIN seen s on (s.event_id = e.event_id)
+	LEFT JOIN follow_pubkeys f ON (f.pubkey = e.pubkey)
 	WHERE root_event_id IN (`
 	for k := range eventMap {
 		treeQry = treeQry + `'` + k + `',`
@@ -551,11 +564,12 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 		var nip05 sql.NullString
 		var lud16 sql.NullString
 		var displayname sql.NullString
+		var followed sql.NullString
 
 		if err := treeRows.Scan(&root_event_id, &reply_event_id, &id, &event.EventID, &event.Pubkey,
 			&event.Kind, &event.EventCreatedAt, &event.Content, &event.TagsFull, &event.Etags,
 			&event.Ptags, &event.Sig, &name, &about, &picture,
-			&website, &nip05, &lud16, &displayname); err != nil {
+			&website, &nip05, &lud16, &displayname, &followed); err != nil {
 			log.Println(err.Error())
 			panic(err)
 		}
@@ -584,6 +598,12 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 		if displayname.Valid {
 			event.Profile.DisplayName = displayname.String
 		}
+
+		event.Profile.Followed = false
+		if followed.Valid {
+			event.Profile.Followed = true
+		}
+
 		event.Children = make([]Event, 0)
 		if item, ok := eventMap[root_event_id]; ok {
 			item.Children = append(item.Children, event)
@@ -715,6 +735,16 @@ func (st *Storage) BlockPubkey(ctx context.Context, pubkey string) error {
  */
 func (st *Storage) FollowPubkey(ctx context.Context, pubkey string) error {
 	_, err := st.DbPool.Exec(ctx, `INSERT INTO "follow_pubkeys" (pubkey, created_at) VALUES ($1, NOW()) ON CONFLICT (pubkey) DO NOTHING;`, pubkey)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	return nil
+}
+
+func (st *Storage) UnfollowPubkey(ctx context.Context, pubkey string) error {
+	_, err := st.DbPool.Exec(ctx, `DELETE FROM "follow_pubkeys" WHERE pubkey = $1;`, pubkey)
 	if err != nil {
 		log.Println(err)
 		return err
