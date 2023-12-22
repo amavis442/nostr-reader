@@ -101,7 +101,7 @@
       })
       .then((data) => {
         console.log("Json is ", data);
-        refreshView({ page: current_page, limit: limit, since: since });
+        refreshView({ page: current_page, limit: limit, since: since }, tabs[currentTab - 1]);
         return data;
       })
       .catch((err) => {
@@ -122,6 +122,7 @@
       })
       .then((data) => {
         console.log("Json is ", data);
+        refreshView({ page: current_page, limit: limit, since: since }, tabs[currentTab - 1]);
         return data;
       })
       .catch((err) => {
@@ -142,10 +143,7 @@
       })
       .then((data) => {
         console.log("Json is ", data);
-        if (currentTab == 2) { 
-          refreshView({ page: 1, limit: limit, since: since }, tabs[1])
-        }
-        
+        refreshView({ page: current_page, limit: limit, since: since }, tabs[currentTab - 1])
         return data;
       })
       .catch((err) => {
@@ -300,7 +298,7 @@
       {to}
       {total}
       on:change={(ev) => {
-        refreshView({ page: ev.detail, limit: limit, since: since });
+        refreshView({ page: ev.detail, limit: limit, since: since }, tabs[currentTab - 1]);
         document.getElementById("content").scrollTo(0, 0);
       }}
     ></Pagination>
