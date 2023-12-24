@@ -45,6 +45,7 @@ type Event struct {
 	Profile        Profile           `json:"profile"`
 	Garbage        bool              `json:"gargabe"`
 	Children       map[string]Event  `json:"children"`
+	Tree           int64             `json:"tree"`
 }
 
 type BlockPubkey struct {

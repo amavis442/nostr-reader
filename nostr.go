@@ -148,7 +148,7 @@ func (nostr *Nostr) Post(ctx context.Context, content string, event_id string) e
 		if err == nil && status != nostrHandler.PublishStatusFailed {
 			success += 1
 		}
-
+		log.Println("Reply", ev)
 		fmt.Println(ev)
 		return true
 	})

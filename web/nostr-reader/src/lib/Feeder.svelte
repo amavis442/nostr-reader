@@ -1,0 +1,37 @@
+<script lang="ts">
+</script>
+
+<div class="flex flex-col gap-4 h-screen">
+  <div class="h-screen">
+    <div
+      id="Notes"
+      class="flex flex-col relative mx-auto bg-gray-800
+              dark:highlight-white/5 shadow-lg ring-1 ring-black/5
+              divide-y ml-4 mr-4
+              space-y-0 place-content-start
+              h-full max-h-full w-11/12"
+    >
+      <div class="h-full w-full overflow-y-auto">
+        <slot />
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  div.createnote {
+    position: absolute;
+    bottom: 10px;
+    right: 15%;
+    border: 0;
+  }
+  .create-note {
+    height: 50px;
+    width: 50px;
+  }
+  .create-note i {
+    height: 100%;
+    font-size: 60px;
+    color: rgba(255, 255, 255, 0.9);
+  }
+</style>

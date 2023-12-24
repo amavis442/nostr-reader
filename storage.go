@@ -360,7 +360,7 @@ func (st *Storage) GetEvents(ctx context.Context, limit int) (*[]Event, error) {
 		if displayname.Valid {
 			event.Profile.DisplayName = displayname.String
 		}
-
+		event.Tree = 1
 		events = append(events, event)
 	}
 	// Check for errors from iterating over rows.
@@ -508,6 +508,7 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 		if followed.Valid {
 			event.Profile.Followed = true
 		}
+		event.Tree = 1
 
 		event.Children = make(map[string]Event, 0)
 		eventMap[event.EventID] = event
@@ -599,12 +600,13 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 		//event.Children = make(map[string]Event)
 		if item, ok := eventMap[root_event_id]; ok {
 			if reply_event_id.Valid && reply_event_id.String == "" {
+				event.Tree = 2
 				item.Children[event.EventID] = event
 				//item.Children = append(item.Children, event)
 				eventMap[root_event_id] = item
 				fmt.Println("Note has child event ", event)
 			}
-			/*if reply_event_id.Valid {
+			/*if reply_event_id.Valid && reply_event_id.String <> ""{
 				for _, child := range item.Children {
 					if child.EventID == reply_event_id.String {
 						if len(child.Children) < 1 {
