@@ -171,39 +171,6 @@
       });
   }
 
-  let searchEvent = writable({});
-  function searchEvents(noteId: string, etag: string) {
-    fetch("/api/searchevent", {
-      method: "POST",
-      body: JSON.stringify({ id: etag }),
-      headers: {
-        "Content-Type": "application/json",
-      },
-    })
-      .then((res) => {
-        return res.json();
-      })
-      .then((data) => {
-        console.log("Json is ", data);
-        if (data.content) {
-          document.getElementById("search_" + noteId + "_" + etag).innerHTML =
-            '<p class="truncate hover:text-clip; width: 100%">' +
-            toHtml(data.content) +
-            "</p><br/><hr/>" +
-            (data.profile.name ? data.profile.name : data.pubkey);
-        }
-        if (!data.content) {
-          document.getElementById("search_" + noteId + "_" + etag).innerHTML =
-            "No event data available";
-        }
-
-        return data;
-      })
-      .catch((err) => {
-        console.error("error", err);
-      });
-  }
-
   let showModal = false;
   let replyToEventId = "";
   async function onPublish(e: Event) {
@@ -319,8 +286,6 @@
             {#each pageData ? pageData : [] as note (note.id)}
               <NoteEvent
                 {note}
-                on:searchEvent={(ev) =>
-                  searchEvents(ev.detail.id, ev.detail.etag)}
                 on:followUser={(ev) => followUser(ev.detail)}
                 on:unfollowUser={(ev) => unfollowUser(ev.detail)}
                 on:blockUser={(ev) => blockUser(ev.detail)}

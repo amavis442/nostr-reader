@@ -44,7 +44,7 @@ type Event struct {
 	Sig            string            `json:"sig"`
 	Profile        Profile           `json:"profile"`
 	Garbage        bool              `json:"gargabe"`
-	Children       []Event           `json:"children"`
+	Children       map[string]Event  `json:"children"`
 }
 
 type BlockPubkey struct {

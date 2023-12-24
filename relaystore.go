@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"mime"
 	"net/http"
@@ -101,6 +102,7 @@ func main() {
 
 	mux.Handle("/", http.FileServer(http.Dir("web/nostr-reader/dist")))
 
+	fmt.Println("Server running: http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", mux))
 
 }

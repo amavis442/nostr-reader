@@ -376,7 +376,6 @@ func (st *Storage) GetEvents(ctx context.Context, limit int) (*[]Event, error) {
  * Do not show all data in an endless scrol page, but paginate it for easy access
  * and ignore the garbage tagged posts
  *
- * @TODO!: clean up query's. MainQry and TreeQry are much alike and are processed the same. Maybe use a func to process them
  */
 func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow bool) error {
 	tx, err := st.DbPool.Begin(ctx)
@@ -395,7 +394,8 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 
 	//Only root events.
 	mainQry := `SELECT e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full::json, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
-	u.website, u.nip05, u.lud16, u.display_name, f.pubkey FROM events e 
+	u.website, u.nip05, u.lud16, u.display_name, f.pubkey 
+	FROM events e 
 	LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
 	LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
 	LEFT JOIN seen s on (s.event_id = e.event_id)`
@@ -454,6 +454,9 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 	}
 	defer rows.Close()
 
+	/**
+	 * Get all root notes
+	 */
 	events := make([]Event, 0)
 	eventMap := make(map[string]Event)
 	var keys []string
@@ -506,25 +509,9 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 			event.Profile.Followed = true
 		}
 
-		/*
-			childrenQry := `SELECT e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig
-			FROM events e,tree t WHERE t.root_event_id = '` + event.EventID + `';`
-			var childEvent Event
-			childRow := tx.QueryRow(ctx, childrenQry)
-
-			if err := childRow.Scan(&id, &childEvent.EventID, &childEvent.Pubkey, &childEvent.Kind, &childEvent.EventCreatedAt, &childEvent.Content, &childEvent.TagsFull,
-				&childEvent.Etags, &childEvent.Ptags, &childEvent.Sig); err != nil {
-				if err != nil {
-					log.Println(err)
-					return nil
-				}
-				event.Children = append(event.Children, childEvent)
-			}
-		*/
-		event.Children = make([]Event, 0)
+		event.Children = make(map[string]Event, 0)
 		eventMap[event.EventID] = event
 		keys = append(keys, event.EventID) // Make sure the order stays the same @see https://go.dev/blog/maps
-		//events = append(events, event)
 	}
 	// Check for errors from iterating over rows.
 	if err := rows.Err(); err != nil {
@@ -533,8 +520,13 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 	}
 	rows.Close()
 
-	treeQry := `select t.root_event_id, t.reply_event_id, e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full::json, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
-	u.website, u.nip05, u.lud16, u.display_name, f.pubkey FROM tree t, events e 
+	/**
+	 * Get all child notes
+	 */
+	treeQry := `SELECT t.root_event_id, t.reply_event_id, e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, 
+	e.tags_full::json, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
+	u.website, u.nip05, u.lud16, u.display_name, f.pubkey 
+	FROM tree t, events e 
 	LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
 	LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
 	LEFT JOIN seen s on (s.event_id = e.event_id)
@@ -604,10 +596,26 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 			event.Profile.Followed = true
 		}
 
-		event.Children = make([]Event, 0)
+		//event.Children = make(map[string]Event)
 		if item, ok := eventMap[root_event_id]; ok {
-			item.Children = append(item.Children, event)
-			eventMap[root_event_id] = item
+			if reply_event_id.Valid && reply_event_id.String == "" {
+				item.Children[event.EventID] = event
+				//item.Children = append(item.Children, event)
+				eventMap[root_event_id] = item
+				fmt.Println("Note has child event ", event)
+			}
+			/*if reply_event_id.Valid {
+				for _, child := range item.Children {
+					if child.EventID == reply_event_id.String {
+						if len(child.Children) < 1 {
+							child.Children = make([]Event, 0)
+						}
+						child.Children = append(child.Children, event)
+						eventMap[root_event_id] = item
+					}
+				}
+			}
+			*/
 		}
 	}
 	if err := treeRows.Err(); err != nil {
