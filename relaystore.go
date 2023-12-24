@@ -100,6 +100,12 @@ func main() {
 	 */
 	mux.HandleFunc("/api/publish", req.Publish)
 
+	/**
+	 * Use meta data set and get
+	 */
+	mux.HandleFunc("/api/getmetadata", req.GetMetaData)
+	mux.HandleFunc("/api/setmetadata", req.SetMetaData)
+
 	mux.Handle("/", http.FileServer(http.Dir("web/nostr-reader/dist")))
 
 	fmt.Println("Server running: http://localhost:8080")

@@ -2,6 +2,7 @@
   import { Router, Link, Route } from "svelte-routing";
   import Feed from "./routes/Feed.svelte";
   import Followed from "./routes/Followed.svelte";
+  import Account from "./routes/Account.svelte";
   import "@fortawesome/fontawesome-free/css/fontawesome.css";
   import "@fortawesome/fontawesome-free/css/solid.css";
   export let url = "";
@@ -27,6 +28,9 @@
             Following
             </Link>
         </p>
+        <p class="nav-p {url === '/account' ? 'selected' : ''}">
+          <Link to="account" title="Your account data">Account</Link>
+        </p>
       </nav>
     </header>
 
@@ -34,6 +38,7 @@
       <Route path="/" component="{Feed}" />
       <Route path="global" component="{Feed}" />
       <Route path="followed" component="{Followed}" />
+      <Route path="account" component="{Account}" />
     </main>
   </div>
 </Router>

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -327,5 +328,84 @@ func (nostr *Nostr) UnfollowPubkey(ctx context.Context, user *FollowPubkey) erro
 		return err
 	}
 	fmt.Println("Unfollowed: ", user.Pubkey)
+	return nil
+}
+
+func (nostr *Nostr) GetMetaData(ctx context.Context) (nostrHandler.Event, error) {
+	pubkey := nostr.Cfg.Pubkey
+	filter := nostrHandler.Filter{
+		Kinds:   []int{nostrHandler.KindProfileMetadata},
+		Authors: []string{pubkey},
+	}
+
+	fmt.Println("Get account data from relays:", filter)
+	var m sync.Map
+	nostr.Do(func(ctx context.Context, relay *nostrHandler.Relay) bool {
+		evs, err := relay.QuerySync(ctx, filter)
+		if err != nil {
+			return false
+		}
+		for _, ev := range evs {
+			if _, ok := m.Load(ev.ID); !ok {
+				m.LoadOrStore(ev.ID, ev)
+			}
+		}
+		return true
+	})
+
+	fmt.Println("Done for profile: ")
+	if v, ok := m.Load(pubkey); ok {
+		//var event *nostrHandler.Event
+		event := v.(*nostrHandler.Event)
+		fmt.Println(*event)
+		return *event, nil
+	}
+
+	return nostrHandler.Event{}, nil
+}
+
+func (nostr *Nostr) SetMetaData(ctx context.Context, user *UserProfile) error {
+	ev := nostrHandler.Event{}
+	ev.Tags = nostrHandler.Tags{}
+	//var err error
+
+	ctx, cancel := context.WithTimeout(ctx, time.Second*15) // It has 15 seconds to complete or else it will cancel itself.
+	defer cancel()
+
+	ev.PubKey = nostr.Cfg.Pubkey
+	ev.CreatedAt = nostrHandler.Now()
+	ev.Kind = nostrHandler.KindProfileMetadata
+	c, err := json.Marshal(*user)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	ev.Content = string(c)
+
+	fmt.Println(ev)
+	var success int
+	nostr.Do(func(ctx context.Context, relay *nostrHandler.Relay) bool {
+		// calling Sign sets the event ID field and the event Sig field
+		if err := ev.Sign(nostr.Cfg.Pk); err != nil {
+			return false
+		}
+
+		status, err := relay.Publish(ctx, ev)
+		if err != nil {
+			fmt.Println(err)
+			return false
+		}
+		if err == nil && status != nostrHandler.PublishStatusFailed {
+			success += 1
+		}
+		log.Println("Reply", ev)
+		fmt.Println(ev)
+		return true
+	})
+
+	if success == 0 {
+		return errors.New("cannot send profile metadata")
+	}
+
 	return nil
 }

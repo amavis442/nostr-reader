@@ -20,7 +20,7 @@ type Requests struct {
 /**
  * I put this here because this will be returned as json for the api
  */
-type Profile struct {
+type UserProfile struct {
 	Name        string `json:"name"`
 	About       string `json:"about"`
 	Picture     string `json:"picture"`
@@ -29,7 +29,11 @@ type Profile struct {
 	Lud16       string `json:"lud16"`
 	DisplayName string `json:"display_name"`
 	Pubkey      string `json:"pubkey"`
-	Followed    bool   `json:"followed"`
+}
+
+type Profile struct {
+	UserProfile
+	Followed bool `json:"followed"`
 }
 
 type Event struct {
@@ -356,6 +360,46 @@ func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = json.NewEncoder(w).Encode(test)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (req *Requests) GetMetaData(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	event, _ := req.Nostr.GetMetaData(ctx)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
+	w.WriteHeader(http.StatusOK)
+	err := json.NewEncoder(w).Encode(event)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (req *Requests) SetMetaData(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var user UserProfile
+	err := json.NewDecoder(r.Body).Decode(&user)
+	if err != nil {
+		log.Println(err)
+		panic(err)
+	}
+	user.Pubkey = req.Cfg.Pubkey
+	_ = req.Nostr.SetMetaData(ctx, &user)
+
+	//fmt.Println("Follow user: ", user.Pubkey)
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
+	w.WriteHeader(http.StatusOK)
+	err = json.NewEncoder(w).Encode(user)
 	if err != nil {
 		panic(err)
 	}
