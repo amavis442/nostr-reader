@@ -96,13 +96,15 @@ func (nostr *Nostr) Post(ctx context.Context, content string, event_id string) e
 	log.Println(replyETags)
 	log.Println(len(replyETags))
 
-	if event_id != "" && len(replyETags) == 0 {
-		ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"e", event_id, "", "root"})
+	// We reply to the root of the Thread
+	if replyEv.ID != "" && len(replyETags) == 0 {
+		ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"e", replyEv.ID, "", "root"})
+		ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"p", replyEv.PubKey})
 		log.Println("Response to event id [", event_id, "]. Added root marker. ", ev.Tags)
 	}
-	ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"p", replyEv.PubKey})
-	var hasRootTag bool = false
 
+	// We reply to a reply which should have tags
+	var hasRootTag bool = false
 	if len(replyEv.Tags) > 0 {
 		for _, tag := range replyEv.Tags {
 			log.Println("Walking the tags if it works...", tag)
@@ -117,13 +119,12 @@ func (nostr *Nostr) Post(ctx context.Context, content string, event_id string) e
 					ev.Tags = ev.Tags.AppendUnique(tag)
 				}
 				if tag[3] == "root" {
-					log.Println("Thread has no root marker but has #e tags: ", replyEv.Tags)
+					ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{tag[0], tag[1], tag[2], "root"})
+					log.Println("Thread has root marker so we keep that: ", replyEv.Tags)
 					hasRootTag = true
 				}
 			}
-			/* if tag[0] != "e" {
-				ev.Tags = ev.Tags.AppendUnique(tag)
-			} */
+
 			if tag[0] == "p" {
 				ev.Tags = ev.Tags.AppendUnique(tag)
 			}
@@ -132,6 +133,7 @@ func (nostr *Nostr) Post(ctx context.Context, content string, event_id string) e
 			log.Println("Thread has no root marker but has #e tags so we add the root marker")
 			ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"e", event_id, "", "root"})
 		}
+		ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"p", replyEv.PubKey})
 	}
 
 	var success int
