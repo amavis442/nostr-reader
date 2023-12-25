@@ -1,4 +1,16 @@
 <script lang="ts">
+    import CreateNoteModal from "./partials/Modal/CreateNoteModal.svelte";
+    import { openModal } from "svelte-modals";
+    import { publish } from "./state/main";
+    
+    function createTextNote() {
+    openModal(CreateNoteModal, {
+      note: null,
+      onSendTextNote: (noteText: string) => {
+        publish(noteText,"");
+      },
+    });
+  }
 </script>
 
 <div class="flex flex-col gap-4 h-screen">
@@ -16,6 +28,16 @@
       </div>
     </div>
   </div>
+</div>
+
+<div class="createnote">
+  <button
+    on:click={createTextNote}
+    class="create-note p-2 mr-4"
+    title="Create a new note"
+  >
+    <i class="fa-regular fa-message" />
+  </button>
 </div>
 
 <style>

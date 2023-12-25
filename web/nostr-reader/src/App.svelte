@@ -5,9 +5,13 @@
   import Account from "./routes/Account.svelte";
   import "@fortawesome/fontawesome-free/css/fontawesome.css";
   import "@fortawesome/fontawesome-free/css/solid.css";
+  import Toasts from "./lib/partials/Toast/Toasts.svelte";
+  import { Modals, closeModal } from "svelte-modals";
   export let url = "";
 
 </script>
+
+<Toasts />
 
 <Router url="{url}">
   <div class="flex h-screen w-screen m-auto justify-center">
@@ -43,6 +47,14 @@
   </div>
 </Router>
 
+<Modals>
+  <div
+    slot="backdrop"
+    class="backdrop"
+    on:click={closeModal}
+    on:keyup={closeModal}
+  />
+</Modals>
 
 <style>
   .backdrop {

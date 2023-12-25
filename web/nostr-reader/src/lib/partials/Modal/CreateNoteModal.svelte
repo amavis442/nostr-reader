@@ -1,12 +1,11 @@
 <script lang="ts">
   import { closeModal } from "svelte-modals";
-  import type { TextNote } from "../../state/types";
   import Button from "../Button.svelte";
   import TextArea from "../TextArea.svelte";
 
   // provided by <Modals />
   export let isOpen: boolean;
-  export let note: TextNote | null;
+  export let note;
   export let onSendTextNote: Function;
 
   function onSubmit(e: Event) {
