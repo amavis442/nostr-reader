@@ -59,7 +59,7 @@ func (nostr *Nostr) Do(f func(context.Context, *nostrHandler.Relay) bool) {
 	wg.Wait()
 }
 
-func (nostr *Nostr) Post(ctx context.Context, content string, event_id string) error {
+func (nostr *Nostr) Post(ctx context.Context, content string, event_id string) (nostrHandler.Event, error) {
 	ev := nostrHandler.Event{}
 	ev.Tags = nostrHandler.Tags{}
 	var numEtags int = 0
@@ -73,7 +73,7 @@ func (nostr *Nostr) Post(ctx context.Context, content string, event_id string) e
 	if event_id != "" { // It is a reply to an Event
 		replyEv, err = nostr.Storage.FindRawEvent(ctx, event_id)
 		if err != nil {
-			return err
+			return nostrHandler.Event{}, err
 		}
 		replyETags = replyEv.Tags.GetAll([]string{"e"})
 		numEtags = len(replyETags)
@@ -151,16 +151,19 @@ func (nostr *Nostr) Post(ctx context.Context, content string, event_id string) e
 		if err == nil && status != nostrHandler.PublishStatusFailed {
 			success += 1
 		}
-		log.Println("Reply", ev)
-		fmt.Println(ev)
+		log.Println("Posting to: [", relay.URL, "] Even data: ", ev)
+		fmt.Println("Posting to: [", relay.URL, "] Even data: ", ev)
 		return true
 	})
 
 	if success == 0 {
-		return errors.New("cannot reply")
+		return nostrHandler.Event{}, errors.New("cannot reply")
 	}
+	log.Println("Saving post: ", ev)
 
-	return nil
+	nostr.Storage.SaveEvents(ctx, []*nostrHandler.Event{&ev})
+
+	return ev, nil
 }
 
 /**
