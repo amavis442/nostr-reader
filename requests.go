@@ -346,12 +346,14 @@ func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	log.Println("Msg to publish: ", msg.Msg)
-	err = req.Nostr.Post(ctx, msg.Msg, msg.Event_id)
+	postEv, _ := req.Nostr.Post(ctx, msg.Msg, msg.Event_id)
 	test := map[string]string{}
 
 	test["status"] = "ok"
 	test["msg"] = msg.Msg
 	test["reply_to_event_id"] = msg.Event_id
+	jsonPostEv, _ := json.Marshal(postEv)
+	test["post"] = string(jsonPostEv)
 
 	if err != nil {
 		log.Println(err)

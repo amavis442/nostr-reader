@@ -35,20 +35,20 @@ export async function refreshView(params) {
       console.log("Json is ", data);
 
       pageMetaData.set({
-          current_page: data.current_page,
-          from: data.from,
-          to: data.to,
-          per_page: data.per_page,
-          last_page: data.last_page > 10 ? 10 : data.last_page,
-          total: data.total,
-          limit: data.limit,
-          since: data.since
+        current_page: data.current_page,
+        from: data.from,
+        to: data.to,
+        per_page: data.per_page,
+        last_page: data.last_page > 10 ? 10 : data.last_page,
+        total: data.total,
+        limit: data.limit,
+        since: data.since
       })
 
       pageData.update(() => { return data.data });
       return data.data;
     })
-    //.then(() => (document.getElementById("content").scrollTo(0, 0)))
+    .then(() => (document.getElementById("content").scrollTo(0, 0)))
     .catch((err) => {
       console.error("error", err);
     });
@@ -137,8 +137,8 @@ export function unfollowUser(pubkey: string) {
     });
 }
 
-export function publish(msg: string, event_id: string) {
-  fetch(`${import.meta.env.VITE_PREVIEW_LINK}/api/publish`, {
+export async function publish(msg: string, event_id: string) {
+  await fetch(`${import.meta.env.VITE_PREVIEW_LINK}/api/publish`, {
     method: "POST",
     body: JSON.stringify({ msg: msg, event_id: event_id }),
     headers: {
@@ -150,6 +150,8 @@ export function publish(msg: string, event_id: string) {
     })
     .then((data) => {
       console.log("Json is ", data);
+      const pageData = get(pageMetaData)
+      refreshView({ page: pageData.current_page, limit: pageData.limit, since: pageData.since });
       return data;
     })
     .catch((err) => {
