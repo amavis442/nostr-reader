@@ -30,7 +30,7 @@
       }
     }
 
-    fetch(`${import.meta.env.VITE_PREVIEW_LINK}/api/setmetadata`, {
+    fetch(`${import.meta.env.VITE_API_LINK}/api/setmetadata`, {
       method: "POST",
       body: JSON.stringify({
         name: name,
@@ -100,7 +100,7 @@
     }
     */
   function getMetaData() {
-    fetch(`${import.meta.env.VITE_PREVIEW_LINK}/api/getmetadata`, {
+    fetch(`${import.meta.env.VITE_API_LINK}/api/getmetadata`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

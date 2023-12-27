@@ -138,7 +138,7 @@
                     <div class="mt-2" on:click={(e) => e.stopPropagation()}>
                       <Preview
                         endpoint={`${
-                          import.meta.env.VITE_PREVIEW_LINK
+                          import.meta.env.VITE_API_LINK
                         }/api/preview/link`}
                         url={findLink(note.content)}
                       />
