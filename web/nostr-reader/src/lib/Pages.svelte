@@ -26,6 +26,7 @@
       limit: $pageMetaData.limit,
       since: $pageMetaData.since,
     });
+    document.getElementById("content").scrollTo(0, 0)
   });
 
   function createReplyTextNote(replyToNote) {
