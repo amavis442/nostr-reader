@@ -108,7 +108,11 @@ func main() {
 
 	mux.Handle("/", http.FileServer(http.Dir("web/nostr-reader/dist")))
 
-	fmt.Println("Server running: http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	var port string = "8080"
+	if cfg.Server.Port > 0 {
+		port = fmt.Sprint(cfg.Server.Port)
+	}
+	fmt.Println("Server running: http://localhost:" + port)
+	log.Fatal(http.ListenAndServe(":"+port, mux))
 
 }

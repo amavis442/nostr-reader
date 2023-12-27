@@ -7,6 +7,10 @@ import (
 	"os"
 )
 
+type Server struct {
+	Port int64
+}
+
 /**
  * Used to store the config.json file and some database related stuff for easy access
  *
@@ -20,6 +24,7 @@ type Config struct {
 	Nsec     string
 	Filter   []string
 	Storage  *Storage
+	Server   *Server
 }
 
 /**

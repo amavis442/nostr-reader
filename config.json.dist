@@ -6,6 +6,9 @@
         "port": 5432,
         "host": "localhost"
     },
+    "server": {
+        "port": 8080
+    },
     "relays": [
 
         "wss://nostr.anchel.nl", 
@@ -16,5 +19,6 @@
     "pubkey": "",
     "npub": "",
     "pk": "",
-    "nsec": ""
+    "nsec": "",
+    "filter": [] 
 }

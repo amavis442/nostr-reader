@@ -55,7 +55,7 @@ export async function refreshView(params) {
 }
 
 export async function refresh() {
-  fetch(`${import.meta.env.VITE_PREVIEW_LINK}/api/sync`)
+  fetch(`${import.meta.env.VITE_API_LINK}/api/sync`)
     .then((res) => {
       return res.json();
     })
@@ -72,7 +72,7 @@ export async function refresh() {
 }
 
 export function blockUser(pubkey: string) {
-  fetch(`${import.meta.env.VITE_PREVIEW_LINK}/api/blockuser`, {
+  fetch(`${import.meta.env.VITE_API_LINK}/api/blockuser`, {
     method: "POST",
     body: JSON.stringify({ pubkey: pubkey }),
     headers: {
@@ -94,7 +94,7 @@ export function blockUser(pubkey: string) {
 }
 
 export function followUser(pubkey: string) {
-  fetch(`${import.meta.env.VITE_PREVIEW_LINK}/api/followuser`, {
+  fetch(`${import.meta.env.VITE_API_LINK}/api/followuser`, {
     method: "POST",
     body: JSON.stringify({ pubkey: pubkey }),
     headers: {
@@ -116,7 +116,7 @@ export function followUser(pubkey: string) {
 }
 
 export function unfollowUser(pubkey: string) {
-  fetch(`${import.meta.env.VITE_PREVIEW_LINK}/api/unfollowuser`, {
+  fetch(`${import.meta.env.VITE_API_LINK}/api/unfollowuser`, {
     method: "POST",
     body: JSON.stringify({ pubkey: pubkey }),
     headers: {
@@ -138,7 +138,7 @@ export function unfollowUser(pubkey: string) {
 }
 
 export async function publish(msg: string, event_id: string) {
-  await fetch(`${import.meta.env.VITE_PREVIEW_LINK}/api/publish`, {
+  await fetch(`${import.meta.env.VITE_API_LINK}/api/publish`, {
     method: "POST",
     body: JSON.stringify({ msg: msg, event_id: event_id }),
     headers: {

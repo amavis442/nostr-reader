@@ -19,6 +19,7 @@ You will need go 1.20 and npm 9.1
 
 `go build .`
 
+For the frontend rename .env.local.dist to .env.local.
 this will get the packages and build relaystore.exe on windows and will be the server 
 
 ```
@@ -29,12 +30,12 @@ npm install
 npm run build
 ```
 
-start relaystore.exe, make sure you have a valid config.json with at least your pubkey and private key
+Start relaystore.exe, make sure you have a valid config.json with at least your pubkey and private key.
 Also start the postgresql server on the standard port or change that in the config file. A log file in 
 the project dir will show if something goes wrong and why.
 For now there is a lot of logging in the file like sql query's, event data etc. This is for debugging 
 purposes and will be optional in the future. 
 
 In browser goto http://localhost:8080/ and press sync to get events. The port is fixed for now and can give problems if you have other
-apps running on that same port. Will change that later so you can set it yourself, but then you need to recompile the frontend so it knows how
-to communicate with the server.
+apps running on that same port. If you want to set another port then change that in config.json and in .env.local and rebuild the server and the 
+frontend.
