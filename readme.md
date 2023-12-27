@@ -20,7 +20,7 @@ You will need go 1.20 and npm 9.1
 `go build .`
 
 For the frontend rename .env.local.dist to .env.local.
-this will get the packages and build relaystore.exe on windows and will be the server 
+
 
 ```
 cd web/nostr-reader
@@ -29,6 +29,8 @@ npm install
 
 npm run build
 ```
+
+This will get the packages and build relaystore.exe on windows and will be the server. 
 
 Start relaystore.exe, make sure you have a valid config.json with at least your pubkey and private key.
 Also start the postgresql server on the standard port or change that in the config file. A log file in 
