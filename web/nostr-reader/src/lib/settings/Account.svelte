@@ -186,7 +186,7 @@
           bind:value={website}
           id="website"
           describedby="websiteHelp"
-          placeholder="About"
+          placeholder="Website"
         />
         <small id="websiteHelp" class="block mt-1 text-xs text-gray-600">
           What website can you be found
