@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -43,24 +44,26 @@ type DbConfig struct {
 const CreateQuery string = `
  CREATE TABLE IF NOT EXISTS events (
 	 id SERIAL Primary Key,
-	 event_id TEXT UNIQUE, 
-	 pubkey TEXT, 
-	 kind INTEGER, 
-	 event_created_at INTEGER, 
+	 event_id TEXT UNIQUE NOT NULL, 
+	 pubkey TEXT NOT NULL, 
+	 kind INTEGER NOT NULL, 
+	 event_created_at INTEGER NOT NULL, 
 	 content TEXT, 
 	 tags_full TEXT, 
 	 ptags text[],
 	 etags text[],
 	 sig TEXT,
-	 raw TEXT,
 	 garbage boolean DEFAULT false,
+	 raw json,
 	 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
  );
  CREATE INDEX IF NOT EXISTS idx_events_pubkey ON events (pubkey);
+ CREATE INDEX IF NOT EXISTS idx_events_ptags ON events USING gin (etags);
+ CREATE INDEX IF NOT EXISTS idx_events_etags ON events USING gin (ptags);
  
  CREATE TABLE IF NOT EXISTS profiles (
 	 id SERIAL Primary Key,
-	 pubkey VARCHAR UNIQUE, 
+	 pubkey VARCHAR UNIQUE NOT NULL, 
 	 name TEXT,
 	 about TEXT,
 	 picture TEXT,
@@ -76,32 +79,33 @@ const CreateQuery string = `
  
  CREATE TABLE IF NOT EXISTS block_pubkeys (
 	 id SERIAL Primary Key, 
-	 pubkey VARCHAR UNIQUE, 
+	 pubkey VARCHAR UNIQUE NOT NULL, 
 	 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
  );
  CREATE INDEX IF NOT EXISTS idx_block_pubkeys_pubkey ON block_pubkeys (pubkey);
  
  CREATE TABLE IF NOT EXISTS follow_pubkeys (
 	 id SERIAL Primary Key,
-	 pubkey VARCHAR UNIQUE, 
+	 pubkey VARCHAR UNIQUE NOT NULL, 
 	 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
  );
  CREATE INDEX IF NOT EXISTS idx_follow_pubkeys_pubkey ON follow_pubkeys (pubkey);
  
  CREATE TABLE IF NOT EXISTS seen (
 	 id SERIAL Primary Key,
-	 event_id VARCHAR UNIQUE, 
+	 event_id VARCHAR UNIQUE NOT NULL, 
 	 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
  );
  CREATE INDEX IF NOT EXISTS seen_by_event_id ON seen (event_id);
  
  CREATE TABLE IF NOT EXISTS tree (
 	 id SERIAL Primary Key,
-	 event_id VARCHAR,
+	 event_id VARCHAR UNIQUE NOT NULL,
 	 root_event_id VARCHAR,
 	 reply_event_id VARCHAR, 
 	 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
  );
+
  `
 
 func (st *Storage) CheckError(err error) {
@@ -176,10 +180,10 @@ func (st *Storage) SaveProfiles(ctx context.Context, evs []*nostr.Event) {
  * This will normalize the content tag of the events with all the unwanted markup (Myaby put this in a helper function)
  */
 func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string {
-	var qry = `INSERT INTO "events" ("event_id", "pubkey", "kind", "event_created_at", "content", "tags_full" , "sig" , "raw" , "ptags" , "etags", "garbage", "created_at") 
+	var qry = `INSERT INTO "events" ("event_id", "pubkey", "kind", "event_created_at", "content", "tags_full" , "sig" , "ptags" , "etags", "garbage", "raw", "created_at") 
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW()) ON CONFLICT (event_id) DO NOTHING;`
 
-	var treeQry = `INSERT INTO tree ("event_id","root_event_id", "reply_event_id", "created_at") VALUES ($1, $2, $3, NOW())`
+	var treeQry = `INSERT INTO tree ("event_id","root_event_id", "reply_event_id", "created_at") VALUES ($1, $2, $3, NOW()) ON CONFLICT (event_id) DO NOTHING;`
 
 	tx, err := st.DbPool.Begin(ctx)
 	defer func() {
@@ -280,8 +284,22 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string 
 		}
 		ptags = ptags[0:ptagsSliceSize] // Idiots who put a lot of ptags in it. Bad clients
 		etags = etags[0:etagsSliceSize] // Same story as with ptags.
-		if _, err := tx.Exec(ctx, qry, ev.ID, ev.PubKey, ev.Kind, ev.CreatedAt, ev.Content, string(tagJson), ev.Sig, ev.String(), ptags, etags, Garbage); err != nil {
-			log.Println(err.Error(), ev.String())
+
+		jsonbuf := bytes.NewBuffer(nil)
+		jsonbuf.Reset()
+		enc := json.NewEncoder(jsonbuf)
+		// turn off stupid go json encoding automatically doing HTML escaping...
+		enc.SetEscapeHTML(false)
+		if err := enc.Encode(ev); err != nil {
+			log.Println(err)
+			return []string{}
+		}
+
+		if _, err := tx.Exec(ctx, qry, ev.ID, ev.PubKey, ev.Kind, ev.CreatedAt, ev.Content, string(tagJson), ev.Sig, ptags, etags, Garbage, jsonbuf.Bytes()); err != nil {
+			log.Println(qry)
+			log.Println(err.Error())
+			log.Println(ev.String())
+			log.Println(jsonbuf.Bytes())
 			panic(err)
 		}
 
