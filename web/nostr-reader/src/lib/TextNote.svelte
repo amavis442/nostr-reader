@@ -31,7 +31,7 @@
   }
 
   function normalizeName(data): string {
-    return (data ? (data.name ? data.name : note.pubkey) : note.pubkey).slice(
+    return (data ? (data.name ? data.name : note.event.pubkey) : note.event.pubkey).slice(
       0,
       10
     );
@@ -59,7 +59,7 @@
   }
 </script>
 
-{#if note && note.kind == 1}
+{#if note && note.event.kind == 1}
   <li>
     <div class="flex flex-col items-top p-2 w-full overflow-hidden mb-2">
       <div
@@ -82,7 +82,7 @@
                 ? note.profile.picture
                 : placeholder}
               title={note.profile.about ? note.profile.about : ""}
-              alt={note.pubkey.slice(0, 5)}
+              alt={note.event.pubkey.slice(0, 5)}
             />
           </div>
 
@@ -92,14 +92,14 @@
                 <div class="flex gap-2 h-12 w-full">
                   <div class="text-left order-first w-6/12">
                     <strong class="text-black text-sm font-medium">
-                      <span title={note.pubkey}
+                      <span title={note.event.pubkey}
                         >{normalizeName(note.profile)}</span
                       >
                       {#if note.profile.followed}
                         <i class="fa-solid fa-bookmark" />
                       {/if}
                       <small class="text-gray"
-                        >{new Date(note.created_at * 1000).toLocaleString(
+                        >{new Date(note.event.created_at * 1000).toLocaleString(
                           "nl-NL"
                         )}</small
                       >
@@ -109,18 +109,18 @@
                   <div class="text-right order-last md:w-6/12">
                     <span class="text-right">
                       {#if note.profile.followed}
-                        <button on:click={unfollowUser(note.pubkey)}
+                        <button on:click={unfollowUser(note.event.pubkey)}
                           ><i class="fa-solid fa-user-minus"></i> Unfollow</button
                         >|
                       {:else}
-                        <button on:click={followUser(note.pubkey)}
+                        <button on:click={followUser(note.event.pubkey)}
                           ><i class="fa-solid fa-user-plus"></i> Follow</button
                         >|
                       {/if}
-                      <button on:click={blockUser(note.pubkey)}
+                      <button on:click={blockUser(note.event.pubkey)}
                         ><i class="fa-solid fa-ban" /> Block</button
                       >|
-                      <button on:click={reply(note)}
+                      <button on:click={reply(note.event)}
                         ><i class="fa-solid fa-comment-dots"></i> Reply</button
                       >
                     </span>
@@ -132,15 +132,15 @@
             <div class="xl:max-w-lg md:max-w-lg sm:max-w-sm p-2">
               <div class="text-left w-full max-w-max break-words items-top">
                 <span class="text-black text-md font-medium">
-                  {@html toHtml(note.content)}
-                  {#if findLink(note.content)}
+                  {@html toHtml(note.event.content)}
+                  {#if findLink(note.event.content)}
                     <!-- svelte-ignore a11y-click-events-have-key-events -->
                     <div class="mt-2" on:click={(e) => e.stopPropagation()}>
                       <Preview
                         endpoint={`${
                           import.meta.env.VITE_API_LINK
                         }/api/preview/link`}
-                        url={findLink(note.content)}
+                        url={findLink(note.event.content)}
                       />
                     </div>
                   {/if}

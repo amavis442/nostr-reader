@@ -20,39 +20,6 @@ type Requests struct {
 /**
  * I put this here because this will be returned as json for the api
  */
-type UserProfile struct {
-	Name        string `json:"name"`
-	About       string `json:"about"`
-	Picture     string `json:"picture"`
-	Website     string `json:"website"`
-	Nip05       string `json:"nip05"`
-	Lud16       string `json:"lud16"`
-	DisplayName string `json:"display_name"`
-	Pubkey      string `json:"pubkey"`
-}
-
-type Profile struct {
-	UserProfile
-	Followed bool `json:"followed"`
-}
-
-type Event struct {
-	//Event	*nostrHandler.Event
-	EventID        string            `json:"id"`
-	Pubkey         string            `json:"pubkey"`
-	Kind           int               `json:"kind"`
-	EventCreatedAt int64             `json:"created_at"`
-	Content        string            `json:"content"`
-	TagsFull       nostrHandler.Tags `json:"tags"`
-	Etags          []string          `json:"etags"`
-	Ptags          []string          `json:"ptags"`
-	Sig            string            `json:"sig"`
-	Profile        Profile           `json:"profile"`
-	Garbage        bool              `json:"gargabe"`
-	Children       map[string]Event  `json:"children"`
-	Tree           int64             `json:"tree"`
-}
-
 type BlockPubkey struct {
 	Pubkey string `json:"pubkey"`
 }
@@ -267,7 +234,7 @@ func (req *Requests) SearchEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Println("Searching event with Id: ", j.ID)
 	ev, _ := req.Cfg.Storage.FindEvent(ctx, j.ID)
-	if ev.EventID == "" {
+	if ev.Event.ID == "" {
 		filter := nostrHandler.Filter{
 			IDs:   []string{j.ID},
 			Limit: 1,
@@ -386,7 +353,7 @@ func (req *Requests) GetMetaData(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) SetMetaData(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	var user UserProfile

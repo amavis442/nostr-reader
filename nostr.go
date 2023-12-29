@@ -17,6 +17,31 @@ type Nostr struct {
 	Cfg     *Config
 }
 
+type UserProfile struct {
+	Name        string `json:"name"`
+	About       string `json:"about"`
+	Picture     string `json:"picture"`
+	Website     string `json:"website"`
+	Nip05       string `json:"nip05"`
+	Lud16       string `json:"lud16"`
+	DisplayName string `json:"display_name"`
+	Pubkey      string `json:"pubkey"`
+}
+
+type Profile struct {
+	UserProfile
+	Followed bool `json:"followed"`
+}
+
+type Event struct {
+	Event    *nostrHandler.Event `json:"event"`
+	Profile  Profile             `json:"profile"`
+	Etags    []string            `json:"etags"`
+	Ptags    []string            `json:"ptags"`
+	Garbage  bool                `json:"gargabe"`
+	Children map[string]Event    `json:"children"`
+	Tree     int64               `json:"tree"`
+}
 type RelayUrl string
 
 var KeyUrl RelayUrl = "relayUrl"
@@ -145,16 +170,14 @@ func (nostr *Nostr) Post(ctx context.Context, content string, event_id string) (
 			return false
 		}
 
-		status, err := relay.Publish(ctx, ev)
+		err := relay.Publish(ctx, ev)
 		if err != nil {
 			fmt.Println(err)
 			return false
 		}
-		if err == nil && status != nostrHandler.PublishStatusFailed {
-			success += 1
-		}
 		log.Println("Posting to: [", relay.URL, "] Event data: ", ev)
 		fmt.Println("Posting to: [", relay.URL, "] Event data: ", ev)
+		success += 1
 		return true
 	})
 
@@ -374,10 +397,6 @@ func (nostr *Nostr) GetMetaData(ctx context.Context) (nostrHandler.Event, error)
 func (nostr *Nostr) SetMetaData(ctx context.Context, user *UserProfile) error {
 	ev := nostrHandler.Event{}
 	ev.Tags = nostrHandler.Tags{}
-	//var err error
-
-	ctx, cancel := context.WithTimeout(ctx, time.Second*15) // It has 15 seconds to complete or else it will cancel itself.
-	defer cancel()
 
 	ev.PubKey = nostr.Cfg.Pubkey
 	ev.CreatedAt = nostrHandler.Now()
@@ -397,16 +416,15 @@ func (nostr *Nostr) SetMetaData(ctx context.Context, user *UserProfile) error {
 			return false
 		}
 
-		status, err := relay.Publish(ctx, ev)
+		err := relay.Publish(ctx, ev)
 		if err != nil {
 			fmt.Println(err)
+			log.Println(err)
 			return false
-		}
-		if err == nil && status != nostrHandler.PublishStatusFailed {
-			success += 1
 		}
 		log.Println("Reply", ev)
 		fmt.Println(ev)
+		success += 1
 		return true
 	})
 

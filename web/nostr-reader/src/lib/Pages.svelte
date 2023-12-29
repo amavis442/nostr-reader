@@ -96,7 +96,7 @@
       </div>
 
       <ul class="items-center w-full border-hidden" id="content">
-        {#each $pageData ? $pageData : [] as note (note.id)}
+        {#each $pageData ? $pageData : [] as note (note.event.id)}
           <TextNote
             {note}
             on:followUser={(ev) => followUser(ev.detail)}

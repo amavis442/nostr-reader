@@ -326,7 +326,7 @@ func (st *Storage) GetEvents(ctx context.Context, limit int) (*[]Event, error) {
 		}
 	}()
 
-	rows, err := tx.Query(ctx, `SELECT e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full::json, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
+	rows, err := tx.Query(ctx, `SELECT e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full::json,e.sig, e.etags, e.ptags, u.name, u.about , u.picture,
 	u.website, u.nip05, u.lud16, u.display_name FROM events e LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) LEFT JOIN seen s on (s.event_id = e.event_id)
 	WHERE e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false ORDER BY e.event_created_at DESC LIMIT $1`, limit)
 
@@ -348,7 +348,9 @@ func (st *Storage) GetEvents(ctx context.Context, limit int) (*[]Event, error) {
 		var lud16 sql.NullString
 		var displayname sql.NullString
 
-		if err := rows.Scan(&event.EventID, &event.Pubkey, &event.Kind, &event.EventCreatedAt, &event.Content, &event.TagsFull, &event.Etags, &event.Ptags, &event.Sig,
+		event.Event = &nostr.Event{}
+		if err := rows.Scan(&event.Event.ID, &event.Event.PubKey, &event.Event.Kind, &event.Event.CreatedAt, &event.Event.Content, &event.Event.Tags, &event.Event.Sig,
+			&event.Etags, &event.Ptags,
 			&name, &about, &picture, &website, &nip05, &lud16, &displayname); err != nil {
 			log.Println((err.Error()))
 			panic(err)
@@ -357,7 +359,7 @@ func (st *Storage) GetEvents(ctx context.Context, limit int) (*[]Event, error) {
 		if name.Valid {
 			event.Profile.Name = name.String
 		} else {
-			event.Profile.Name = event.Pubkey
+			event.Profile.Name = event.Event.PubKey
 		}
 		if about.Valid {
 			event.Profile.About = about.String
@@ -411,8 +413,9 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 	)
 
 	//Only root events.
-	mainQry := `SELECT e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full::json, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
-	u.website, u.nip05, u.lud16, u.display_name, f.pubkey 
+	mainQry := `SELECT e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full::json, e.sig, e.etags, e.ptags,  
+	u.name, u.about , u.picture,
+	u.website, u.nip05, u.lud16, u.display_name, f.pubkey follow
 	FROM events e 
 	LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
 	LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
@@ -491,7 +494,9 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 		var displayname sql.NullString
 		var followed sql.NullString
 
-		if err := rows.Scan(&id, &event.EventID, &event.Pubkey, &event.Kind, &event.EventCreatedAt, &event.Content, &event.TagsFull, &event.Etags, &event.Ptags, &event.Sig,
+		event.Event = &nostr.Event{}
+		if err := rows.Scan(&id, &event.Event.ID, &event.Event.PubKey, &event.Event.Kind, &event.Event.CreatedAt, &event.Event.Content, &event.Event.Tags, &event.Event.Sig,
+			&event.Etags, &event.Ptags,
 			&name, &about, &picture, &website, &nip05, &lud16, &displayname, &followed); err != nil {
 			log.Println(err.Error())
 			panic(err)
@@ -500,7 +505,7 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 		if name.Valid {
 			event.Profile.Name = name.String
 		} else {
-			event.Profile.Name = event.Pubkey
+			event.Profile.Name = event.Event.PubKey
 		}
 		if about.Valid {
 			event.Profile.About = about.String
@@ -528,9 +533,12 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 		}
 		event.Tree = 1
 
+		//nostr.Event = json.Unmarshal()
+		//sdk.ParseReferences(&nostr.Event{event})
+
 		event.Children = make(map[string]Event, 0)
-		eventMap[event.EventID] = event
-		keys = append(keys, event.EventID) // Make sure the order stays the same @see https://go.dev/blog/maps
+		eventMap[event.Event.ID] = event
+		keys = append(keys, event.Event.ID) // Make sure the order stays the same @see https://go.dev/blog/maps
 	}
 	// Check for errors from iterating over rows.
 	if err := rows.Err(); err != nil {
@@ -542,9 +550,10 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 	/**
 	 * Get all child notes
 	 */
-	treeQry := `SELECT t.root_event_id, t.reply_event_id, e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, 
-	e.tags_full::json, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
-	u.website, u.nip05, u.lud16, u.display_name, f.pubkey 
+	treeQry := `SELECT t.root_event_id, t.reply_event_id, 
+	e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content,e.tags_full::json,e.sig, 
+	e.etags, e.ptags , u.name, u.about , u.picture,
+	u.website, u.nip05, u.lud16, u.display_name, f.pubkey follow
 	FROM tree t, events e 
 	LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
 	LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
@@ -576,10 +585,11 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 		var lud16 sql.NullString
 		var displayname sql.NullString
 		var followed sql.NullString
+		event.Event = &nostr.Event{}
 
-		if err := treeRows.Scan(&root_event_id, &reply_event_id, &id, &event.EventID, &event.Pubkey,
-			&event.Kind, &event.EventCreatedAt, &event.Content, &event.TagsFull, &event.Etags,
-			&event.Ptags, &event.Sig, &name, &about, &picture,
+		if err := treeRows.Scan(&root_event_id, &reply_event_id, &id,
+			&event.Event.ID, &event.Event.PubKey, &event.Event.Kind, &event.Event.CreatedAt, &event.Event.Content, &event.Event.Tags, &event.Event.Sig,
+			&event.Etags, &event.Ptags, &name, &about, &picture,
 			&website, &nip05, &lud16, &displayname, &followed); err != nil {
 			log.Println(err.Error())
 			panic(err)
@@ -588,7 +598,7 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 		if name.Valid {
 			event.Profile.Name = name.String
 		} else {
-			event.Profile.Name = event.Pubkey
+			event.Profile.Name = event.Event.PubKey
 		}
 		if about.Valid {
 			event.Profile.About = about.String
@@ -619,7 +629,7 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 		if item, ok := eventMap[root_event_id]; ok {
 			if reply_event_id.Valid && reply_event_id.String == "" {
 				event.Tree = 2
-				item.Children[event.EventID] = event
+				item.Children[event.Event.ID] = event
 				//item.Children = append(item.Children, event)
 				eventMap[root_event_id] = item
 			}
@@ -655,8 +665,8 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
  * Find an event based on an unique event id
  */
 func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
-	var qry = `SELECT e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full, e.etags, e.ptags, e.sig, u.name, u.about , u.picture,
-	u.website, u.nip05, u.lud16, u.display_name
+	var qry = `SELECT e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full::json, e.sig, e.etags, e.ptags, 
+	u.name, u.about , u.picture, u.website, u.nip05, u.lud16, u.display_name
 	FROM events e LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
 	WHERE e.event_id = $1`
 	//qry = qry + "'" + id + "'"
@@ -671,9 +681,10 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 	var nip05 sql.NullString
 	var lud16 sql.NullString
 	var displayname sql.NullString
+	event.Event = &nostr.Event{}
 
-	err := st.DbPool.QueryRow(ctx, qry, id).Scan(&event.EventID, &event.Pubkey, &event.Kind, &event.EventCreatedAt, &event.Content, &event.TagsFull, &event.Etags, &event.Ptags, &event.Sig,
-		&name, &about, &picture, &website, &nip05, &lud16, &displayname)
+	err := st.DbPool.QueryRow(ctx, qry, id).Scan(&event.Event.ID, &event.Event.PubKey, &event.Event.Kind, &event.Event.CreatedAt, &event.Event.Content, &event.Event.Tags, &event.Event.Sig,
+		&event.Etags, &event.Ptags, &name, &about, &picture, &website, &nip05, &lud16, &displayname)
 	switch {
 	case err == sql.ErrNoRows:
 		log.Printf("404 no event with id %s\n", id)
@@ -687,16 +698,17 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 }
 
 func (st *Storage) FindRawEvent(ctx context.Context, id string) (nostr.Event, error) {
-	var qry = `SELECT e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.sig, e.tags_full::json tags
+	var qry = `SELECT e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.sig, e.tags_full::json
 	FROM events e 
 	WHERE e.event_id = $1`
 	qryStr := qry[:len(qry)-2] + "'" + id + "'"
 	log.Println(qryStr)
 
-	var event nostr.Event
+	var event Event
+	event.Event = &nostr.Event{}
 
-	err := st.DbPool.QueryRow(ctx, qry, id).Scan(&event.ID, &event.PubKey, &event.Kind, &event.CreatedAt,
-		&event.Content, &event.Sig, &event.Tags)
+	err := st.DbPool.QueryRow(ctx, qry, id).Scan(&event.Event.ID, &event.Event.PubKey, &event.Event.Kind, &event.Event.CreatedAt,
+		&event.Event.Content, &event.Event.Sig, &event.Event.Tags)
 	switch {
 	case err == sql.ErrNoRows:
 		log.Printf("404 no event with id %s\n", id)
@@ -706,7 +718,7 @@ func (st *Storage) FindRawEvent(ctx context.Context, id string) (nostr.Event, er
 		log.Println("200 Event: ", event)
 	}
 
-	return event, err
+	return *event.Event, err
 }
 
 func (st *Storage) CheckProfiles(ctx context.Context, pubkeys []string, epochtime int64) ([]string, error) {
