@@ -153,8 +153,8 @@ func (nostr *Nostr) Post(ctx context.Context, content string, event_id string) (
 		if err == nil && status != nostrHandler.PublishStatusFailed {
 			success += 1
 		}
-		log.Println("Posting to: [", relay.URL, "] Even data: ", ev)
-		fmt.Println("Posting to: [", relay.URL, "] Even data: ", ev)
+		log.Println("Posting to: [", relay.URL, "] Event data: ", ev)
+		fmt.Println("Posting to: [", relay.URL, "] Event data: ", ev)
 		return true
 	})
 
