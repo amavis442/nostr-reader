@@ -11,7 +11,7 @@ There is a block function based on blocking pubkeys, but that is as fancy as it 
 This is a project to learn the go language better.
 
 Inspiration is taken from [https://github.com/mattn/algia](algia) and [https://github.com/barkyq/gnost-relay](gnost-relay)
-And of biggest thanks goes to fiatjaf [https://github.com/nbd-wtf/go-nostr]go-nostr for making life easier.
+And biggest thanks goes to fiatjaf [https://github.com/nbd-wtf/go-nostr]go-nostr for making life easier.
 
 ## Use 
 
