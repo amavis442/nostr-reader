@@ -622,7 +622,6 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 				item.Children[event.EventID] = event
 				//item.Children = append(item.Children, event)
 				eventMap[root_event_id] = item
-				fmt.Println("Note has child event ", event)
 			}
 			/*if reply_event_id.Valid && reply_event_id.String <> ""{
 				for _, child := range item.Children {

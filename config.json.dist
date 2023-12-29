@@ -9,13 +9,28 @@
     "server": {
         "port": 8080
     },
-    "relays": [
-
-        "wss://nostr.anchel.nl", 
-        "wss://relay.plebstr.com", 
-        "wss://relay.nostr.vet", 
-        "wss://nostrue.com"
-    ],
+    "relays": {
+        "wss://nostr.anchel.nl": {
+            "read": true,
+            "write": true,
+            "search": true
+        }, 
+        "wss://relay.plebstr.com": {
+            "read": true,
+            "write": true,
+            "search": true
+        }, 
+        "wss://relay.nostr.vet": {
+            "read": true,
+            "write": true,
+            "search": true
+        }, 
+        "wss://nostrue.com": {
+            "read": true,
+            "write": true,
+            "search": true
+        }
+    },
     "pubkey": "",
     "npub": "",
     "pk": "",

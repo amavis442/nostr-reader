@@ -37,6 +37,7 @@ type Profile struct {
 }
 
 type Event struct {
+	//Event	*nostrHandler.Event
 	EventID        string            `json:"id"`
 	Pubkey         string            `json:"pubkey"`
 	Kind           int               `json:"kind"`
