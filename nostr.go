@@ -172,7 +172,7 @@ func (nostr *Nostr) Post(ctx context.Context, content string, event_id string) (
  * Send a request over a websocket to get new events (notes) and after processing the events
  * try to get all the usernames metadata from who posted the note.
  */
-func (nostr *Nostr) GetEvents(ctx context.Context, filter nostrHandler.Filter) {
+func (nostr *Nostr) GetEvents(ctx context.Context, filter nostrHandler.Filter) ([]*nostrHandler.Event, error) {
 	fmt.Println("Get Event data from relays")
 	var m sync.Map
 	var mu sync.Mutex
@@ -221,11 +221,36 @@ func (nostr *Nostr) GetEvents(ctx context.Context, filter nostrHandler.Filter) {
 	}
 
 	// Last but not least, try to get the user metadata
-	defer nostr.updateProfiles(ctx, pubkeys)
+	nostr.updateProfiles(ctx, pubkeys)
 
 	defer func() {
 		fmt.Println("Done receiving and closed ralay connections")
 	}()
+
+	return evs, nil
+}
+
+func (nostr *Nostr) GetNotifications(ctx context.Context, pubkey string) {
+	var tagMap nostrHandler.TagMap = make(nostrHandler.TagMap, 0)
+	tagMap["p"] = []string{pubkey}
+	var filter nostrHandler.Filter = nostrHandler.Filter{
+		Kinds: []int{nostrHandler.KindTextNote},
+		Tags:  tagMap,
+	}
+	fmt.Println(filter)
+
+	evs, _ := nostr.GetEvents(ctx, filter)
+
+	for k := range tagMap {
+		delete(tagMap, k)
+	}
+
+	for _, ev := range evs {
+		tagMap["e"] = append(tagMap["e"], ev.ID)
+	}
+	filter.Tags = tagMap
+	fmt.Println(filter)
+	nostr.GetEvents(ctx, filter)
 }
 
 /**

@@ -3,6 +3,7 @@
   import Feed from "./routes/Feed.svelte";
   import Followed from "./routes/Followed.svelte";
   import Account from "./routes/Account.svelte";
+  import Notifications from "./routes/Notifications.svelte";
   import "@fortawesome/fontawesome-free/css/fontawesome.css";
   import "@fortawesome/fontawesome-free/css/solid.css";
   import Toasts from "./lib/partials/Toast/Toasts.svelte";
@@ -32,6 +33,12 @@
             Following
             </Link>
         </p>
+        <p class="nav-p {url === '/notifications' ? 'selected' : ''}">
+          <Link to="/notifications" title="Inbox">
+            Notifications
+            </Link>
+        </p>
+
         <p class="nav-p {url === '/account' ? 'selected' : ''}">
           <Link to="account" title="Your account data">Account</Link>
         </p>
@@ -42,6 +49,7 @@
       <Route path="/" component="{Feed}" />
       <Route path="global" component="{Feed}" />
       <Route path="followed" component="{Followed}" />
+      <Route path="notifications" component="{Notifications}" />
       <Route path="account" component="{Account}" />
     </main>
   </div>

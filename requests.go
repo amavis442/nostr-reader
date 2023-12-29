@@ -367,6 +367,28 @@ func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 }
+func (req *Requests) Notifications(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	req.Nostr.GetNotifications(ctx, req.Cfg.Pubkey)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept")
+
+	w.WriteHeader(http.StatusOK)
+
+	test := map[string]string{}
+	test["status"] = "ok"
+
+	err := json.NewEncoder(w).Encode(test)
+	if err != nil {
+		panic(err)
+	}
+}
 
 func (req *Requests) GetMetaData(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()

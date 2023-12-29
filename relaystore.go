@@ -100,7 +100,7 @@ func main() {
 	 * Sometimes it is nice to see pictures in the post and not just a link
 	 */
 	mux.HandleFunc("/api/publish", req.Publish)
-
+	mux.HandleFunc("/api/notifications", req.Notifications)
 	/**
 	 * Use meta data set and get
 	 */
