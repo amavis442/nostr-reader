@@ -17,13 +17,6 @@ type Nostr struct {
 	Cfg     *Config
 }
 
-type Relay struct {
-	Relay *nostrHandler.Relay
-	Url   string
-	Read  bool
-	Write bool
-}
-
 type RelayUrl string
 
 var KeyUrl RelayUrl = "relayUrl"
@@ -36,13 +29,22 @@ var KeyUrl RelayUrl = "relayUrl"
  *
  * It just makes sure all available relays are called
  */
-func (nostr *Nostr) Do(f func(context.Context, *nostrHandler.Relay) bool) {
+func (nostr *Nostr) Do(r Relay, f func(context.Context, *nostrHandler.Relay) bool) {
 	var wg sync.WaitGroup
 
-	for _, relayUrl := range nostr.Cfg.Relays {
+	for relayUrl, v := range nostr.Cfg.Relays {
+		if r.Write && !v.Write {
+			continue
+		}
+		if r.Search && !v.Search {
+			continue
+		}
+		if !r.Write && !v.Read {
+			continue
+		}
 		wg.Add(1)
 
-		go func(wg *sync.WaitGroup, relayUrl string) {
+		go func(wg *sync.WaitGroup, relayUrl string, v Relay) {
 			defer wg.Done()
 			ctx := context.WithValue(context.Background(), KeyUrl, relayUrl)
 			relay, err := nostrHandler.RelayConnect(ctx, relayUrl)
@@ -54,7 +56,7 @@ func (nostr *Nostr) Do(f func(context.Context, *nostrHandler.Relay) bool) {
 				ctx.Done()
 			}
 			relay.Close()
-		}(&wg, relayUrl)
+		}(&wg, relayUrl, v)
 	}
 	wg.Wait()
 }
@@ -137,7 +139,7 @@ func (nostr *Nostr) Post(ctx context.Context, content string, event_id string) (
 	}
 
 	var success int
-	nostr.Do(func(ctx context.Context, relay *nostrHandler.Relay) bool {
+	nostr.Do(Relay{Write: true}, func(ctx context.Context, relay *nostrHandler.Relay) bool {
 		// calling Sign sets the event ID field and the event Sig field
 		if err := ev.Sign(nostr.Cfg.Pk); err != nil {
 			return false
@@ -175,7 +177,7 @@ func (nostr *Nostr) GetEvents(ctx context.Context, filter nostrHandler.Filter) {
 	var m sync.Map
 	var mu sync.Mutex
 
-	nostr.Do(func(ctx context.Context, relay *nostrHandler.Relay) bool {
+	nostr.Do(Relay{Read: true}, func(ctx context.Context, relay *nostrHandler.Relay) bool {
 		mu.Lock()
 		evs, err := relay.QuerySync(ctx, filter)
 		if err != nil {
@@ -279,7 +281,7 @@ func (nostr *Nostr) updateProfiles(ctx context.Context, pubkeys []string) {
 
 	fmt.Println("Get user data from relays")
 	var m sync.Map
-	nostr.Do(func(ctx context.Context, relay *nostrHandler.Relay) bool {
+	nostr.Do(Relay{Read: true}, func(ctx context.Context, relay *nostrHandler.Relay) bool {
 		evs, err := relay.QuerySync(ctx, filter)
 		if err != nil {
 			return false
@@ -345,7 +347,7 @@ func (nostr *Nostr) GetMetaData(ctx context.Context) (nostrHandler.Event, error)
 
 	fmt.Println("Get account data from relays:", filter)
 	var m sync.Map
-	nostr.Do(func(ctx context.Context, relay *nostrHandler.Relay) bool {
+	nostr.Do(Relay{Read: true}, func(ctx context.Context, relay *nostrHandler.Relay) bool {
 		evs, err := relay.QuerySync(ctx, filter)
 		if err != nil {
 			return false
@@ -389,7 +391,7 @@ func (nostr *Nostr) SetMetaData(ctx context.Context, user *UserProfile) error {
 
 	fmt.Println(ev)
 	var success int
-	nostr.Do(func(ctx context.Context, relay *nostrHandler.Relay) bool {
+	nostr.Do(Relay{Write: true}, func(ctx context.Context, relay *nostrHandler.Relay) bool {
 		// calling Sign sets the event ID field and the event Sig field
 		if err := ev.Sign(nostr.Cfg.Pk); err != nil {
 			return false

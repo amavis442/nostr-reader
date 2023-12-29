@@ -11,13 +11,19 @@ type Server struct {
 	Port int64
 }
 
+type Relay struct {
+	Read   bool `json:"read"`
+	Write  bool `json:"write"`
+	Search bool `json:"search"`
+}
+
 /**
  * Used to store the config.json file and some database related stuff for easy access
  *
  */
 type Config struct {
 	Database *DbConfig
-	Relays   []string
+	Relays   map[string]Relay
 	Pubkey   string
 	Npub     string
 	Pk       string

@@ -30,6 +30,7 @@ func main() {
 		log.Println(err.Error())
 		os.Exit(0)
 	}
+
 	var ctx context.Context = context.Background()
 	var st Storage
 	err = st.Connect(ctx, cfg) // Does not make a connection immediatly but prepares so it does not yet know if the pg server is available.
