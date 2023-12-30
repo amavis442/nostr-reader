@@ -22,7 +22,11 @@
       })
       .then((data) => {
         console.debug("Json is ", data);
-        return data.data;
+        if (data != undefined && data != null) {
+          return data.data;
+        } else {
+          return null
+        }
       })
       .catch((err) => {
         console.debug("error", err);

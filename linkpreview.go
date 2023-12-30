@@ -82,6 +82,7 @@ func URLPreview(ctx context.Context, url string) (map[string]interface{}, error)
 				Timeout: ConnectMaxWaitTime,
 			}).DialContext,
 		},
+		Timeout: 15 * time.Second,
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -97,14 +98,14 @@ func URLPreview(ctx context.Context, url string) (map[string]interface{}, error)
 
 	if e, ok := err.(net.Error); ok && e.Timeout() {
 		log.Printf("Do request timeout: %s\n", err)
-		return nil, fmt.Errorf("do request timeout: %s", err)
+		return map[string]interface{}{"url": url, "data": nil, "status": "error", "respcode": fmt.Sprint(resp.StatusCode), "error": "do request timeout: " + err.Error()}, fmt.Errorf("do request timeout: %s", err)
 	} else if err != nil {
 		log.Printf("Cannot do request: %s\n", err)
-		return nil, fmt.Errorf("cannot do request: %s", err)
+		return map[string]interface{}{"url": url, "data": nil, "status": "error", "respcode": fmt.Sprint(resp.StatusCode), "error": "cannot do request: " + err.Error()}, fmt.Errorf("cannot do request: %s", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("request not succesfull %d", resp.StatusCode)
+		return map[string]interface{}{"url": url, "data": nil, "status": "error", "respcode": fmt.Sprint(resp.StatusCode), "error": "request not succesfull"}, fmt.Errorf("request not succesfull %d", resp.StatusCode)
 	}
 
 	contentType := resp.Header.Get("Content-type")
@@ -120,7 +121,7 @@ func URLPreview(ctx context.Context, url string) (map[string]interface{}, error)
 
 	defer resp.Body.Close()
 
-	data := map[string]interface{}{"url": url, "data": meta}
+	data := map[string]interface{}{"url": url, "data": meta, "status": "ok", "respcode": fmt.Sprint(resp.StatusCode), "error": ""}
 	return data, nil
 }
 
