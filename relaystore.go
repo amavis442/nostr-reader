@@ -107,6 +107,7 @@ func main() {
 	 */
 	mux.HandleFunc("/api/getmetadata", req.GetMetaData)
 	mux.HandleFunc("/api/setmetadata", req.SetMetaData)
+	mux.HandleFunc("/api/getprofile", req.GetProfile)
 
 	mux.Handle("/", http.FileServer(http.Dir("web/nostr-reader/dist")))
 

@@ -376,3 +376,19 @@ func (req *Requests) SetMetaData(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 }
+
+func (req *Requests) GetProfile(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	profile, _ := req.Cfg.Storage.FindProfile(ctx, req.Cfg.Pubkey)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
+	w.WriteHeader(http.StatusOK)
+	err := json.NewEncoder(w).Encode(profile)
+	if err != nil {
+		panic(err)
+	}
+}

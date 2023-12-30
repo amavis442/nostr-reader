@@ -814,3 +814,56 @@ func (st *Storage) getLastTimeStamp(ctx context.Context) int64 {
 	fmt.Println("Timestamp from database: ", createdAt)
 	return createdAt.Unix()
 }
+
+func (st *Storage) FindProfile(ctx context.Context, pubkey string) (Profile, error) {
+	var qry = `SELECT
+	name, about, picture, website, nip05, lud16, display_name
+	FROM profiles WHERE pubkey = $1`
+	//qry = qry + "'" + id + "'"
+	log.Println(qry)
+
+	var profile Profile = Profile{}
+
+	var name sql.NullString
+	var about sql.NullString
+	var picture sql.NullString
+	var website sql.NullString
+	var nip05 sql.NullString
+	var lud16 sql.NullString
+	var displayname sql.NullString
+
+	err := st.DbPool.QueryRow(ctx, qry, pubkey).Scan(&name, &about, &picture, &website, &nip05, &lud16, &displayname)
+	switch {
+	case err == sql.ErrNoRows:
+		log.Printf("404 no profile with pubkey %s\n", pubkey)
+	case err != nil:
+		log.Fatalf("502 query error: %v\n", err)
+	}
+
+	if name.Valid {
+		profile.Name = name.String
+	} else {
+		profile.Name = pubkey
+	}
+	if about.Valid {
+		profile.About = about.String
+	}
+	if picture.Valid {
+		profile.Picture = picture.String
+	}
+
+	if website.Valid {
+		profile.Website = website.String
+	}
+	if nip05.Valid {
+		profile.Nip05 = nip05.String
+	}
+	if lud16.Valid {
+		profile.Lud16 = lud16.String
+	}
+	if displayname.Valid {
+		profile.DisplayName = displayname.String
+	}
+
+	return profile, err
+}

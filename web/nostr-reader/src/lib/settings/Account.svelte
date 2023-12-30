@@ -10,6 +10,7 @@
   let nip05: string;
   let website: string;
   let displayname: string;
+  let lud16:string;
 
   /**
    * @see https://www.thisdot.co/blog/handling-forms-in-svelte
@@ -39,6 +40,7 @@
         nip05: nip05,
         website: website,
         display_name: displayname,
+        lud16: lud16
       }),
       headers: {
         "Content-Type": "application/json",
@@ -63,42 +65,7 @@
     });
   }
 
-  let promise: Promise<void>;
-
-  async function checkPubkey() {
-    /*let filter: Filter = {
-        kinds: [0],
-        authors: [pubkey],
-      };
-      
-      log("Account view:: checkPubkey filter ", filter);
-  
-      promise = getData(filter)
-      .then((result: Array<Event> | null) => {
-        if (result.length) {
-          let data = result[0];
-          const content = JSON.parse(data.content);
-          name = content.name;
-          about = content.about;
-          picture = content.picture;
-        }
-        log(
-          "Account view:: checkPubkey ",
-          "Result: ",
-          result,
-          " Pubkey: ",
-          pubkey
-        );
-      });*/
-  }
-
-  /*
-    async function generateKeys() {
-      const keys = await getKeys();
-      privkey = keys.priv;
-      pubkey = keys.pub;
-    }
-    */
+ 
   function getMetaData() {
     fetch(`${import.meta.env.VITE_API_LINK}/api/getmetadata`, {
       method: "POST",
@@ -118,6 +85,7 @@
         nip05 = profile.nip05
         displayname = profile.display_name
         website = profile.website
+        lud16 = profile.lud16
         return data;
       })
       .catch((err) => {
@@ -125,7 +93,32 @@
       });
   }
 
-  onMount(async () => {});
+  onMount(async () => {
+    fetch(`${import.meta.env.VITE_API_LINK}/api/getprofile`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    })
+      .then((res) => {
+        return res.json();
+      })
+      .then((profile) => {
+        console.log("Json is ", profile);
+        name = profile.name
+        about = profile.about
+        picture = profile.picture
+        nip05 = profile.nip05
+        displayname = profile.display_name
+        website = profile.website
+        lud16 = profile.lud16
+        return profile;
+      })
+      .catch((err) => {
+        console.error("error", err);
+      });
+
+  });
 </script>
 
 <div class="xl:w-8/12 lg:w-10/12 md:w-10/12 sm:w-full">
@@ -182,6 +175,22 @@
         <small id="nip05Help" class="block mt-1 text-xs text-gray-600">
           Some relays require a nip05 verification before you can post in the
           form of bob@example.com
+        </small>
+      </div>
+
+      <div class="form-group mb-6">
+        <label for="lud16" class="form-label inline-block mb-2 text-gray-700">
+          Lud16
+        </label>
+        <Text
+          bind:value={lud16}
+          id="lud16"
+          describedby="lud16Help"
+          placeholder="Lud16"
+        />
+        <small id="lud16Help" class="block mt-1 text-xs text-gray-600">
+          If you want to receive payments like sats, you can use https://getalby.com/
+          and lud16 will be something like name@getalby.com
         </small>
       </div>
 
