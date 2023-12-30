@@ -363,9 +363,15 @@ func (nostr *Nostr) UnfollowPubkey(ctx context.Context, user *FollowPubkey) erro
 
 func (nostr *Nostr) GetMetaData(ctx context.Context) (nostrHandler.Event, error) {
 	pubkey := nostr.Cfg.Pubkey
+
+	//var tagMap nostrHandler.TagMap = make(nostrHandler.TagMap, 0)
+	//tagMap["p"] = []string{pubkey}
+
 	filter := nostrHandler.Filter{
 		Kinds:   []int{nostrHandler.KindProfileMetadata},
 		Authors: []string{pubkey},
+		//Tags:    tagMap,
+		Limit: 1,
 	}
 
 	fmt.Println("Get account data from relays:", filter)
@@ -376,20 +382,20 @@ func (nostr *Nostr) GetMetaData(ctx context.Context) (nostrHandler.Event, error)
 			return false
 		}
 		for _, ev := range evs {
-			if _, ok := m.Load(ev.ID); !ok {
-				m.LoadOrStore(ev.ID, ev)
+			if _, ok := m.Load(ev.PubKey); !ok {
+				m.LoadOrStore(ev.PubKey, ev)
 			}
 		}
 		return true
 	})
 
-	fmt.Println("Done for profile: ")
 	if v, ok := m.Load(pubkey); ok {
 		//var event *nostrHandler.Event
 		event := v.(*nostrHandler.Event)
 		fmt.Println(*event)
 		return *event, nil
 	}
+	fmt.Println("Done for profile and found nothing: ")
 
 	return nostrHandler.Event{}, nil
 }

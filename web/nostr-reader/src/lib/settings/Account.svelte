@@ -111,6 +111,13 @@
       })
       .then((data) => {
         console.log("Json is ", data);
+        let profile = JSON.parse(data.content)
+        name = profile.name
+        about = profile.about
+        picture = profile.picture
+        nip05 = profile.nip05
+        displayname = profile.display_name
+        website = profile.website
         return data;
       })
       .catch((err) => {

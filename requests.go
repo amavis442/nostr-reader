@@ -337,10 +337,12 @@ func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) GetMetaData(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	event, _ := req.Nostr.GetMetaData(ctx)
+
+	req.Cfg.Storage.SaveProfiles(ctx, []*nostrHandler.Event{&event})
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS

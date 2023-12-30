@@ -142,7 +142,11 @@ func (st *Storage) Close() {
 func (st *Storage) SaveProfiles(ctx context.Context, evs []*nostr.Event) {
 	var qry = `INSERT INTO "profiles" ("pubkey", "name","about", "picture",  "website", "nip05",
 	"lud16", "display_name", "raw", "profile_created_at", "created_at")
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()) ON CONFLICT (pubkey) DO NOTHING;`
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()) ON CONFLICT (pubkey) DO 
+		UPDATE SET "pubkey" = $1, "name" = $2,"about" = $3, "picture" = $4,  "website" = $5, "nip05" = $6,
+		"lud16" = $7, "display_name" = $8, "raw" = $9, "profile_created_at" = $10, "created_at" = NOW()
+		
+		;`
 
 	var tx pgx.Tx
 	tx, err := st.DbPool.Begin(ctx)
