@@ -6,7 +6,11 @@
   import Preview from "./partials/Preview/Preview.svelte";
   import placeholder from "../assets/profile-picture.jpg";
   import Icon from "svelte-icons-pack/Icon.svelte";
-  import BsInfoCircle from "svelte-icons-pack/bs/BsInfoCircle";
+  import FaSolidInfoCircle from "svelte-icons-pack/fa/FaSolidInfoCircle";
+  import FaSolidUserMinus from "svelte-icons-pack/fa/FaSolidUserMinus";
+  import FaSolidUserPlus from "svelte-icons-pack/fa/FaSolidUserPlus";
+  import FaSolidBan from "svelte-icons-pack/fa/FaSolidBan";
+  import FaCommentDots from "svelte-icons-pack/fa/FaCommentDots";
 
   const dispatch = createEventDispatcher();
   export let note;
@@ -113,46 +117,55 @@
 
                   <div class="text-right order-last md:w-6/12">
                     <span class="text-right">
-                      <ul class="list-none flex flex-row justify-end">
-                        <li>
+                      <div
+                        class="flex flex-row gap-1 content-normal justify-end"
+                      >
+                        <div>
                           {#if note.profile.followed}
                             <button
                               on:click={unfollowUser(note.event.pubkey)}
                               title="unfollow"
-                              ><i class="fa-solid fa-user-minus"></i></button
-                            >|
+                              class="p-1"
+                              ><Icon src={FaSolidUserMinus} size="24" /></button
+                            >
                           {:else}
                             <button
                               on:click={followUser(note.event.pubkey)}
                               title="follow"
-                              ><i class="fa-solid fa-user-plus"></i></button
-                            >|
+                              class="p-1"
+                              ><Icon src={FaSolidUserPlus} size="24" /></button
+                            >
                           {/if}
-                        </li>
-                        <li>
+                        </div>
+                        <div>
                           <button
                             on:click={blockUser(note.event.pubkey)}
-                            title="block"><i class="fa-solid fa-ban" /></button
-                          >|
-                        </li>
-                        <li>
-                          <button on:click={reply(note.event)} title="reply"
-                            ><i class="fa-solid fa-comment-dots"></i></button
+                            class="p-1"
+                            title="block"
+                            ><Icon src={FaSolidBan} size="24" /></button
                           >
-                        </li>
-                        <li>
-                          <button on:click={info(note)} title="info" class="w-full h-full content-center"
-                            ><Icon src={BsInfoCircle} /></button
+                        </div>
+                        <div>
+                          <button
+                            on:click={reply(note.event)}
+                            title="reply"
+                            class="p-1"
+                            ><Icon src={FaCommentDots} size="24" /></button
                           >
-                        </li>
-                      </ul>
+                        </div>
+                        <div>
+                          <button on:click={info(note)} title="info" class="p-1"
+                            ><Icon src={FaSolidInfoCircle} size="24" /></button
+                          >
+                        </div>
+                      </div>
                     </span>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div class="xl:max-w-lg md:max-w-lg sm:max-w-sm p-2">
+            <div class="p-2 w-11/12">
               <div class="text-left w-full max-w-max break-words items-top">
                 <span class="text-black text-md font-medium break-words">
                   {@html toHtml(note.event.content)}
