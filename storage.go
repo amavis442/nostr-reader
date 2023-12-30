@@ -172,6 +172,16 @@ func (st *Storage) SaveProfiles(ctx context.Context, evs []*nostr.Event) {
 			ctx.Done()
 		}
 		fmt.Println("Profile: ", data.Name)
+
+		/*
+			if data.Nip05 == "" {
+				st.BlockPubkey(ctx, ev.PubKey)
+			}
+		*/
+		// Should be in a dynamic list, so you can add to it or remove items.
+		if data.Picture != "" && data.Picture[0:len("https://randomuser.me")] == "https://randomuser.me" {
+			st.BlockPubkey(ctx, ev.PubKey)
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		log.Println(err.Error())
