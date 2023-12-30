@@ -5,6 +5,8 @@
   import { toHtml, findLink } from "./util/html";
   import Preview from "./partials/Preview/Preview.svelte";
   import placeholder from "../assets/profile-picture.jpg";
+  import Icon from "svelte-icons-pack/Icon.svelte";
+  import BsInfoCircle from "svelte-icons-pack/bs/BsInfoCircle";
 
   const dispatch = createEventDispatcher();
   export let note;
@@ -25,16 +27,19 @@
     dispatch("reply", note);
   }
 
+  function info(note) {
+    dispatch("info", note);
+  }
+
   let repliesExpanded = false;
   function toggleReplies() {
     repliesExpanded = !repliesExpanded;
   }
 
   function normalizeName(data): string {
-    return (data ? (data.name ? data.name : note.event.pubkey) : note.event.pubkey).slice(
-      0,
-      10
-    );
+    return (
+      data ? (data.name ? data.name : note.event.pubkey) : note.event.pubkey
+    ).slice(0, data && data.name.length < 50 ? data.name.length : 20);
   }
 
   let borderColor = "border-indigo-" + (note.tree * 100 + 400);
@@ -82,7 +87,7 @@
                 ? note.profile.picture
                 : placeholder}
               title={note.profile.about ? note.profile.about : ""}
-              alt={note.event.pubkey.slice(0, 5)}
+              alt={note.event.pubkey.slice(0, 10)}
             />
           </div>
 
@@ -108,21 +113,39 @@
 
                   <div class="text-right order-last md:w-6/12">
                     <span class="text-right">
-                      {#if note.profile.followed}
-                        <button on:click={unfollowUser(note.event.pubkey)}
-                          ><i class="fa-solid fa-user-minus"></i> Unfollow</button
-                        >|
-                      {:else}
-                        <button on:click={followUser(note.event.pubkey)}
-                          ><i class="fa-solid fa-user-plus"></i> Follow</button
-                        >|
-                      {/if}
-                      <button on:click={blockUser(note.event.pubkey)}
-                        ><i class="fa-solid fa-ban" /> Block</button
-                      >|
-                      <button on:click={reply(note.event)}
-                        ><i class="fa-solid fa-comment-dots"></i> Reply</button
-                      >
+                      <ul class="list-none flex flex-row justify-end">
+                        <li>
+                          {#if note.profile.followed}
+                            <button
+                              on:click={unfollowUser(note.event.pubkey)}
+                              title="unfollow"
+                              ><i class="fa-solid fa-user-minus"></i></button
+                            >|
+                          {:else}
+                            <button
+                              on:click={followUser(note.event.pubkey)}
+                              title="follow"
+                              ><i class="fa-solid fa-user-plus"></i></button
+                            >|
+                          {/if}
+                        </li>
+                        <li>
+                          <button
+                            on:click={blockUser(note.event.pubkey)}
+                            title="block"><i class="fa-solid fa-ban" /></button
+                          >|
+                        </li>
+                        <li>
+                          <button on:click={reply(note.event)} title="reply"
+                            ><i class="fa-solid fa-comment-dots"></i></button
+                          >
+                        </li>
+                        <li>
+                          <button on:click={info(note)} title="info" class="w-full h-full content-center"
+                            ><Icon src={BsInfoCircle} /></button
+                          >
+                        </li>
+                      </ul>
                     </span>
                   </div>
                 </div>
@@ -131,7 +154,7 @@
 
             <div class="xl:max-w-lg md:max-w-lg sm:max-w-sm p-2">
               <div class="text-left w-full max-w-max break-words items-top">
-                <span class="text-black text-md font-medium">
+                <span class="text-black text-md font-medium break-words">
                   {@html toHtml(note.event.content)}
                   {#if findLink(note.event.content)}
                     <!-- svelte-ignore a11y-click-events-have-key-events -->

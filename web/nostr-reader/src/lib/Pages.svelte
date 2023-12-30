@@ -4,6 +4,7 @@
   import Feeder from "./Feeder.svelte";
   import TextNote from "./TextNote.svelte";
   import CreateNoteModal from "./partials/Modal/CreateNoteModal.svelte";
+  import InfoModal from "./partials/Modal/InfoModal.svelte";
   import { openModal } from "svelte-modals";
   import {
     refreshView,
@@ -35,6 +36,12 @@
       onSendTextNote: (noteText: string) => {
         publish(noteText, replyToNote.id);
       },
+    });
+  }
+
+  function createInfoModal(note) {
+    openModal(InfoModal, {
+      note: note,
     });
   }
 </script>
@@ -104,6 +111,9 @@
             on:blockUser={(ev) => blockUser(ev.detail)}
             on:reply={(ev) => {
               createReplyTextNote(ev.detail);
+            }}
+            on:info={(ev) => {
+              createInfoModal(ev.detail);
             }}
           ></TextNote>
         {/each}
