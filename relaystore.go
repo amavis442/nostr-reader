@@ -7,6 +7,7 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"time"
 )
 
 /**
@@ -113,7 +114,16 @@ func main() {
 	if cfg.Server.Port > 0 {
 		port = fmt.Sprint(cfg.Server.Port)
 	}
-	fmt.Println("Server running: http://localhost:" + port)
-	log.Fatal(http.ListenAndServe(":"+port, mux))
 
+	srv := &http.Server{
+		Addr:           ":" + port,
+		Handler:        mux,
+		ReadTimeout:    30 * time.Second,
+		WriteTimeout:   30 * time.Second,
+		MaxHeaderBytes: 1 << 20,
+	}
+
+	fmt.Println("Server running: http://localhost:" + port)
+	//log.Fatal(http.ListenAndServe(":"+port, mux))
+	log.Fatal(srv.ListenAndServe())
 }
