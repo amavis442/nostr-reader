@@ -11,6 +11,7 @@
   import FaSolidUserPlus from "svelte-icons-pack/fa/FaSolidUserPlus";
   import FaSolidBan from "svelte-icons-pack/fa/FaSolidBan";
   import FaCommentDots from "svelte-icons-pack/fa/FaCommentDots";
+  import FaSolidSync from "svelte-icons-pack/fa/FaSolidSync";
 
   const dispatch = createEventDispatcher();
   export let note;
@@ -33,6 +34,9 @@
 
   function info(note) {
     dispatch("info", note);
+  }
+  function syncnote(note) {
+    dispatch("syncNote", note);
   }
 
   let repliesExpanded = false;
@@ -154,8 +158,16 @@
                           >
                         </div>
                         <div>
-                          <button on:click={info(note)} title="info" class="p-1"
+                          <button
+                            on:click={info(note.event)}
+                            title="info"
+                            class="p-1"
                             ><Icon src={FaSolidInfoCircle} size="24" /></button
+                          >
+                        </div>
+                        <div>
+                          <button on:click={syncnote(note.event)} title="sync note" class="p-1"
+                            ><Icon src={FaSolidSync} size="24" /></button
                           >
                         </div>
                       </div>

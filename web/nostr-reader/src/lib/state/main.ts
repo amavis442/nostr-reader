@@ -158,3 +158,26 @@ export async function publish(msg: string, event_id: string) {
       console.error("error", err);
     });
 }
+
+export async function syncNote(event) {
+  fetch(`${import.meta.env.VITE_API_LINK}/api/syncnote`, {
+    method: "POST",
+    body: JSON.stringify({ id: event.id }),
+    headers: {
+      "Content-Type": "application/json",
+    },
+  })
+    .then((res) => {
+      return res.json();
+    })
+    .then((data) => {
+      console.log("Json is ", data);
+      const pageData = get(pageMetaData)
+      refreshView({ page: pageData.current_page, limit: pageData.limit, since: pageData.since });
+      return data;
+    })
+    .then(() => (document.getElementById("content").scrollTo(0, 0)))
+    .catch((err) => {
+      console.error("error", err);
+    });
+}

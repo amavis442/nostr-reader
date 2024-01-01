@@ -97,6 +97,45 @@ func (req *Requests) StartSync(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (req *Requests) SyncNote(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	type Request struct {
+		ID string
+	}
+	var j Request
+	err := json.NewDecoder(r.Body).Decode(&j)
+	if err != nil {
+		panic(err)
+	}
+	log.Println("Sync event with Id: ", j.ID)
+	var tagMap nostrHandler.TagMap = make(nostrHandler.TagMap, 0)
+	tagMap["e"] = []string{j.ID}
+	filter := nostrHandler.Filter{
+		Tags:  tagMap,
+		Limit: 1,
+	}
+
+	req.Nostr.GetEvents(ctx, filter, false)
+
+	log.Println("Need to get it", j.ID, filter)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
+	w.WriteHeader(http.StatusOK)
+
+	syncHash = fmt.Sprint(time.Now().Unix())
+
+	test := make(map[string]string)
+	test["status"] = "ok"
+	test["message"] = syncHash
+	err = json.NewEncoder(w).Encode(test)
+	if err != nil {
+		panic(err)
+	}
+}
+
 func (req *Requests) BlockUser(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -240,7 +279,7 @@ func (req *Requests) SearchEvent(w http.ResponseWriter, r *http.Request) {
 			Limit: 1,
 		}
 
-		req.Nostr.GetEvents(ctx, filter)
+		req.Nostr.GetEvents(ctx, filter, false)
 
 		log.Println("Need to get it", j.ID, filter)
 	}

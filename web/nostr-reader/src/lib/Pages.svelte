@@ -16,6 +16,7 @@
     pageData,
     setApiUrl,
     pageMetaData,
+    syncNote
   } from "./state/main";
 
   export let apiUrl: string = "";
@@ -109,6 +110,7 @@
             on:followUser={(ev) => followUser(ev.detail)}
             on:unfollowUser={(ev) => unfollowUser(ev.detail)}
             on:blockUser={(ev) => blockUser(ev.detail)}
+            on:syncNote={(ev) => syncNote(ev.detail)}
             on:reply={(ev) => {
               createReplyTextNote(ev.detail);
             }}

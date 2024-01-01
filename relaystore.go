@@ -73,6 +73,7 @@ func main() {
 	 * This will sync the local database with that of the relays (Only public events and not channels and such)
 	 */
 	mux.HandleFunc("/api/sync", req.StartSync)
+	mux.HandleFunc("/api/syncnote", req.SyncNote)
 
 	/**
 	 * Put a user on the naughty list

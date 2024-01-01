@@ -195,7 +195,7 @@ func (nostr *Nostr) Post(ctx context.Context, content string, event_id string) (
  * Send a request over a websocket to get new events (notes) and after processing the events
  * try to get all the usernames metadata from who posted the note.
  */
-func (nostr *Nostr) GetEvents(ctx context.Context, filter nostrHandler.Filter) {
+func (nostr *Nostr) GetEvents(ctx context.Context, filter nostrHandler.Filter, withProfiles bool) {
 	fmt.Println("Get Event data from relays")
 	var m sync.Map
 	var mu sync.Mutex
@@ -239,12 +239,15 @@ func (nostr *Nostr) GetEvents(ctx context.Context, filter nostrHandler.Filter) {
 	 */
 	var pubkeys = make([]string, 0)
 	pubkeys = nostr.Storage.SaveEvents(ctx, evs)
-	for i, pubkey := range pubkeys {
-		log.Println(i, pubkey)
-	}
 
-	// Last but not least, try to get the user metadata
-	defer nostr.updateProfiles(ctx, pubkeys)
+	if withProfiles {
+		for i, pubkey := range pubkeys {
+			log.Println(i, pubkey)
+		}
+
+		// Last but not least, try to get the user metadata
+		nostr.updateProfiles(ctx, pubkeys)
+	}
 
 	defer func() {
 		fmt.Println("Done receiving and closed ralay connections")
@@ -277,7 +280,7 @@ func (nostr *Nostr) getEventData(ctx context.Context) {
 		Since: &timeStamp,
 	}
 
-	nostr.GetEvents(ctx, filter)
+	nostr.GetEvents(ctx, filter, true)
 
 	defer func() {
 		fmt.Println("Closing shop")
