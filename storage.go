@@ -179,7 +179,7 @@ func (st *Storage) SaveProfiles(ctx context.Context, evs []*nostr.Event) {
 			}
 		*/
 		// Should be in a dynamic list, so you can add to it or remove items.
-		if data.Picture != "" && data.Picture[0:len("https://randomuser.me")] == "https://randomuser.me" {
+		if data.Picture != "" && len(data.Picture) > len("https://randomuser.me") && data.Picture[0:len("https://randomuser.me")] == "https://randomuser.me" {
 			st.BlockPubkey(ctx, ev.PubKey)
 		}
 	}
