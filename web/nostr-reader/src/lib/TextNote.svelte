@@ -159,7 +159,7 @@
                         </div>
                         <div>
                           <button
-                            on:click={info(note.event)}
+                            on:click={info(note)}
                             title="info"
                             class="p-1"
                             ><Icon src={FaSolidInfoCircle} size="24" /></button
