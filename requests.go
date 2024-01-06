@@ -118,6 +118,7 @@ func (req *Requests) SyncNote(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.Nostr.GetEvents(ctx, filter, false)
+	ev, err := req.Cfg.Storage.FindEvent(ctx, j.ID)
 
 	log.Println("Need to get it", j.ID, filter)
 
@@ -127,9 +128,16 @@ func (req *Requests) SyncNote(w http.ResponseWriter, r *http.Request) {
 
 	syncHash = fmt.Sprint(time.Now().Unix())
 
-	test := make(map[string]string)
-	test["status"] = "ok"
-	test["message"] = syncHash
+	type Result struct {
+		Status  string `json:"status"`
+		Message string `json:"message"`
+		Data    Event  `json:"data"`
+	}
+	var test = Result{}
+	//test := make(map[string]string)
+	test.Status = "ok"
+	test.Message = syncHash
+	test.Data = ev
 	err = json.NewEncoder(w).Encode(test)
 	if err != nil {
 		panic(err)

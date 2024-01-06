@@ -707,6 +707,84 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 	default:
 		log.Println("200 Event: ", event)
 	}
+	event.Tree = 1
+	event.Children = make(map[string]Event, 0)
+
+	treeQry := `SELECT t.root_event_id, t.reply_event_id, 
+	e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content,e.tags_full::json,e.sig, 
+	e.etags, e.ptags , u.name, u.about , u.picture,
+	u.website, u.nip05, u.lud16, u.display_name, f.pubkey follow
+	FROM tree t, events e 
+	LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
+	LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
+	LEFT JOIN seen s on (s.event_id = e.event_id)
+	LEFT JOIN follow_pubkeys f ON (f.pubkey = e.pubkey)
+	WHERE root_event_id IN (` + `'` + event.Event.ID + `')` +
+		` AND e.event_id = t.event_id
+	AND e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false;`
+
+	var treeRows pgx.Rows
+	treeRows, err = st.DbPool.Query(ctx, treeQry)
+	if err != nil {
+		log.Println(err)
+	}
+	for treeRows.Next() {
+		var childEvent Event
+		var id int
+		var root_event_id string
+		var reply_event_id sql.NullString
+		var name sql.NullString
+		var about sql.NullString
+		var picture sql.NullString
+
+		var website sql.NullString
+		var nip05 sql.NullString
+		var lud16 sql.NullString
+		var displayname sql.NullString
+		var followed sql.NullString
+		childEvent.Event = &nostr.Event{}
+
+		if err := treeRows.Scan(&root_event_id, &reply_event_id, &id,
+			&childEvent.Event.ID, &childEvent.Event.PubKey, &childEvent.Event.Kind, &childEvent.Event.CreatedAt, &childEvent.Event.Content, &childEvent.Event.Tags, &childEvent.Event.Sig,
+			&childEvent.Etags, &childEvent.Ptags, &name, &about, &picture,
+			&website, &nip05, &lud16, &displayname, &followed); err != nil {
+			log.Println(err.Error())
+			panic(err)
+		}
+
+		if name.Valid {
+			childEvent.Profile.Name = name.String
+		} else {
+			childEvent.Profile.Name = event.Event.PubKey
+		}
+		if about.Valid {
+			childEvent.Profile.About = about.String
+		}
+		if picture.Valid {
+			childEvent.Profile.Picture = picture.String
+		}
+
+		if website.Valid {
+			childEvent.Profile.Website = website.String
+		}
+		if nip05.Valid {
+			childEvent.Profile.Nip05 = nip05.String
+		}
+		if lud16.Valid {
+			childEvent.Profile.Lud16 = lud16.String
+		}
+		if displayname.Valid {
+			childEvent.Profile.DisplayName = displayname.String
+		}
+
+		childEvent.Profile.Followed = false
+		if followed.Valid {
+			childEvent.Profile.Followed = true
+		}
+
+		event.Children[childEvent.Event.ID] = childEvent
+		event.Tree = 2
+	}
 
 	return event, err
 }

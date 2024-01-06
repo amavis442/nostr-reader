@@ -137,6 +137,7 @@ export function unfollowUser(pubkey: string) {
     });
 }
 
+//Todo: needs same fix as sunc note so only a portion of the view is updated and not the complete view.
 export async function publish(msg: string, event_id: string) {
   await fetch(`${import.meta.env.VITE_API_LINK}/api/publish`, {
     method: "POST",
@@ -151,7 +152,9 @@ export async function publish(msg: string, event_id: string) {
     .then((data) => {
       console.log("Json is ", data);
       const pageData = get(pageMetaData)
-      refreshView({ page: pageData.current_page, limit: pageData.limit, since: pageData.since });
+      if (event_id = "") {
+        refreshView({ page: pageData.current_page, limit: pageData.limit, since: pageData.since });
+      }
       return data;
     })
     .catch((err) => {
@@ -171,9 +174,14 @@ export async function syncNote(event) {
       return res.json();
     })
     .then((data) => {
-      console.log("Json is ", data);
-      const pageData = get(pageMetaData)
-      refreshView({ page: pageData.current_page, limit: pageData.limit, since: pageData.since });
+      pageData.update((events) => { 
+        return events.map(function(ev) {
+          if (ev.event.id == data.data.event.id) {
+            ev.event = data.data.event;
+          }
+          return ev
+        })        
+      });
       return data;
     })
     .then(() => (document.getElementById("content").scrollTo(0, 0)))
