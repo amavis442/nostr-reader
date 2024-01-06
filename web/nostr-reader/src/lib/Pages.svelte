@@ -51,7 +51,13 @@
   <Feeder>
     <slot>
       <div class="flex flex-col bg-white p-2 rounded-lg m-2">
-        <button on:click={refresh} class="btn btn-blue"
+        <button on:click={() => {
+          refreshView({
+            page: $pageMetaData.current_page,
+            limit: $pageMetaData.limit,
+            since: $pageMetaData.since,
+          })
+        }} class="btn btn-blue"
           ><i class="fa-solid fa-arrows-rotate"></i> Sync</button
         >
         <select

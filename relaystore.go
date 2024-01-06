@@ -125,7 +125,45 @@ func main() {
 		MaxHeaderBytes: 1 << 20,
 	}
 
+	ticker := time.NewTicker(300 * time.Second)
+	// Creating channel using make
+	tickerChan := make(chan bool)
+
+	go func() {
+		for {
+			select {
+			case <-tickerChan:
+				return
+			// interval task
+			case tm := <-ticker.C:
+				fmt.Println("The Current time is: ", tm)
+				intervalTask(nostr)
+			}
+		}
+	}()
+
 	fmt.Println("Server running: http://localhost:" + port)
 	//log.Fatal(http.ListenAndServe(":"+port, mux))
 	log.Fatal(srv.ListenAndServe())
+
+	// Turn off ticker after 10 seconds
+	// Calling Sleep() method
+	//time.Sleep(10 * time.Second)
+
+	// Calling Stop() method
+	//ticker.Stop()
+
+	// Setting the value of channel
+	//tickerChan <- true
+
+	// Printed when the ticker is turned off
+	//fmt.Println("Ticker is turned off!")
+}
+
+func intervalTask(nostr Nostr) {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	EventsQueue = EventsQueue[:0]
+	nostr.getEventData(ctx)
 }
