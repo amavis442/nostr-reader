@@ -22,13 +22,13 @@ export function findLink(t: string): string | undefined {
  * @url: https://stackoverflow.com/a/10315969/624466
  */
 function ytVidId(url: string) {
-  let match = url.match(/^(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?$/gmi);
+  let match = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?/gmi);
   return (match && match[0]) ? match[0] : false;
 }
 
 function imgTag(url: string) {
   url = url.replace("<br />", ' ').replace("<br>", ' ')
-  let match = url.match(/^https?:\/\/(?:[a-z\-]+\.)+[a-z]{2,6}(?:\/[^\/#?]+)+\.(?:jpe?g|gif|png|webp)$/gmi);
+  let match = url.match(/https?:\/\/(?:[a-z\-]+\.)+[a-z]{2,6}(?:\/[^\/#?]+)+\.(?:jpe?g|gif|png|webp)/gmi);
   return (match && match[0]) ? match[0] : false;
 }
 
