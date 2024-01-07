@@ -516,6 +516,9 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 			panic(err)
 		}
 
+		event.RootId = event.Event.ID
+		event.Tree = 1
+
 		if name.Valid {
 			event.Profile.Name = name.String
 		} else {
@@ -545,7 +548,6 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 		if followed.Valid {
 			event.Profile.Followed = true
 		}
-		event.Tree = 1
 
 		//nostr.Event = json.Unmarshal()
 		//sdk.ParseReferences(&nostr.Event{event})
@@ -586,7 +588,7 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 		log.Println(err)
 	}
 	for treeRows.Next() {
-		var event Event
+		var childEvent Event
 		var id int
 		var root_event_id string
 		var reply_event_id sql.NullString
@@ -599,51 +601,54 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 		var lud16 sql.NullString
 		var displayname sql.NullString
 		var followed sql.NullString
-		event.Event = &nostr.Event{}
+		childEvent.Event = &nostr.Event{}
 
 		if err := treeRows.Scan(&root_event_id, &reply_event_id, &id,
-			&event.Event.ID, &event.Event.PubKey, &event.Event.Kind, &event.Event.CreatedAt, &event.Event.Content, &event.Event.Tags, &event.Event.Sig,
-			&event.Etags, &event.Ptags, &name, &about, &picture,
+			&childEvent.Event.ID, &childEvent.Event.PubKey, &childEvent.Event.Kind, &childEvent.Event.CreatedAt, &childEvent.Event.Content, &childEvent.Event.Tags, &childEvent.Event.Sig,
+			&childEvent.Etags, &childEvent.Ptags, &name, &about, &picture,
 			&website, &nip05, &lud16, &displayname, &followed); err != nil {
 			log.Println(err.Error())
 			panic(err)
 		}
 
+		childEvent.Tree = 2
+		childEvent.RootId = root_event_id
+
 		if name.Valid {
-			event.Profile.Name = name.String
+			childEvent.Profile.Name = name.String
 		} else {
-			event.Profile.Name = event.Event.PubKey
+			childEvent.Profile.Name = childEvent.Event.PubKey
 		}
 		if about.Valid {
-			event.Profile.About = about.String
+			childEvent.Profile.About = about.String
 		}
 		if picture.Valid {
-			event.Profile.Picture = picture.String
+			childEvent.Profile.Picture = picture.String
 		}
 
 		if website.Valid {
-			event.Profile.Website = website.String
+			childEvent.Profile.Website = website.String
 		}
 		if nip05.Valid {
-			event.Profile.Nip05 = nip05.String
+			childEvent.Profile.Nip05 = nip05.String
 		}
 		if lud16.Valid {
-			event.Profile.Lud16 = lud16.String
+			childEvent.Profile.Lud16 = lud16.String
 		}
 		if displayname.Valid {
-			event.Profile.DisplayName = displayname.String
+			childEvent.Profile.DisplayName = displayname.String
 		}
 
-		event.Profile.Followed = false
+		childEvent.Profile.Followed = false
 		if followed.Valid {
-			event.Profile.Followed = true
+			childEvent.Profile.Followed = true
 		}
 
 		//event.Children = make(map[string]Event)
 		if item, ok := eventMap[root_event_id]; ok {
 			if reply_event_id.Valid && reply_event_id.String == "" {
-				event.Tree = 2
-				item.Children[event.Event.ID] = event
+				childEvent.Tree = 2
+				item.Children[childEvent.Event.ID] = childEvent
 				//item.Children = append(item.Children, event)
 				eventMap[root_event_id] = item
 			}
@@ -708,6 +713,7 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 		log.Println("200 Event: ", event)
 	}
 	event.Tree = 1
+	event.RootId = event.Event.ID
 	event.Children = make(map[string]Event, 0)
 
 	treeQry := `SELECT t.root_event_id, t.reply_event_id, 
@@ -752,6 +758,9 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 			panic(err)
 		}
 
+		childEvent.RootId = event.Event.ID
+		childEvent.Tree = 2
+
 		if name.Valid {
 			childEvent.Profile.Name = name.String
 		} else {
@@ -781,9 +790,7 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 		if followed.Valid {
 			childEvent.Profile.Followed = true
 		}
-
 		event.Children[childEvent.Event.ID] = childEvent
-		event.Tree = 2
 	}
 
 	return event, err
