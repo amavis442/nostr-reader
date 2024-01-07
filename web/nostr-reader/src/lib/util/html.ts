@@ -12,25 +12,7 @@ export function findLink(t: string): string | undefined {
   let p = imgTag(t);
   if (p) return p;
 
-  const options = { defaultProtocol: 'https' };
-  return linkifyHtml(t, options);
-
-  /*
-  return text.replace(urlRegex, function(url) {
-    return '<a href="' + url + '">' + url + '</a>';
-  });
-  */
-
-  /*
-  const match = t.match(urlRegex);
-  if (match && match[0]) {
-    return t.replace(urlRegex, function(url) {
-      return '<a href="' + url + '">' + url + '</a>';
-    });
-  }
-
   return undefined;
-  */
 }
 
 /**
