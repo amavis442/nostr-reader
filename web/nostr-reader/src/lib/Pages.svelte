@@ -35,7 +35,7 @@
     openModal(CreateNoteModal, {
       note: replyToNote,
       onSendTextNote: (noteText: string) => {
-        publish(noteText, replyToNote.id);
+        publish(noteText, replyToNote);
       },
     });
   }

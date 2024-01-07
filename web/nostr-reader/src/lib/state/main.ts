@@ -138,10 +138,10 @@ export function unfollowUser(pubkey: string) {
 }
 
 //Todo: needs same fix as sunc note so only a portion of the view is updated and not the complete view.
-export async function publish(msg: string, event_id: string) {
+export async function publish(msg: string, note) {
   await fetch(`${import.meta.env.VITE_API_LINK}/api/publish`, {
     method: "POST",
-    body: JSON.stringify({ msg: msg, event_id: event_id }),
+    body: JSON.stringify({ msg: msg, event_id: note.event.id }),
     headers: {
       "Content-Type": "application/json",
     },
@@ -152,8 +152,13 @@ export async function publish(msg: string, event_id: string) {
     .then((data) => {
       console.log("Json is ", data);
       const pageData = get(pageMetaData)
-      if (event_id = "") {
+      if (note.event.id == note.root_id) {
+        // Refresh whole page
         refreshView({ page: pageData.current_page, limit: pageData.limit, since: pageData.since });
+      }
+      if (note.event.id != note.root_id) {
+        // Only refresh note
+        syncNote(note.root_id)
       }
       return data;
     })
@@ -176,7 +181,7 @@ export async function syncNote(event) {
     .then((data) => {
       pageData.update((events) => { 
         return events.map(function(ev) {
-          if (ev.event.id == data.data.event.id) {
+          if (ev.event.id == data.data.root_id) {
             ev.event = data.data.event;
           }
           return ev

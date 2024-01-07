@@ -32,9 +32,9 @@
       <form on:submit|preventDefault={onSubmit}>
         {#if note}
           <h5 class="text-gray-900 text-xl font-medium mb-2">
-            Re: {note.content.slice(0, 30)}
+            Re: {note.event.content.slice(0, 30)}
           </h5>
-          <TextArea id="reply{note.id}" placeholder="Add reply" cols="30" rows="5"/>
+          <TextArea id="reply{note.event.id}" placeholder="Add reply" cols="30" rows="5"/>
         {:else}
           <h5 class="text-gray-900 text-xl font-medium mb-2">
             Create a new note

@@ -151,7 +151,7 @@
                         </div>
                         <div>
                           <button
-                            on:click={reply(note.event)}
+                            on:click={reply(note)}
                             title="reply"
                             class="p-1"
                             ><Icon src={FaCommentDots} size="24" /></button
@@ -226,6 +226,7 @@
                     on:unfollowUser
                     on:blockUser
                     on:reply
+                    on:info
                   />
                 </li>
               {/each}
