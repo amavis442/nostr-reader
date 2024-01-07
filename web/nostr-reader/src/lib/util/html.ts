@@ -1,4 +1,9 @@
 import lightBolt11Decoder from 'light-bolt11-decoder';
+import * as linkify from 'linkifyjs';
+import linkifyHtml from 'linkify-html';
+
+//var urlRegex =/(\b(https?|ftp|file):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig;
+var urlRegex = /https?:\/\/([\w.-]+)[^ ]*[-A-Z0-9+&@#\/%=~_|]/ig;
 
 export function findLink(t: string): string | undefined {
   let m = ytVidId(t);
@@ -7,12 +12,25 @@ export function findLink(t: string): string | undefined {
   let p = imgTag(t);
   if (p) return p;
 
-  const match = t.match(/https?:\/\/([\w.-]+)[^ ]*/);
+  const options = { defaultProtocol: 'https' };
+  return linkifyHtml(t, options);
+
+  /*
+  return text.replace(urlRegex, function(url) {
+    return '<a href="' + url + '">' + url + '</a>';
+  });
+  */
+
+  /*
+  const match = t.match(urlRegex);
   if (match && match[0]) {
-    return match[0];
+    return t.replace(urlRegex, function(url) {
+      return '<a href="' + url + '">' + url + '</a>';
+    });
   }
 
   return undefined;
+  */
 }
 
 /**
@@ -43,6 +61,7 @@ export function escapeHtml(html: string): string {
 
 export function toHtml(content: string): string {
 
+
   let match = content.match(/(lnbc|lnbt)\w+/gmi)
   if (match && match[0]) { // Lightning invoice
     let invoice = lightBolt11Decoder.decode(match[0])
@@ -60,25 +79,61 @@ export function toHtml(content: string): string {
         switch (unit) {
           case 'm': amount = amount * 0.001 * unitNumber
             break;
-          case 'u': amount = amount * 0.000001  * unitNumber
+          case 'u': amount = amount * 0.000001 * unitNumber
             break;
-          case 'n': amount = amount * 0.000000001  * unitNumber
+          case 'n': amount = amount * 0.000000001 * unitNumber
             break;
-          case 'p': amount = amount * 0.000000000001  * unitNumber
+          case 'p': amount = amount * 0.000000000001 * unitNumber
             break;
         }
       }
     }
     //console.debug('INVOICE:', match, match[0], invoice)
-    content = content.replace(match[0], 'lightning invoice: ' + amount + ' sats (Amount: ' + rawAmount + ', Unit: ' + rawUnit +', Unit number: ' +  unitNumber + ')')
+    content = content.replace(match[0], 'lightning invoice: ' + amount + ' sats (Amount: ' + rawAmount + ', Unit: ' + rawUnit + ', Unit number: ' + unitNumber + ')')
     content = content.replace("&#39;", "'")
-  
-    return content 
+    content = content.replace("\n", "<br/>")
+
+    //return content 
   }
 
-  return escapeHtml(content)
-    .replace(/\n/g, "<br />")
-    .replace(/https?:\/\/([\w.-]+)[^ ]*/g, (url, domain) => {
-      return `<a href="${url}" target="_blank noopener" class="underline">${domain}</a>`;
-    });
+  const options = {
+    defaultProtocol: 'https',
+    attributes: {
+      title: "External Link",
+      class: "underline"
+    },
+    format: (value, type) => {
+      if (type === "url") {
+        value = value.replace(urlRegex, (url, domain) => {
+            return `${domain}`;
+        });
+        if (value.length > 50) {
+          value = value.slice(0, 50) + "…";
+        }
+      }
+      return value;
+    },
+    rel: "noopener",
+    target: {
+      url: "_blank",
+      email: null,
+    },
+  };
+  content = linkifyHtml(content, options);
+  console.log(":After linkify", content)
+
+
+  /* content = escapeHtml(content)
+    .replace(/\n/g, "<br/>")
+    //.replace(urlRegex, function(url, domain) {
+    //  return `<a href="${url}"  target="_blank noopener" class="underline">${domain}</a>`;
+    //});
+    //.replace(urlRegex, (url, domain) => {
+    //  return `<a href="${url}" target="_blank noopener" class="underline">${domain}</a>`;
+    //})
+  
+    ;
+*/
+  console.log(":Content is [", content, "]")
+  return `<div>${content}</div>`;
 }
