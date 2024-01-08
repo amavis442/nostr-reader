@@ -1,7 +1,7 @@
 <script lang="ts">
   // @ts-nocheck
 
-  import { createEventDispatcher } from "svelte";
+  import { createEventDispatcher,beforeUpdate } from "svelte";
   import { toHtml, findLink } from "./util/html";
   import Preview from "./partials/Preview/Preview.svelte";
   import placeholder from "../assets/profile-picture.jpg";
@@ -70,6 +70,18 @@
 
     return "";
   }
+
+  let imgUrls = [];
+  let hasImgUrls = false;
+
+  beforeUpdate(() => {
+    imgUrls = findLink(note.event.content);
+    
+    if (imgUrls && imgUrls.length > 0) {
+      console.log("Img/youtube/rumble urls\n", imgUrls);
+      hasImgUrls = true;
+    }
+  });
 </script>
 
 {#if note && note.event.kind == 1}
@@ -181,15 +193,18 @@
               <div class="text-left w-full max-w-max break-words items-top">
                 <span class="text-black text-md font-medium break-words">
                   {@html toHtml(note.event.content)}
-                  {#if findLink(note.event.content)}
+                  
+                  {#if hasImgUrls}
                     <!-- svelte-ignore a11y-click-events-have-key-events -->
                     <div class="mt-2" on:click={(e) => e.stopPropagation()}>
+                      {#each imgUrls as imgUrl}
                       <Preview
                         endpoint={`${
                           import.meta.env.VITE_API_LINK
                         }/api/preview/link`}
-                        url={findLink(note.event.content)}
+                        url={imgUrl}
                       />
+                      {/each}
                     </div>
                   {/if}
                 </span>

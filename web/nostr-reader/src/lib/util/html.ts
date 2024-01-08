@@ -4,15 +4,21 @@ import linkifyHtml from 'linkify-html';
 
 //var urlRegex =/(\b(https?|ftp|file):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig;
 var urlRegex = /https?:\/\/([\w.-]+)[^ ]*[-A-Z0-9+&@#\/%=~_|]/ig;
+//var imgUrlRegex = /https?:\/\/(?:[a-z\-]+\.)+[a-z]{2,6}(?:\/[^\/#?]+)+\.(?:jpe?g|gif|png|webp)/gmi;
+var imgUrlRegex = /https?:\/\/.*\.(png|jpe?g|png|gif|webp)/igm;
 
-export function findLink(t: string): string | undefined {
-  let m = ytVidId(t);
-  if (m) return m;
+export function findLink(text: string): array {
+  let links = [];
+  
+  let m = ytVidId(text);
+  if (m) links = [...links,...m];
 
-  let p = imgTag(t);
-  if (p) return p;
-
-  return undefined;
+  let p = imgTag(text);
+  if (p) {
+    console.debug("Found img url matches in:\n [", text, "]\nResult: ", p)
+    links = [...links,...p];
+  }
+  return links;
 }
 
 /**
@@ -21,15 +27,24 @@ export function findLink(t: string): string | undefined {
  * @author: Stephan Schmitz <eyecatchup@gmail.com>
  * @url: https://stackoverflow.com/a/10315969/624466
  */
-function ytVidId(url: string) {
-  let match = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?/gmi);
-  return (match && match[0]) ? match[0] : false;
+function ytVidId(text: string):array  {
+  let match = text.match(/(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?/gmi);
+  return (match && match[0]) ? [match[0]] : [];
 }
 
-function imgTag(url: string) {
-  url = url.replace("<br />", ' ').replace("<br>", ' ')
-  let match = url.match(/https?:\/\/(?:[a-z\-]+\.)+[a-z]{2,6}(?:\/[^\/#?]+)+\.(?:jpe?g|gif|png|webp)/gmi);
-  return (match && match[0]) ? match[0] : false;
+function imgTag(text: string): array {
+  //url = url.replace("<br />", ' ').replace("<br>", ' ')
+  
+  
+  let match = text.match(imgUrlRegex);
+  if (match && match.length > 1) {
+    var imgUrls = []
+    for (var i=0; i < match.length; i++) {
+      imgUrls[i] = match[i]
+    }
+    return imgUrls;
+  }
+  return (match && match[0]) ? [match[0]] : [];
 }
 
 

@@ -45,11 +45,11 @@
     >
       <Link href={url}>
         {#if preview.images}
-          <img src={preview.images[0]} alt={preview.description}/>
+          <img src={preview.images[0]} alt={preview.description} height="100"/>
           <div class="h-px bg-medium" />
         {/if}
         {#if preview.mediaType == "image"}
-          <img src={preview.url} alt={preview.url}/>
+          <img src={preview.url} alt={preview.url} height="100"/>
           <div class="h-px bg-medium" />
         {/if}
 
