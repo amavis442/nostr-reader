@@ -489,10 +489,22 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 	}
 	defer rows.Close()
 
-	/**
-	 * Get all root notes
-	 */
+	//eventMap := make(map[string]Event)
+	//var keys []string
+	eventMap, keys, err := st.procesEventRows(rows)
+
+	st.getChildren(ctx, tx, eventMap)
 	events := make([]Event, 0)
+	// Make sure the order stays the same
+	for _, k := range keys {
+		events = append(events, eventMap[k])
+	}
+
+	p.Data = events
+	return nil
+}
+
+func (st *Storage) procesEventRows(rows pgx.Rows) (map[string]Event, []string, error) {
 	eventMap := make(map[string]Event)
 	var keys []string
 	for rows.Next() {
@@ -559,28 +571,34 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 	// Check for errors from iterating over rows.
 	if err := rows.Err(); err != nil {
 		log.Println(err)
-		return nil
+		return nil, nil, err
 	}
 	rows.Close()
+
+	return eventMap, keys, nil
+}
+
+func (st *Storage) getChildren(ctx context.Context, tx pgx.Tx, eventMap map[string]Event) error {
+	var err error
 
 	/**
 	 * Get all child notes
 	 */
 	treeQry := `SELECT t.root_event_id, t.reply_event_id, 
-	e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content,e.tags_full::json,e.sig, 
-	e.etags, e.ptags , u.name, u.about , u.picture,
-	u.website, u.nip05, u.lud16, u.display_name, f.pubkey follow
-	FROM tree t, events e 
-	LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
-	LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
-	LEFT JOIN seen s on (s.event_id = e.event_id)
-	LEFT JOIN follow_pubkeys f ON (f.pubkey = e.pubkey)
-	WHERE root_event_id IN (`
+	 e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content,e.tags_full::json,e.sig, 
+	 e.etags, e.ptags , u.name, u.about , u.picture,
+	 u.website, u.nip05, u.lud16, u.display_name, f.pubkey follow
+	 FROM tree t, events e 
+	 LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
+	 LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
+	 LEFT JOIN seen s on (s.event_id = e.event_id)
+	 LEFT JOIN follow_pubkeys f ON (f.pubkey = e.pubkey)
+	 WHERE root_event_id IN (`
 	for k := range eventMap {
 		treeQry = treeQry + `'` + k + `',`
 	}
 	treeQry = treeQry[:len(treeQry)-1] + `) AND e.event_id = t.event_id
-	AND e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false;`
+	 AND e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false;`
 	log.Println("Tree query: ", treeQry)
 	var treeRows pgx.Rows
 	treeRows, err = tx.Query(ctx, treeQry)
@@ -643,27 +661,12 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 		if followed.Valid {
 			childEvent.Profile.Followed = true
 		}
-
-		//event.Children = make(map[string]Event)
 		if item, ok := eventMap[root_event_id]; ok {
 			if reply_event_id.Valid && reply_event_id.String == "" {
 				childEvent.Tree = 2
 				item.Children[childEvent.Event.ID] = childEvent
-				//item.Children = append(item.Children, event)
 				eventMap[root_event_id] = item
 			}
-			/*if reply_event_id.Valid && reply_event_id.String <> ""{
-				for _, child := range item.Children {
-					if child.EventID == reply_event_id.String {
-						if len(child.Children) < 1 {
-							child.Children = make([]Event, 0)
-						}
-						child.Children = append(child.Children, event)
-						eventMap[root_event_id] = item
-					}
-				}
-			}
-			*/
 		}
 	}
 	if err := treeRows.Err(); err != nil {
@@ -671,11 +674,47 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 	}
 	treeRows.Close()
 
+	return nil
+}
+
+func (st *Storage) getInbox(ctx context.Context, p *Pagination, pubkey string) error {
+	qry := `SELECT 
+	e0.id, e0.event_id, e0.pubkey, e0.kind, e0.event_created_at, e0.content, e0.tags_full::json, e0.sig, e0.etags, e0.ptags,  
+	u.name, u.about , u.picture,
+	u.website, u.nip05, u.lud16, u.display_name, f.pubkey follow
+	FROM 
+	events e0 
+	LEFT JOIN follow_pubkeys f ON (f.pubkey = e0.pubkey)
+	LEFT JOIN profiles u ON (u.pubkey = e0.pubkey ) 
+	JOIN (SELECT t.* FROM tree t, events e1 WHERE e1.pubkey = $1 AND e1.event_id = t.event_id) t0 ON e0.event_id = t0.root_event_id
+	ORDER BY e0.event_created_at DESC;`
+
+	tx, err := st.DbPool.Begin(ctx)
+	defer func() {
+		if err != nil {
+			tx.Rollback(ctx)
+		} else {
+			tx.Commit(ctx)
+		}
+	}()
+
+	rows, err := tx.Query(ctx, qry, pubkey)
+	if err != nil {
+		log.Println(err)
+		return nil
+	}
+	defer rows.Close()
+
+	eventMap, keys, err := st.procesEventRows(rows)
+	p.SetTotal(int64(len(keys)))
+	p.SetTo()
+
+	st.getChildren(ctx, tx, eventMap)
+	events := make([]Event, 0)
 	// Make sure the order stays the same
 	for _, k := range keys {
 		events = append(events, eventMap[k])
 	}
-
 	p.Data = events
 	return nil
 }

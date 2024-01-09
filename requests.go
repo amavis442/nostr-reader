@@ -75,6 +75,36 @@ func (req *Requests) getRoot(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (req *Requests) getInbox(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var p Page
+	err := json.NewDecoder(r.Body).Decode(&p)
+	if err != nil {
+		panic(err)
+	}
+
+	pagination := Pagination{}
+	pagination.SetLimit(p.Limit)
+	pagination.SetCurrentPage(p.Page)
+	pagination.SetSince(p.Since)
+	err = req.Cfg.Storage.getInbox(ctx, &pagination, req.Cfg.Pubkey)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
+	w.WriteHeader(http.StatusOK)
+
+	if err != nil {
+		log.Println(err)
+	}
+	err = json.NewEncoder(w).Encode(&pagination)
+	if err != nil {
+		panic(err)
+	}
+}
+
 func (req *Requests) StartSync(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
@@ -118,7 +148,7 @@ func (req *Requests) SyncNote(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.Nostr.GetEvents(ctx, filter, false)
-	ev, err := req.Cfg.Storage.FindEvent(ctx, j.ID)
+	ev, _ := req.Cfg.Storage.FindEvent(ctx, j.ID)
 
 	log.Println("Need to get it", j.ID, filter)
 

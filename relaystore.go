@@ -68,7 +68,7 @@ func main() {
 	 * This will not SYNC the local database with that of the relays.
 	 */
 	mux.HandleFunc("/api/events", req.getRoot)
-
+	mux.HandleFunc("/api/inbox", req.getInbox)
 	/**
 	 * This will sync the local database with that of the relays (Only public events and not channels and such)
 	 */
