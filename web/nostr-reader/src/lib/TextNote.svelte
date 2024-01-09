@@ -73,6 +73,7 @@
 
   let imgUrls = [];
   let hasImgUrls = false;
+  let content = "";
 
   beforeUpdate(() => {
     imgUrls = findLink(note.event.content);
@@ -81,6 +82,8 @@
       console.log("Img/youtube/rumble urls\n", imgUrls);
       hasImgUrls = true;
     }
+
+    content = toHtml(note.event.content)
   });
 </script>
 
@@ -192,7 +195,7 @@
             <div class="p-2 w-11/12">
               <div class="text-left w-full max-w-max break-words items-top">
                 <span class="text-black text-md font-medium break-words">
-                  {@html toHtml(note.event.content)}
+                  {@html content}
                 </span>  
                   {#if hasImgUrls}
                     <!-- svelte-ignore a11y-click-events-have-key-events -->

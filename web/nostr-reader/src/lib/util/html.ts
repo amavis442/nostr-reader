@@ -1,5 +1,4 @@
 import lightBolt11Decoder from 'light-bolt11-decoder';
-import * as linkify from 'linkifyjs';
 import linkifyHtml from 'linkify-html';
 
 //var urlRegex =/(\b(https?|ftp|file):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig;
@@ -16,7 +15,16 @@ export function findLink(text: string): array {
   let p = imgTag(text);
   if (p) {
     console.debug("Found img url matches in:\n [", text, "]\nResult: ", p)
-    links = [...links,...p];
+    //Check if there a spaces in the output then seperate them
+    var imgArray = [];
+    for (var i = 0; i < p.length;i++) {
+      if (p[i].match(" ")) {
+        imgArray = [...imgArray, ...p[i].split(" ")]
+      } else {
+        imgArray = [...imgArray, ...p]
+      }
+    }
+    links = [...links,...imgArray];
   }
   return links;
 }
