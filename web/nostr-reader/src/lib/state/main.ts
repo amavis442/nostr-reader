@@ -89,7 +89,13 @@ export function blockUser(pubkey: string) {
     .then((data) => {
       console.log("Json is ", data);
       const pageData = get(pageMetaData)
-      refreshView({ page: pageData.current_page, limit: pageData.limit, since: pageData.since });
+      refreshView({ 
+        page: pageData.current_page, 
+        limit: pageData.limit, 
+        since: pageData.since,
+        renew: false,
+        maxid: pageData.maxid 
+      });
       return data;
     })
     .catch((err) => {
@@ -111,7 +117,13 @@ export function followUser(pubkey: string) {
     .then((data) => {
       console.log("Json is ", data);
       const pageData = get(pageMetaData)
-      refreshView({ page: pageData.current_page, limit: pageData.limit, since: pageData.since });
+      refreshView({ 
+        page: pageData.current_page, 
+        limit: pageData.limit, 
+        since: pageData.since,        
+        renew: false,
+        maxid: pageData.maxid  
+      });
       return data;
     })
     .catch((err) => {
@@ -133,7 +145,13 @@ export function unfollowUser(pubkey: string) {
     .then((data) => {
       console.log("Json is ", data);
       const pageData = get(pageMetaData)
-      refreshView({ page: pageData.current_page, limit: pageData.limit, since: pageData.since });
+      refreshView({ 
+        page: pageData.current_page, 
+        limit: pageData.limit, 
+        since: pageData.since,
+        renew: false,
+        maxid: pageData.maxid   
+      });
       return data;
     })
     .catch((err) => {
@@ -158,7 +176,13 @@ export async function publish(msg: string, note) {
       const pageData = get(pageMetaData)
       if (note.event.id == note.root_id) {
         // Refresh whole page
-        refreshView({ page: pageData.current_page, limit: pageData.limit, since: pageData.since });
+        refreshView({ 
+          page: pageData.current_page, 
+          limit: pageData.limit, 
+          since: pageData.since,
+          renew: true,
+          maxid: pageData.maxid  
+        });
       }
       if (note.event.id != note.root_id) {
         // Only refresh note
