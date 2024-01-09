@@ -40,6 +40,8 @@ type Page struct {
 	Page  int
 	Limit int
 	Since int
+	MaxId int64
+	Renew bool
 }
 
 /**
@@ -60,6 +62,10 @@ func (req *Requests) getRoot(w http.ResponseWriter, r *http.Request) {
 	pagination.SetLimit(p.Limit)
 	pagination.SetCurrentPage(p.Page)
 	pagination.SetSince(p.Since)
+
+	pagination.SetRenew(p.Renew)
+	pagination.SetMaxId(p.MaxId)
+
 	err = req.Cfg.Storage.GetEventPagination(ctx, &pagination, false)
 
 	w.Header().Set("Content-Type", "application/json")

@@ -14,6 +14,8 @@ type Pagination struct {
 	From        int     `json:"from"`
 	To          int     `json:"to"`
 	Since       int     `json:"since"`
+	Renew       bool    `json:"renew"`
+	MaxId       int64   `json:"maxid"`
 }
 
 func (p *Pagination) SetTotal(recordCount int64) {
@@ -61,4 +63,12 @@ func (p *Pagination) SetTo() {
 	} else {
 		p.To = (p.CurrentPage-1)*p.Limit + p.Limit // Not correct at end
 	}
+}
+
+func (p *Pagination) SetMaxId(maxid int64) {
+	p.MaxId = maxid
+}
+
+func (p *Pagination) SetRenew(renew bool) {
+	p.Renew = renew
 }

@@ -445,6 +445,9 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 		`
 	}
 	mainQry += `WHERE e.kind = 1 AND e.etags='{}' AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false`
+	if !p.Renew {
+		mainQry += ` AND e.id <= ` + fmt.Sprintf("%d", p.MaxId)
+	}
 	if p.Since != 0 {
 		since := time.Now().Unix() - int64(p.Since*60*60*24)
 		mainQry = mainQry + ` AND e.event_created_at > ` + fmt.Sprintf("%d", since)
@@ -452,16 +455,6 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 
 	countQry := `SELECT COUNT(*) AS cnt FROM (SELECT DISTINCT id, event_id, event_created_at FROM (` + mainQry + `) resultTable) tbl`
 	log.Println(countQry)
-
-	selectIdQry := `SELECT id FROM (SELECT DISTINCT id, event_id, event_created_at FROM ( ` + mainQry + `) resultInnerTable ORDER BY event_created_at DESC) tbl  LIMIT ` + strconv.Itoa(p.Limit)
-	if p.Offset > 0 {
-		selectIdQry = selectIdQry + ` OFFSET ` + fmt.Sprintf("%d", p.Offset)
-	}
-	selectIdQry = selectIdQry + `;`
-	log.Println(selectIdQry)
-
-	selectQry := mainQry + ` AND e.id IN (`
-
 	tx.QueryRow(ctx, countQry).Scan(&recordCount)
 	p.SetTotal(recordCount)
 	p.SetTo()
@@ -469,16 +462,29 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 		return nil
 	}
 
+	selectIdQry := `SELECT id FROM (SELECT DISTINCT id, event_id, event_created_at FROM ( ` + mainQry + `) resultInnerTable ORDER BY event_created_at DESC) tbl  LIMIT ` + strconv.Itoa(p.Limit)
+	if p.Offset > 0 {
+		selectIdQry = selectIdQry + ` OFFSET ` + fmt.Sprintf("%d", p.Offset)
+	}
+	selectIdQry = selectIdQry + `;`
+	log.Println(selectIdQry)
 	rowsIds, err := tx.Query(ctx, selectIdQry)
 	if err != nil {
 		log.Fatal(err)
 	}
+	selectQry := mainQry + ` AND e.id IN (`
+	var maxId int64 = 0
 	for rowsIds.Next() {
 		rowsIds.Scan(&recordId)
 		selectQry = selectQry + fmt.Sprintf("%d", recordId) + ","
+		if recordId > maxId {
+			maxId = recordId
+		}
 	}
 	rowsIds.Close()
-
+	if p.Renew {
+		p.MaxId = maxId
+	}
 	finalQry := selectQry[:len(selectQry)-1]
 	finalQry = finalQry + ") ORDER BY event_created_at DESC;"
 	log.Println(finalQry)
@@ -487,10 +493,6 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 		log.Println(err)
 		return nil
 	}
-	defer rows.Close()
-
-	//eventMap := make(map[string]Event)
-	//var keys []string
 	eventMap, keys, err := st.procesEventRows(rows)
 
 	st.getChildren(ctx, tx, eventMap)

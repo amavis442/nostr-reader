@@ -27,6 +27,8 @@
       page: 1,
       limit: $pageMetaData.limit,
       since: $pageMetaData.since,
+      renew: $pageMetaData.renew,
+      maxid: $pageMetaData.maxid
     });
     document.getElementById("content").scrollTo(0, 0)
   });
@@ -56,6 +58,8 @@
             page: $pageMetaData.current_page,
             limit: $pageMetaData.limit,
             since: $pageMetaData.since,
+            renew: true,
+            maxid: $pageMetaData.maxid
           })
         }} class="btn btn-blue"
           ><i class="fa-solid fa-arrows-rotate"></i> Sync</button
@@ -68,6 +72,8 @@
               page: $pageMetaData.current_page,
               limit: $pageMetaData.limit,
               since: $pageMetaData.since,
+              renew: false,
+              maxid: $pageMetaData.maxid
             });
           }}
           class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
@@ -87,6 +93,8 @@
               page: $pageMetaData.current_page,
               limit: $pageMetaData.limit,
               since: $pageMetaData.since,
+              renew: false,
+              maxid: $pageMetaData.maxid
             })}
           class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
         >
@@ -103,6 +111,8 @@
                 page: ev.detail,
                 limit: $pageMetaData.limit,
                 since: $pageMetaData.since,
+                renew: false,
+                maxid: $pageMetaData.maxid
               });
             }}
           ></Pagination>

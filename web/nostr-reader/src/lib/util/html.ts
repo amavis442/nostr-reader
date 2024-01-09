@@ -8,6 +8,7 @@ var imgUrlRegex = /https?:\/\/.*\.(png|jpe?g|png|gif|webp)/igm;
 
 export function findLink(text: string): array {
   let links = [];
+  text = text.replace(/\n/gm, " ")
   
   let m = ytVidId(text);
   if (m) links = [...links,...m];

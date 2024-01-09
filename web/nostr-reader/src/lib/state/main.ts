@@ -13,7 +13,9 @@ export let pageMetaData = writable({
   last_page: 1,
   total: 0,
   limit: 60,
-  since: 1 // 1 day
+  since: 1, // 1 day
+  renew: true,
+  maxid: 0
 });
 
 export function setApiUrl(url: string) {
@@ -42,7 +44,9 @@ export async function refreshView(params) {
         last_page: data.last_page > 10 ? 10 : data.last_page,
         total: data.total,
         limit: data.limit,
-        since: data.since
+        since: data.since,
+        renew: data.renew,
+        maxid: data.maxid
       })
 
       pageData.update(() => { return data.data });
