@@ -39,17 +39,16 @@
 </script>
 
 {#if preview}
-  <div class="max-w-sm">
     <div
-      class="rounded border border-solid border-medium flex flex-col bg-white overflow-hidden"
+      class="rounded-2xl border border-solid border-medium bg-white overflow-hidden"
     >
       <Link href={url}>
         {#if preview.images}
-          <img src={preview.images[0]} alt={preview.description} height="100"/>
+          <img src={preview.images[0]} alt={preview.description} class="object-contain h-56"/>
           <div class="h-px bg-medium" />
         {/if}
         {#if preview.mediaType == "image"}
-          <img src={preview.url} alt={preview.url} height="100"/>
+          <img src={preview.url} alt={preview.url} class="object-contain h-56"/>
           <div class="h-px bg-medium" />
         {/if}
 
@@ -65,5 +64,4 @@
         {/if}
       </Link>
     </div>
-  </div>
 {/if}

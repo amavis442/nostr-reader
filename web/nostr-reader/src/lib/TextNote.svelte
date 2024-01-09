@@ -193,10 +193,10 @@
               <div class="text-left w-full max-w-max break-words items-top">
                 <span class="text-black text-md font-medium break-words">
                   {@html toHtml(note.event.content)}
-                  
+                </span>  
                   {#if hasImgUrls}
                     <!-- svelte-ignore a11y-click-events-have-key-events -->
-                    <div class="mt-2" on:click={(e) => e.stopPropagation()}>
+                    <div class="mt-4 flex flex-cols-2 gap-4 bg-bg_color" on:click={(e) => e.stopPropagation()}>
                       {#each imgUrls as imgUrl}
                       <Preview
                         endpoint={`${
@@ -207,7 +207,6 @@
                       {/each}
                     </div>
                   {/if}
-                </span>
               </div>
             </div>
 

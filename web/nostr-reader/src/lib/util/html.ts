@@ -34,8 +34,6 @@ function ytVidId(text: string):array  {
 
 function imgTag(text: string): array {
   //url = url.replace("<br />", ' ').replace("<br>", ' ')
-  
-  
   let match = text.match(imgUrlRegex);
   if (match && match.length > 1) {
     var imgUrls = []
@@ -57,8 +55,6 @@ export function escapeHtml(html: string): string {
 }
 
 export function toHtml(content: string): string {
-
-
   let match = content.match(/(lnbc|lnbt)\w+/gmi)
   if (match && match[0]) { // Lightning invoice
     let invoice = lightBolt11Decoder.decode(match[0])
@@ -87,11 +83,10 @@ export function toHtml(content: string): string {
     }
     //console.debug('INVOICE:', match, match[0], invoice)
     content = content.replace(match[0], 'lightning invoice: ' + amount + ' sats (Amount: ' + rawAmount + ', Unit: ' + rawUnit + ', Unit number: ' + unitNumber + ')')
-    content = content.replace("&#39;", "'")
-    content = content.replace("\n", "<br/>")
-
-    //return content 
   }
+  content = content.replace("&#39;", "'")
+  content = content.replace(/"/gm, "&#34;")
+  content = content.replace(/\n/gm, "<br/>")
 
   const options = {
     defaultProtocol: 'https',
