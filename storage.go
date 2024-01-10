@@ -664,11 +664,27 @@ func (st *Storage) getChildren(ctx context.Context, tx pgx.Tx, eventMap map[stri
 			childEvent.Profile.Followed = true
 		}
 		if item, ok := eventMap[root_event_id]; ok {
-			if reply_event_id.Valid && reply_event_id.String == "" {
-				childEvent.Tree = 2
-				item.Children[childEvent.Event.ID] = childEvent
-				eventMap[root_event_id] = item
+
+			if reply_event_id.Valid {
+				if reply_event_id.String == "" {
+					childEvent.Tree = 2
+					childEvent.Children = make(map[string]Event, 0)
+					item.Children[childEvent.Event.ID] = childEvent
+					eventMap[root_event_id] = item
+				}
+				if reply_event_id.String != "" {
+					if ch, ok := item.Children[reply_event_id.String]; ok {
+						childEvent.Tree = 3
+						childEvent.Children = make(map[string]Event, 0)
+						if ch.Children == nil {
+							ch.Children = make(map[string]Event, 0)
+						}
+						item.Children[reply_event_id.String].Children[childEvent.Event.ID] = childEvent
+						eventMap[root_event_id] = item
+					}
+				}
 			}
+
 		}
 	}
 	if err := treeRows.Err(); err != nil {
