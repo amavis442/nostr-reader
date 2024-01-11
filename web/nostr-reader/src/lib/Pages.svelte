@@ -27,7 +27,7 @@
       page: 1,
       limit: $pageMetaData.limit,
       since: $pageMetaData.since,
-      renew: $pageMetaData.renew,
+      renew: true,
       maxid: $pageMetaData.maxid
     });
     document.getElementById("content").scrollTo(0, 0)
