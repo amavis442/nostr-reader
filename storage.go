@@ -817,6 +817,7 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 
 		childEvent.RootId = event.Event.ID
 		childEvent.Tree = 2
+		childEvent.Children = make(map[string]Event, 0)
 
 		if name.Valid {
 			childEvent.Profile.Name = name.String
@@ -847,6 +848,7 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 		if followed.Valid {
 			childEvent.Profile.Followed = true
 		}
+
 		event.Children[childEvent.Event.ID] = childEvent
 	}
 

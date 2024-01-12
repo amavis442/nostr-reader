@@ -172,9 +172,10 @@ export async function publish(msg: string, note) {
       return res.json();
     })
     .then((data) => {
-      console.log("Json is ", data);
-      const pageData = get(pageMetaData)
-      if (note.event.id == note.root_id) {
+      console.debug("Json is ", data);
+      const pageData = get(pageMetaData);
+      console.debug("Refresh after publish: ", note.event.id);
+      if (note == "") {
         // Refresh whole page
         refreshView({ 
           page: pageData.current_page, 
@@ -184,9 +185,16 @@ export async function publish(msg: string, note) {
           maxid: pageData.maxid  
         });
       }
-      if (note.event.id != note.root_id) {
+      if (note != "") {
         // Only refresh note
-        syncNote(note.root_id)
+        //syncNote(note) // Somehow i introduced a bug in this one :( 
+        refreshView({ 
+          page: pageData.current_page, 
+          limit: pageData.limit, 
+          since: pageData.since,
+          renew: false,
+          maxid: pageData.maxid  
+        });
       }
       return data;
     })
@@ -195,10 +203,10 @@ export async function publish(msg: string, note) {
     });
 }
 
-export async function syncNote(event) {
+export async function syncNote(note) {
   fetch(`${import.meta.env.VITE_API_LINK}/api/syncnote`, {
     method: "POST",
-    body: JSON.stringify({ id: event.id }),
+    body: JSON.stringify({ id: note.event.id }),
     headers: {
       "Content-Type": "application/json",
     },
@@ -207,17 +215,17 @@ export async function syncNote(event) {
       return res.json();
     })
     .then((data) => {
+      //alert(JSON.stringify(data))
       pageData.update((events) => { 
         return events.map(function(ev) {
           if (ev.event.id == data.data.root_id) {
-            ev.event = data.data.event;
+            ev.event = data.data;
           }
           return ev
         })        
       });
       return data;
     })
-    .then(() => (document.getElementById("content").scrollTo(0, 0)))
     .catch((err) => {
       console.error("error", err);
     });
