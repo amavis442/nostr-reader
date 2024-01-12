@@ -25,7 +25,9 @@
   }
 
   function blockUser(pubkey) {
-    dispatch("blockUser", pubkey);
+    if (confirm("Block user?") == true) {
+      dispatch("blockUser", pubkey);
+    }
   }
 
   function reply(note) {
@@ -156,14 +158,7 @@
                             >
                           {/if}
                         </div>
-                        <div>
-                          <button
-                            on:click={blockUser(note.event.pubkey)}
-                            class="p-1"
-                            title="block"
-                            ><Icon src={FaSolidBan} size="24" /></button
-                          >
-                        </div>
+
                         <div>
                           <button
                             on:click={reply(note)}
@@ -181,8 +176,16 @@
                           >
                         </div>
                         <div>
-                          <button on:click={syncnote(note.event)} title="sync note" class="p-1"
+                          <button on:click={syncnote(note)} title="sync note" class="p-1"
                             ><Icon src={FaSolidSync} size="24" /></button
+                          >
+                        </div>
+                        <div>
+                          <button
+                            on:click={blockUser(note.event.pubkey)}
+                            class="p-1"
+                            title="block"
+                            ><Icon src={FaSolidBan} size="24" /></button
                           >
                         </div>
                       </div>
