@@ -163,7 +163,7 @@ export function unfollowUser(pubkey: string) {
 export async function publish(msg: string, note) {
   await fetch(`${import.meta.env.VITE_API_LINK}/api/publish`, {
     method: "POST",
-    body: JSON.stringify({ msg: msg, event_id: note.event.id }),
+    body: JSON.stringify({ msg: msg, event_id: note ? note.event.id : "" }),
     headers: {
       "Content-Type": "application/json",
     },
@@ -174,9 +174,7 @@ export async function publish(msg: string, note) {
     .then((data) => {
       console.debug("Json is ", data);
       const pageData = get(pageMetaData);
-      console.debug("Refresh after publish: ", note.event.id);
       if (note == "") {
-        // Refresh whole page
         refreshView({
           page: pageData.current_page,
           limit: pageData.limit,
@@ -185,9 +183,9 @@ export async function publish(msg: string, note) {
           maxid: pageData.maxid
         });
       }
+
       if (note != "") {
-        // Only refresh note
-        //syncNote(note) // Somehow i introduced a bug in this one :( 
+        console.debug("Refresh after publish: ", note.event.id);
         refreshView({
           page: pageData.current_page,
           limit: pageData.limit,
