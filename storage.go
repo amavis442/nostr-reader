@@ -249,10 +249,10 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string 
 				}
 			case tag[0] == "p":
 				if len(tag) < 1 || len(tag[1]) != 64 {
-					fmt.Println("P# tag not valid: ", tag)
+					log.Println("Query:: P# tag not valid: ", tag)
 					continue
 				} else {
-					fmt.Println("Adding pubkey from p# tag: ", tag[1])
+					log.Println("Query:: Adding pubkey from p# tag: ", tag[1])
 					ptags = append(ptags, tag[1])
 					pubkeys = append(pubkeys, tag[1])
 					ptagsNum = ptagsNum + 1
@@ -286,7 +286,6 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string 
 			}
 		}
 
-		fmt.Println("Add to transaction")
 		ev.Content = strings.ReplaceAll(ev.Content, "\u0000", "")
 		ptagsSliceSize := ptagsNum
 		if ptagsNum > 8 {
@@ -318,8 +317,6 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string 
 		}
 
 		if len(tree.RootTag) > 0 {
-			fmt.Println("Roottag is: ", tree.RootTag)
-
 			tx.Exec(ctx, treeQry, ev.ID, tree.RootTag, tree.ReplyTag)
 		}
 	}

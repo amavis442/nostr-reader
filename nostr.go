@@ -161,15 +161,16 @@ func (nostr *Nostr) Post(ctx context.Context, content string, event_id string) (
 
 		err := relay.Publish(ctx, ev)
 		if err != nil {
-			fmt.Println(err)
+			log.Println("Post:: ", err)
 			return false
 		}
-		log.Println("Post:: Posting to: [", relay.URL, "] Event data: ", ev)
+		log.Println("Post:: Posting to: [", relay.URL, "], Event data: ", ev)
 		success += 1
 		return true
 	})
 
 	if success == 0 {
+		log.Println("Post:: cannot reply")
 		return nostrHandler.Event{}, errors.New("cannot reply")
 	}
 	log.Println("Post:: Saving post: ", ev)
