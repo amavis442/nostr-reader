@@ -110,7 +110,7 @@ const CreateQuery string = `
 
 func (st *Storage) CheckError(err error) {
 	if err != nil {
-		log.Println(err.Error())
+		log.Println("Query:: ", err.Error())
 		panic(err)
 	}
 }
@@ -158,7 +158,7 @@ func (st *Storage) SaveProfiles(ctx context.Context, evs []*nostr.Event) {
 		var data Profile
 		err = json.Unmarshal([]byte(ev.Content), &data)
 		if err != nil {
-			log.Println(err.Error(), ev.Content)
+			log.Println("Query:: ", err.Error(), ev.Content)
 			//panic(err)
 			continue
 		}
@@ -166,7 +166,7 @@ func (st *Storage) SaveProfiles(ctx context.Context, evs []*nostr.Event) {
 		_, err = tx.Exec(ctx, qry, ev.PubKey, data.Name, data.About, data.Picture, data.Website, data.Nip05, data.Lud16, data.DisplayName, ev.String(), ev.CreatedAt)
 		if err != nil {
 			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
-				log.Printf("update profile: unable to rollback: %v", rollbackErr)
+				log.Printf("Query:: Update profile: unable to rollback: %v", rollbackErr)
 			}
 			log.Println(err)
 			ctx.Done()
@@ -311,9 +311,9 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string 
 
 		if _, err := tx.Exec(ctx, qry, ev.ID, ev.PubKey, ev.Kind, ev.CreatedAt, ev.Content, string(tagJson), ev.Sig, ptags, etags, Garbage, jsonbuf.Bytes()); err != nil {
 			log.Println(qry)
-			log.Println(err.Error())
-			log.Println(ev.String())
-			log.Println(jsonbuf.Bytes())
+			log.Println("Query:: ", err.Error())
+			log.Println("Query:: ", ev.String())
+			log.Println("Query:: ", jsonbuf.Bytes())
 			panic(err)
 		}
 
@@ -345,7 +345,7 @@ func (st *Storage) GetEvents(ctx context.Context, limit int) (*[]Event, error) {
 	WHERE e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false ORDER BY e.event_created_at DESC LIMIT $1`, limit)
 
 	if err != nil {
-		log.Println(err)
+		log.Println("Query:: ", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -366,7 +366,7 @@ func (st *Storage) GetEvents(ctx context.Context, limit int) (*[]Event, error) {
 		if err := rows.Scan(&event.Event.ID, &event.Event.PubKey, &event.Event.Kind, &event.Event.CreatedAt, &event.Event.Content, &event.Event.Tags, &event.Event.Sig,
 			&event.Etags, &event.Ptags,
 			&name, &about, &picture, &website, &nip05, &lud16, &displayname); err != nil {
-			log.Println((err.Error()))
+			log.Println("Query:: ", err.Error())
 			panic(err)
 		}
 
@@ -399,7 +399,7 @@ func (st *Storage) GetEvents(ctx context.Context, limit int) (*[]Event, error) {
 	}
 	// Check for errors from iterating over rows.
 	if err := rows.Err(); err != nil {
-		log.Println(err)
+		log.Println("Query:: ", err)
 		return nil, err
 	}
 
@@ -454,7 +454,7 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 	}
 
 	countQry := `SELECT COUNT(*) AS cnt FROM (SELECT DISTINCT id, event_id, event_created_at FROM (` + mainQry + `) resultTable) tbl`
-	log.Println(countQry)
+	log.Println("Query:: ", countQry)
 	tx.QueryRow(ctx, countQry).Scan(&recordCount)
 	p.SetTotal(recordCount)
 	p.SetTo()
@@ -467,7 +467,7 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 		selectIdQry = selectIdQry + ` OFFSET ` + fmt.Sprintf("%d", p.Offset)
 	}
 	selectIdQry = selectIdQry + `;`
-	log.Println(selectIdQry)
+	log.Println("Query:: ", selectIdQry)
 	rowsIds, err := tx.Query(ctx, selectIdQry)
 	if err != nil {
 		log.Fatal(err)
@@ -487,7 +487,7 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 	}
 	finalQry := selectQry[:len(selectQry)-1]
 	finalQry = finalQry + ") ORDER BY event_created_at DESC;"
-	log.Println(finalQry)
+	log.Println("Query:: ", finalQry)
 	rows, err := tx.Query(ctx, finalQry)
 	if err != nil {
 		log.Println(err)
@@ -526,7 +526,7 @@ func (st *Storage) procesEventRows(rows pgx.Rows) (map[string]Event, []string, e
 		if err := rows.Scan(&id, &event.Event.ID, &event.Event.PubKey, &event.Event.Kind, &event.Event.CreatedAt, &event.Event.Content, &event.Event.Tags, &event.Event.Sig,
 			&event.Etags, &event.Ptags,
 			&name, &about, &picture, &website, &nip05, &lud16, &displayname, &followed); err != nil {
-			log.Println(err.Error())
+			log.Println("Query:: ", err.Error())
 			panic(err)
 		}
 
@@ -572,7 +572,7 @@ func (st *Storage) procesEventRows(rows pgx.Rows) (map[string]Event, []string, e
 	}
 	// Check for errors from iterating over rows.
 	if err := rows.Err(); err != nil {
-		log.Println(err)
+		log.Println("Query:: ", err)
 		return nil, nil, err
 	}
 	rows.Close()
@@ -601,7 +601,7 @@ func (st *Storage) getChildren(ctx context.Context, tx pgx.Tx, eventMap map[stri
 	}
 	treeQry = treeQry[:len(treeQry)-1] + `) AND e.event_id = t.event_id
 	 AND e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false;`
-	log.Println("Tree query: ", treeQry)
+	log.Println("Query:: ", "Tree query: ", treeQry)
 	var treeRows pgx.Rows
 	treeRows, err = tx.Query(ctx, treeQry)
 	if err != nil {
@@ -718,7 +718,7 @@ func (st *Storage) getInbox(ctx context.Context, p *Pagination, pubkey string) e
 
 	rows, err := tx.Query(ctx, qry, pubkey)
 	if err != nil {
-		log.Println(err)
+		log.Println("Query:: ", err)
 		return nil
 	}
 	defer rows.Close()
@@ -746,7 +746,7 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 	FROM events e LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
 	WHERE e.event_id = $1`
 	//qry = qry + "'" + id + "'"
-	log.Println(qry)
+	log.Println("Query:: ", qry)
 
 	var event Event
 	var name sql.NullString
@@ -763,11 +763,11 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 		&event.Etags, &event.Ptags, &name, &about, &picture, &website, &nip05, &lud16, &displayname)
 	switch {
 	case err == sql.ErrNoRows:
-		log.Printf("404 no event with id %s\n", id)
+		log.Printf("Query:: 404 no event with id %s\n", id)
 	case err != nil:
-		log.Fatalf("502 query error: %v\n", err)
+		log.Fatalf("Query:: 502 query error: %v\n", err)
 	default:
-		log.Println("200 Event: ", event)
+		log.Println("Query:: 200 Event: ", event)
 	}
 	event.Tree = 1
 	event.RootId = event.Event.ID
@@ -789,7 +789,7 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 	var treeRows pgx.Rows
 	treeRows, err = st.DbPool.Query(ctx, treeQry)
 	if err != nil {
-		log.Println(err)
+		log.Println("Query:: ", err)
 	}
 	for treeRows.Next() {
 		var childEvent Event
@@ -811,7 +811,7 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 			&childEvent.Event.ID, &childEvent.Event.PubKey, &childEvent.Event.Kind, &childEvent.Event.CreatedAt, &childEvent.Event.Content, &childEvent.Event.Tags, &childEvent.Event.Sig,
 			&childEvent.Etags, &childEvent.Ptags, &name, &about, &picture,
 			&website, &nip05, &lud16, &displayname, &followed); err != nil {
-			log.Println(err.Error())
+			log.Println("Query:: ", err.Error())
 			panic(err)
 		}
 
@@ -860,7 +860,7 @@ func (st *Storage) FindRawEvent(ctx context.Context, id string) (nostr.Event, er
 	FROM events e 
 	WHERE e.event_id = $1`
 	qryStr := qry[:len(qry)-2] + "'" + id + "'"
-	log.Println(qryStr)
+	log.Println("Query:: ", qryStr)
 
 	var event Event
 	event.Event = &nostr.Event{}
@@ -869,11 +869,11 @@ func (st *Storage) FindRawEvent(ctx context.Context, id string) (nostr.Event, er
 		&event.Event.Content, &event.Event.Sig, &event.Event.Tags)
 	switch {
 	case err == sql.ErrNoRows:
-		log.Printf("404 no event with id %s\n", id)
+		log.Printf("Query:: 404 no event with id %s\n", id)
 	case err != nil:
-		log.Printf("502 query error: %v\n", err)
+		log.Printf("Query:: 502 query error: %v\n", err)
 	default:
-		log.Println("200 Event: ", event)
+		log.Println("Query:: 200 Event: ", event)
 	}
 
 	return *event.Event, err
@@ -890,7 +890,7 @@ func (st *Storage) CheckProfiles(ctx context.Context, pubkeys []string, epochtim
 	log.Println("Ignore these pubkeys for data refreshing: ", qry, epochtime)
 	rows, err := st.DbPool.Query(ctx, qry, epochtime)
 	if err != nil {
-		log.Println(err)
+		log.Println("Query:: ", err)
 		return []string{}, err
 	}
 
@@ -898,19 +898,19 @@ func (st *Storage) CheckProfiles(ctx context.Context, pubkeys []string, epochtim
 	for _, pk := range pubkeys { // Put all pubkeys in a map
 		pubkeysMap[pk] = pk
 	}
-	log.Println("Map of pubkeys: ", pubkeysMap)
+	log.Println("Query:: ", "Map of pubkeys: ", pubkeysMap)
 	for rows.Next() {
 		var pubkey string
 		_ = rows.Scan(&pubkey)
 		delete(pubkeysMap, pubkey) // Ignore all pubkeys from the result
 	}
-	log.Println("Left over pubkeys to get (map): ", pubkeysMap)
+	log.Println("Query:: ", "Left over pubkeys to get (map): ", pubkeysMap)
 
 	pubkeysFinal := make([]string, 0) // Create empty []string, i think you can also use []string{}
 	for _, pk := range pubkeysMap {
 		pubkeysFinal = append(pubkeysFinal, pk) // Transform it back to a []string
 	}
-	log.Println("Left over pubkeys to get (array): ", pubkeysFinal)
+	log.Println("Query:: ", "Left over pubkeys to get (array): ", pubkeysFinal)
 	return pubkeysFinal, nil
 }
 
@@ -920,7 +920,7 @@ func (st *Storage) CheckProfiles(ctx context.Context, pubkeys []string, epochtim
 func (st *Storage) BlockPubkey(ctx context.Context, pubkey string) error {
 	_, err := st.DbPool.Exec(ctx, `INSERT INTO "block_pubkeys" (pubkey, created_at) VALUES ($1, NOW()) ON CONFLICT (pubkey) DO NOTHING;`, pubkey)
 	if err != nil {
-		log.Println(err)
+		log.Println("Query:: ", err)
 		return err
 	}
 
@@ -933,7 +933,7 @@ func (st *Storage) BlockPubkey(ctx context.Context, pubkey string) error {
 func (st *Storage) FollowPubkey(ctx context.Context, pubkey string) error {
 	_, err := st.DbPool.Exec(ctx, `INSERT INTO "follow_pubkeys" (pubkey, created_at) VALUES ($1, NOW()) ON CONFLICT (pubkey) DO NOTHING;`, pubkey)
 	if err != nil {
-		log.Println(err)
+		log.Println("Query:: ", err)
 		return err
 	}
 
@@ -943,7 +943,7 @@ func (st *Storage) FollowPubkey(ctx context.Context, pubkey string) error {
 func (st *Storage) UnfollowPubkey(ctx context.Context, pubkey string) error {
 	_, err := st.DbPool.Exec(ctx, `DELETE FROM "follow_pubkeys" WHERE pubkey = $1;`, pubkey)
 	if err != nil {
-		log.Println(err)
+		log.Println("Query:: ", err)
 		return err
 	}
 
@@ -963,8 +963,7 @@ func (st *Storage) FindProfile(ctx context.Context, pubkey string) (Profile, err
 	var qry = `SELECT
 	name, about, picture, website, nip05, lud16, display_name
 	FROM profiles WHERE pubkey = $1`
-	//qry = qry + "'" + id + "'"
-	log.Println(qry)
+	log.Println("Query:: ", qry)
 
 	var profile Profile = Profile{}
 
@@ -979,9 +978,9 @@ func (st *Storage) FindProfile(ctx context.Context, pubkey string) (Profile, err
 	err := st.DbPool.QueryRow(ctx, qry, pubkey).Scan(&name, &about, &picture, &website, &nip05, &lud16, &displayname)
 	switch {
 	case err == sql.ErrNoRows:
-		log.Printf("404 no profile with pubkey %s\n", pubkey)
+		log.Printf("Query:: 404 no profile with pubkey %s\n", pubkey)
 	case err != nil:
-		log.Fatalf("502 query error: %v\n", err)
+		log.Fatalf("Query:: 502 query error: %v\n", err)
 	}
 
 	if name.Valid {
