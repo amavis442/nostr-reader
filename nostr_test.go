@@ -14,5 +14,5 @@ func TestNostrPost(t *testing.T) {
 	var nostr Nostr
 	nostr.Cfg = cfg
 
-	nostr.Post(context.Background(), "This is a test", "")
+	nostr.Post(context.Background(), "This is a test")
 }

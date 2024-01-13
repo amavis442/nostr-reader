@@ -88,69 +88,16 @@ func (nostr *Nostr) Do(r Relay, f func(context.Context, *nostrHandler.Relay) boo
 	wg.Wait()
 }
 
-func (nostr *Nostr) Post(ctx context.Context, content string, event_id string) (nostrHandler.Event, error) {
+func (nostr *Nostr) Post(ctx context.Context, content string) (nostrHandler.Event, error) {
 	ev := nostrHandler.Event{}
 	ev.Tags = nostrHandler.Tags{}
-	var replyETags nostrHandler.Tags
-	var replyEv nostrHandler.Event
-	var err error
-
 	ctx, cancel := context.WithTimeout(ctx, time.Second*15) // It has 15 seconds to complete or else it will cancel itself.
 	defer cancel()
-
-	if event_id != "" { // It is a reply to an Event
-		replyEv, err = nostr.Storage.FindRawEvent(ctx, event_id)
-		if err != nil {
-			return nostrHandler.Event{}, err
-		}
-		replyETags = replyEv.Tags.GetAll([]string{"e"})
-
-		log.Println("Post:: Reply event source: ", replyEv)
-		log.Println("Post:: Reply event tags: ", replyETags)
-	}
 
 	ev.PubKey = nostr.Cfg.Pubkey
 	ev.CreatedAt = nostrHandler.Now()
 	ev.Kind = nostrHandler.KindTextNote
 	ev.Content = content
-
-	var hasRootTag bool = false
-	if replyEv.ID != "" {
-		// We reply to the root of the Thread
-		if len(replyETags) == 0 {
-			ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"e", replyEv.ID, "", "root"})
-			ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"p", replyEv.PubKey})
-			log.Println("Post:: Added root marker: ", ev.Tags)
-		}
-
-		// We reply to a reply which should have tags
-		if len(replyEv.Tags) > 0 {
-			for _, tag := range replyEv.Tags {
-				log.Println("Post:: Walking the tags if it works...", tag)
-
-				if tag[0] == "e" && len(tag) > 2 {
-					if tag[3] == "root" {
-						ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{tag[0], tag[1], tag[2], "root"})
-						log.Println("Post:: Thread has root marker so we keep that: ", replyEv.Tags)
-						hasRootTag = true
-					}
-				}
-
-				if tag[0] == "p" {
-					ev.Tags = ev.Tags.AppendUnique(tag)
-				}
-			}
-
-			if !hasRootTag && len(replyETags) > 0 {
-				log.Println("Post:: Thread has no root marker but has #e tags so we add the root marker")
-				ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"e", event_id, "", "root"})
-			}
-			if hasRootTag && len(replyETags) > 0 {
-				ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"e", event_id, "", "reply"})
-			}
-			ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"p", replyEv.PubKey})
-		}
-	}
 
 	var success int
 	nostr.Do(Relay{Write: true}, func(ctx context.Context, relay *nostrHandler.Relay) bool {
@@ -164,16 +111,109 @@ func (nostr *Nostr) Post(ctx context.Context, content string, event_id string) (
 			log.Println("Post:: ", err)
 			return false
 		}
-		log.Println("Post:: Posting to: [", relay.URL, "], Event data: ", ev)
+		log.Println("Post:: Publish to: [", relay.URL, "], Event data: ", ev)
 		success += 1
 		return true
 	})
 
 	if success == 0 {
-		log.Println("Post:: cannot reply")
-		return nostrHandler.Event{}, errors.New("cannot reply")
+		log.Println("Post:: cannot post")
+		return nostrHandler.Event{}, errors.New("cannot post")
 	}
 	log.Println("Post:: Saving post: ", ev)
+
+	nostr.Storage.SaveEvents(ctx, []*nostrHandler.Event{&ev})
+	return ev, nil
+}
+
+func (nostr *Nostr) Reply(ctx context.Context, content string, event_id string) (nostrHandler.Event, error) {
+	if event_id == "" {
+		log.Println("Reply::Wrong function call. needs event_id since is is a reply")
+		return nostrHandler.Event{}, errors.New("no event_id in call")
+	}
+
+	ev := nostrHandler.Event{}
+	ev.Tags = nostrHandler.Tags{}
+	var replyETags nostrHandler.Tags
+	var replyEv nostrHandler.Event
+	var err error
+
+	ctx, cancel := context.WithTimeout(ctx, time.Second*15) // It has 15 seconds to complete or else it will cancel itself.
+	defer cancel()
+
+	replyEv, err = nostr.Storage.FindRawEvent(ctx, event_id)
+	if err != nil {
+		return nostrHandler.Event{}, err
+	}
+	replyETags = replyEv.Tags.GetAll([]string{"e"})
+
+	log.Println("Reply:: event source: ", replyEv)
+	log.Println("Reply:: event tags: ", replyETags)
+
+	ev.PubKey = nostr.Cfg.Pubkey
+	ev.CreatedAt = nostrHandler.Now()
+	ev.Kind = nostrHandler.KindTextNote
+	ev.Content = content
+
+	var hasRootTag bool = false
+
+	// We reply to the root of the Thread
+	if len(replyETags) == 0 {
+		ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"e", replyEv.ID, "", "root"})
+		ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"p", replyEv.PubKey})
+		log.Println("Reply:: Added root marker: ", ev.Tags)
+	}
+
+	// We reply to a reply which should have tags
+	if len(replyEv.Tags) > 0 {
+		for _, tag := range replyEv.Tags {
+			log.Println("Reply:: Walking the tags if it works...", tag)
+
+			if tag[0] == "e" && len(tag) > 2 {
+				if tag[3] == "root" {
+					ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{tag[0], tag[1], tag[2], "root"})
+					log.Println("Reply:: Thread has root marker so we keep that: ", replyEv.Tags)
+					hasRootTag = true
+				}
+			}
+
+			if tag[0] == "p" {
+				ev.Tags = ev.Tags.AppendUnique(tag)
+			}
+		}
+
+		if !hasRootTag && len(replyETags) > 0 {
+			log.Println("Reply:: Thread has no root marker but has #e tags so we add the root marker")
+			ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"e", event_id, "", "root"})
+		}
+		if hasRootTag && len(replyETags) > 0 {
+			ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"e", event_id, "", "reply"})
+		}
+		ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"p", replyEv.PubKey})
+	}
+
+	var success int
+	nostr.Do(Relay{Write: true}, func(ctx context.Context, relay *nostrHandler.Relay) bool {
+		// calling Sign sets the event ID field and the event Sig field
+		if err := ev.Sign(nostr.Cfg.Pk); err != nil {
+			return false
+		}
+
+		err := relay.Publish(ctx, ev)
+		if err != nil {
+			log.Println("Reply:: ", err)
+			return false
+		}
+		log.Println("Reply:: publish to: [", relay.URL, "], Event data: ", ev)
+		success += 1
+		return true
+	})
+
+	if success == 0 {
+		log.Println("Reply:: cannot reply")
+		return nostrHandler.Event{}, errors.New("cannot reply")
+	}
+	log.Println("Reply:: Saving reply: ", ev)
 
 	nostr.Storage.SaveEvents(ctx, []*nostrHandler.Event{&ev})
 	return ev, nil

@@ -397,7 +397,15 @@ func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	log.Println("Msg to publish: ", msg.Msg)
-	postEv, _ := req.Nostr.Post(ctx, msg.Msg, msg.Event_id)
+	var postEv nostrHandler.Event
+	if msg.Event_id == "" {
+		postEv, _ = req.Nostr.Post(ctx, msg.Msg)
+	}
+
+	if msg.Event_id != "" {
+		postEv, _ = req.Nostr.Reply(ctx, msg.Msg, msg.Event_id)
+	}
+
 	test := map[string]string{}
 
 	test["status"] = "ok"
