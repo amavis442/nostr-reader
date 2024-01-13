@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"sync"
 	"time"
 
@@ -90,7 +91,6 @@ func (nostr *Nostr) Do(r Relay, f func(context.Context, *nostrHandler.Relay) boo
 func (nostr *Nostr) Post(ctx context.Context, content string, event_id string) (nostrHandler.Event, error) {
 	ev := nostrHandler.Event{}
 	ev.Tags = nostrHandler.Tags{}
-	var numEtags int = 0
 	var replyETags nostrHandler.Tags
 	var replyEv nostrHandler.Event
 	var err error
@@ -104,14 +104,9 @@ func (nostr *Nostr) Post(ctx context.Context, content string, event_id string) (
 			return nostrHandler.Event{}, err
 		}
 		replyETags = replyEv.Tags.GetAll([]string{"e"})
-		numEtags = len(replyETags)
-		if numEtags > 0 {
-			fmt.Println(replyETags)
-			fmt.Println("--------------------------------")
-			fmt.Println(replyETags[0][1])
-			fmt.Println(event_id)
-			fmt.Println("********************************")
-		}
+
+		log.Println("Post:: Reply event source: ", replyEv)
+		log.Println("Post:: Reply event tags: ", replyETags)
 	}
 
 	ev.PubKey = nostr.Cfg.Pubkey
@@ -119,49 +114,42 @@ func (nostr *Nostr) Post(ctx context.Context, content string, event_id string) (
 	ev.Kind = nostrHandler.KindTextNote
 	ev.Content = content
 
-	fmt.Println(replyEv)
-	log.Println(replyEv)
-	log.Println(replyETags)
-	log.Println(len(replyETags))
-
-	// We reply to the root of the Thread
-	if replyEv.ID != "" && len(replyETags) == 0 {
-		ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"e", replyEv.ID, "", "root"})
-		ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"p", replyEv.PubKey})
-		log.Println("Response to event id [", event_id, "]. Added root marker. ", ev.Tags)
-	}
-
-	// We reply to a reply which should have tags
 	var hasRootTag bool = false
-	if len(replyEv.Tags) > 0 {
-		for _, tag := range replyEv.Tags {
-			log.Println("Walking the tags if it works...", tag)
+	if replyEv.ID != "" {
+		// We reply to the root of the Thread
+		if len(replyETags) == 0 {
+			ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"e", replyEv.ID, "", "root"})
+			ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"p", replyEv.PubKey})
+			log.Println("Post:: Added root marker: ", ev.Tags)
+		}
 
-			if tag[0] == "e" && len(tag) > 2 {
-				if tag[3] == "reply" {
-					log.Println("Remove reply marker from ", tag[1])
-					ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{tag[0], tag[1], tag[2], ""})
+		// We reply to a reply which should have tags
+		if len(replyEv.Tags) > 0 {
+			for _, tag := range replyEv.Tags {
+				log.Println("Post:: Walking the tags if it works...", tag)
+
+				if tag[0] == "e" && len(tag) > 2 {
+					if tag[3] == "root" {
+						ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{tag[0], tag[1], tag[2], "root"})
+						log.Println("Post:: Thread has root marker so we keep that: ", replyEv.Tags)
+						hasRootTag = true
+					}
 				}
-				if tag[3] != "reply" {
-					log.Println("No markers", tag[1])
+
+				if tag[0] == "p" {
 					ev.Tags = ev.Tags.AppendUnique(tag)
 				}
-				if tag[3] == "root" {
-					ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{tag[0], tag[1], tag[2], "root"})
-					log.Println("Thread has root marker so we keep that: ", replyEv.Tags)
-					hasRootTag = true
-				}
 			}
 
-			if tag[0] == "p" {
-				ev.Tags = ev.Tags.AppendUnique(tag)
+			if !hasRootTag && len(replyETags) > 0 {
+				log.Println("Post:: Thread has no root marker but has #e tags so we add the root marker")
+				ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"e", event_id, "", "root"})
 			}
+			if hasRootTag && len(replyETags) > 0 {
+				ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"e", event_id, "", "reply"})
+			}
+			ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"p", replyEv.PubKey})
 		}
-		if !hasRootTag && len(replyETags) > 0 {
-			log.Println("Thread has no root marker but has #e tags so we add the root marker")
-			ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"e", event_id, "", "root"})
-		}
-		ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"p", replyEv.PubKey})
 	}
 
 	var success int
@@ -176,8 +164,7 @@ func (nostr *Nostr) Post(ctx context.Context, content string, event_id string) (
 			fmt.Println(err)
 			return false
 		}
-		log.Println("Posting to: [", relay.URL, "] Event data: ", ev)
-		fmt.Println("Posting to: [", relay.URL, "] Event data: ", ev)
+		log.Println("Post:: Posting to: [", relay.URL, "] Event data: ", ev)
 		success += 1
 		return true
 	})
@@ -185,10 +172,9 @@ func (nostr *Nostr) Post(ctx context.Context, content string, event_id string) (
 	if success == 0 {
 		return nostrHandler.Event{}, errors.New("cannot reply")
 	}
-	log.Println("Saving post: ", ev)
+	log.Println("Post:: Saving post: ", ev)
 
 	nostr.Storage.SaveEvents(ctx, []*nostrHandler.Event{&ev})
-
 	return ev, nil
 }
 
@@ -200,13 +186,20 @@ func (nostr *Nostr) GetEvents(ctx context.Context, filter nostrHandler.Filter, w
 	fmt.Println("Get Event data from relays")
 	var m sync.Map
 	var mu sync.Mutex
+	found := false
 
 	nostr.Do(Relay{Read: true}, func(ctx context.Context, relay *nostrHandler.Relay) bool {
 		mu.Lock()
+		if found {
+			mu.Unlock()
+			return false
+		}
+		mu.Unlock()
+
 		evs, err := relay.QuerySync(ctx, filter)
 		if err != nil {
 			mu.Unlock()
-			return false
+			return true
 		}
 		/**
 		 * Deduplicate
@@ -216,24 +209,54 @@ func (nostr *Nostr) GetEvents(ctx context.Context, filter nostrHandler.Filter, w
 			if _, ok := m.Load(ev.ID); !ok {
 				m.LoadOrStore(ev.ID, ev)
 				if len(filter.IDs) == 1 {
+					mu.Lock()
+					found = true
 					ctx.Done()
+					mu.Unlock()
 					break
 				}
 			}
 		}
-		mu.Unlock()
 		return true
 	})
 
 	/**
 	 * Turn the sync map into an array we can process
 	 */
-	var evs []*nostrHandler.Event
+	/*var evs []*nostrHandler.Event
 	m.Range(func(k, v any) bool {
 		log.Println(k)
 		evs = append(evs, v.(*nostrHandler.Event))
 		return true
 	})
+	*/
+
+	keys := []string{}
+	m.Range(func(k, v any) bool {
+		keys = append(keys, k.(string))
+		return true
+	})
+
+	sort.Slice(keys, func(i, j int) bool {
+		lhs, ok := m.Load(keys[i])
+		if !ok {
+			return false
+		}
+		rhs, ok := m.Load(keys[j])
+		if !ok {
+			return false
+		}
+		return lhs.(*nostrHandler.Event).CreatedAt.Time().Before(rhs.(*nostrHandler.Event).CreatedAt.Time())
+	})
+
+	var evs []*nostrHandler.Event
+	for _, key := range keys {
+		vv, ok := m.Load(key)
+		if !ok {
+			continue
+		}
+		evs = append(evs, vv.(*nostrHandler.Event))
+	}
 
 	/**
 	 * Array of all the pubkeys in the event also the #p tags
