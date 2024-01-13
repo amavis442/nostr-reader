@@ -32,7 +32,8 @@
       <form on:submit|preventDefault={onSubmit}>
         {#if note}
           <h5 class="text-gray-900 text-xl font-medium mb-2">
-            Re: {note.event.content.slice(0, 30)}
+            Re: {note.event.content.slice(0, 30)}<br/>
+            <small>{note.event.id.slice(0, 5)}...{note.event.id.slice(-5)}</small>
           </h5>
           <TextArea id="reply{note.event.id}" placeholder="Add reply" cols="30" rows="5"/>
         {:else}
