@@ -89,12 +89,12 @@ export function blockUser(pubkey: string) {
     .then((data) => {
       console.log("Json is ", data);
       const pageData = get(pageMetaData)
-      refreshView({ 
-        page: pageData.current_page, 
-        limit: pageData.limit, 
+      refreshView({
+        page: pageData.current_page,
+        limit: pageData.limit,
         since: pageData.since,
         renew: false,
-        maxid: pageData.maxid 
+        maxid: pageData.maxid
       });
       return data;
     })
@@ -117,12 +117,12 @@ export function followUser(pubkey: string) {
     .then((data) => {
       console.log("Json is ", data);
       const pageData = get(pageMetaData)
-      refreshView({ 
-        page: pageData.current_page, 
-        limit: pageData.limit, 
-        since: pageData.since,        
+      refreshView({
+        page: pageData.current_page,
+        limit: pageData.limit,
+        since: pageData.since,
         renew: false,
-        maxid: pageData.maxid  
+        maxid: pageData.maxid
       });
       return data;
     })
@@ -145,12 +145,12 @@ export function unfollowUser(pubkey: string) {
     .then((data) => {
       console.log("Json is ", data);
       const pageData = get(pageMetaData)
-      refreshView({ 
-        page: pageData.current_page, 
-        limit: pageData.limit, 
+      refreshView({
+        page: pageData.current_page,
+        limit: pageData.limit,
         since: pageData.since,
         renew: false,
-        maxid: pageData.maxid   
+        maxid: pageData.maxid
       });
       return data;
     })
@@ -177,23 +177,23 @@ export async function publish(msg: string, note) {
       console.debug("Refresh after publish: ", note.event.id);
       if (note == "") {
         // Refresh whole page
-        refreshView({ 
-          page: pageData.current_page, 
-          limit: pageData.limit, 
+        refreshView({
+          page: pageData.current_page,
+          limit: pageData.limit,
           since: pageData.since,
           renew: true,
-          maxid: pageData.maxid  
+          maxid: pageData.maxid
         });
       }
       if (note != "") {
         // Only refresh note
         //syncNote(note) // Somehow i introduced a bug in this one :( 
-        refreshView({ 
-          page: pageData.current_page, 
-          limit: pageData.limit, 
+        refreshView({
+          page: pageData.current_page,
+          limit: pageData.limit,
           since: pageData.since,
           renew: false,
-          maxid: pageData.maxid  
+          maxid: pageData.maxid
         });
       }
       return data;
@@ -204,29 +204,12 @@ export async function publish(msg: string, note) {
 }
 
 export async function syncNote(note) {
-  fetch(`${import.meta.env.VITE_API_LINK}/api/syncnote`, {
-    method: "POST",
-    body: JSON.stringify({ id: note.event.id }),
-    headers: {
-      "Content-Type": "application/json",
-    },
-  })
-    .then((res) => {
-      return res.json();
-    })
-    .then((data) => {
-      //alert(JSON.stringify(data))
-      pageData.update((events) => { 
-        return events.map(function(ev) {
-          if (ev.event.id == data.data.root_id) {
-            ev.event = data.data;
-          }
-          return ev
-        })        
-      });
-      return data;
-    })
-    .catch((err) => {
-      console.error("error", err);
-    });
+  const pageData = get(pageMetaData)
+  await refreshView({
+    page: pageData.current_page,
+    limit: pageData.limit,
+    since: pageData.since,
+    renew: false,
+    maxid: pageData.maxid
+  });
 }
