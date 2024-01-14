@@ -442,7 +442,7 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 		`
 	}
 	mainQry += `WHERE e.kind = 1 AND e.etags='{}' AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false`
-	if !p.Renew {
+	if !p.Renew && !follow {
 		mainQry += ` AND e.id <= ` + fmt.Sprintf("%d", p.MaxId)
 	}
 	if p.Since != 0 {
@@ -451,7 +451,10 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 	}
 
 	countQry := `SELECT COUNT(*) AS cnt FROM (SELECT DISTINCT id, event_id, event_created_at FROM (` + mainQry + `) resultTable) tbl`
-	tx.QueryRow(ctx, countQry).Scan(&recordCount)
+	err = tx.QueryRow(ctx, countQry).Scan(&recordCount)
+	if err != nil {
+		log.Fatal(err)
+	}
 	p.SetTotal(recordCount)
 	p.SetTo()
 	if recordCount < 1 {
@@ -470,7 +473,11 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 	selectQry := mainQry + ` AND e.id IN (`
 	var maxId int64 = 0
 	for rowsIds.Next() {
-		rowsIds.Scan(&recordId)
+		err = rowsIds.Scan(&recordId)
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		selectQry = selectQry + fmt.Sprintf("%d", recordId) + ","
 		if recordId > maxId {
 			maxId = recordId
@@ -482,6 +489,7 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 	}
 	finalQry := selectQry[:len(selectQry)-1]
 	finalQry = finalQry + ") ORDER BY event_created_at DESC;"
+
 	rows, err := tx.Query(ctx, finalQry)
 	if err != nil {
 		log.Println(err)
