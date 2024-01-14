@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"sort"
 	"sync"
 	"time"
 
@@ -261,43 +260,11 @@ func (nostr *Nostr) GetEvents(ctx context.Context, filter nostrHandler.Filter, w
 		return true
 	})
 
-	/**
-	 * Turn the sync map into an array we can process
-	 */
-	/*var evs []*nostrHandler.Event
+	var evs []*nostrHandler.Event
 	m.Range(func(k, v any) bool {
-		log.Println(k)
 		evs = append(evs, v.(*nostrHandler.Event))
 		return true
 	})
-	*/
-
-	keys := []string{}
-	m.Range(func(k, v any) bool {
-		keys = append(keys, k.(string))
-		return true
-	})
-
-	sort.Slice(keys, func(i, j int) bool {
-		lhs, ok := m.Load(keys[i])
-		if !ok {
-			return false
-		}
-		rhs, ok := m.Load(keys[j])
-		if !ok {
-			return false
-		}
-		return lhs.(*nostrHandler.Event).CreatedAt.Time().Before(rhs.(*nostrHandler.Event).CreatedAt.Time())
-	})
-
-	var evs []*nostrHandler.Event
-	for _, key := range keys {
-		vv, ok := m.Load(key)
-		if !ok {
-			continue
-		}
-		evs = append(evs, vv.(*nostrHandler.Event))
-	}
 
 	/**
 	 * Array of all the pubkeys in the event also the #p tags
