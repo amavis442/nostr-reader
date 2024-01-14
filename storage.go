@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -219,6 +220,12 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string 
 	}
 	var tree Tree
 	for _, ev := range evs {
+		if ev.CreatedAt.Time().Unix() > time.Now().Unix() {
+			log.Println("QUERY:: Ignoring this event because timestamp is in the future")
+			fmt.Fprintf(os.Stderr, "log message: %s", "QUERY:: Ignoring this event because timestamp is in the future."+ev.String())
+			continue
+		}
+
 		fmt.Println("Event ID: ", ev.ID)
 		if len(ev.PubKey) == 64 {
 			pubkeys = append(pubkeys, ev.PubKey)
