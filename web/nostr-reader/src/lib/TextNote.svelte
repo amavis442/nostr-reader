@@ -12,6 +12,7 @@
   import FaSolidBan from "svelte-icons-pack/fa/FaSolidBan";
   import FaCommentDots from "svelte-icons-pack/fa/FaCommentDots";
   import FaSolidSync from "svelte-icons-pack/fa/FaSolidSync";
+  import FaSolidLongArrowAltUp from "svelte-icons-pack/fa/FaSolidLongArrowAltUp";
 
   const dispatch = createEventDispatcher();
   export let note;
@@ -40,6 +41,10 @@
   function syncnote(note) {
     dispatch("syncNote", note);
   }
+  
+  function gotoTopOfPage(note) {
+    dispatch("topPage", note);
+  }
 
   let repliesExpanded = false;
   function toggleReplies() {
@@ -57,7 +62,7 @@
   function align() {
     if (note.tree == 0) return "";
   }
-
+  
   function firstBlock() {
     if (note.tree === 0) {
       return "border-l-4 border-t-2 " + borderColor;
@@ -188,6 +193,14 @@
                             ><Icon src={FaSolidBan} size="24" /></button
                           >
                         </div>
+                        <div>
+                          <button
+                            on:click={gotoTopOfPage(note)}
+                            class="p-1"
+                            title="block"
+                            ><Icon src={FaSolidLongArrowAltUp} size="24" /></button
+                          >
+                        </div>
                       </div>
                     </span>
                   </div>
@@ -247,6 +260,7 @@
                     on:blockUser
                     on:reply
                     on:info
+                    on:topPage
                   />
                 </li>
               {/each}

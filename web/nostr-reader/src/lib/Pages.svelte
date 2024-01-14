@@ -16,7 +16,7 @@
     pageData,
     setApiUrl,
     pageMetaData,
-    syncNote
+    syncNote,
   } from "./state/main";
 
   export let apiUrl: string = "";
@@ -28,9 +28,9 @@
       limit: $pageMetaData.limit,
       since: $pageMetaData.since,
       renew: true,
-      maxid: $pageMetaData.maxid
+      maxid: $pageMetaData.maxid,
     });
-    document.getElementById("content").scrollTo(0, 0)
+    document.getElementById("realNotesContainer").scrollTo(0, 0);
   });
 
   function createReplyTextNote(replyToNote) {
@@ -47,21 +47,27 @@
       note: note,
     });
   }
+
+  function topOfPage(ev) {
+    document.getElementById('realNotesContainer').scrollTo(0, 0);
+  }
 </script>
 
-<main>
+<main id="whatever">
   <Feeder>
     <slot>
       <div class="flex flex-col bg-white p-2 rounded-lg m-2">
-        <button on:click={() => {
-          refreshView({
-            page: $pageMetaData.current_page,
-            limit: $pageMetaData.limit,
-            since: $pageMetaData.since,
-            renew: true,
-            maxid: $pageMetaData.maxid
-          })
-        }} class="btn btn-blue"
+        <button
+          on:click={() => {
+            refreshView({
+              page: $pageMetaData.current_page,
+              limit: $pageMetaData.limit,
+              since: $pageMetaData.since,
+              renew: true,
+              maxid: $pageMetaData.maxid,
+            });
+          }}
+          class="btn btn-blue"
           ><i class="fa-solid fa-arrows-rotate"></i> Sync</button
         >
         <select
@@ -73,7 +79,7 @@
               limit: $pageMetaData.limit,
               since: $pageMetaData.since,
               renew: false,
-              maxid: $pageMetaData.maxid
+              maxid: $pageMetaData.maxid,
             });
           }}
           class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
@@ -94,7 +100,7 @@
               limit: $pageMetaData.limit,
               since: $pageMetaData.since,
               renew: false,
-              maxid: $pageMetaData.maxid
+              maxid: $pageMetaData.maxid,
             })}
           class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
         >
@@ -112,7 +118,7 @@
                 limit: $pageMetaData.limit,
                 since: $pageMetaData.since,
                 renew: false,
-                maxid: $pageMetaData.maxid
+                maxid: $pageMetaData.maxid,
               });
             }}
           ></Pagination>
@@ -133,6 +139,7 @@
             on:info={(ev) => {
               createInfoModal(ev.detail);
             }}
+            on:topPage={(ev) => topOfPage(ev)}
           ></TextNote>
         {/each}
       </ul>

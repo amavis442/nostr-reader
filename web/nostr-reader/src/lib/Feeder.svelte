@@ -23,7 +23,7 @@
               space-y-0 place-content-start
               h-full max-h-full w-11/12"
     >
-      <div class="h-full w-full overflow-y-auto">
+      <div class="h-full w-full overflow-y-auto" id="realNotesContainer">
         <slot />
       </div>
     </div>
