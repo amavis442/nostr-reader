@@ -146,9 +146,6 @@ func (nostr *Nostr) Reply(ctx context.Context, content string, event_id string) 
 	}
 	replyETags = replyEv.Tags.GetAll([]string{"e"})
 
-	log.Println("Reply:: event source: ", replyEv)
-	log.Println("Reply:: event tags: ", replyETags)
-
 	ev.PubKey = nostr.Cfg.Pubkey
 	ev.CreatedAt = nostrHandler.Now()
 	ev.Kind = nostrHandler.KindTextNote
@@ -160,18 +157,14 @@ func (nostr *Nostr) Reply(ctx context.Context, content string, event_id string) 
 	if len(replyETags) == 0 {
 		ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"e", replyEv.ID, "", "root"})
 		ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"p", replyEv.PubKey})
-		log.Println("Reply:: Added root marker: ", ev.Tags)
 	}
 
 	// We reply to a reply which should have tags
 	if len(replyEv.Tags) > 0 {
 		for _, tag := range replyEv.Tags {
-			log.Println("Reply:: Walking the tags if it works...", tag)
-
 			if tag[0] == "e" && len(tag) > 2 {
 				if tag[3] == "root" {
 					ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{tag[0], tag[1], tag[2], "root"})
-					log.Println("Reply:: Thread has root marker so we keep that: ", replyEv.Tags)
 					hasRootTag = true
 				}
 			}
@@ -182,7 +175,6 @@ func (nostr *Nostr) Reply(ctx context.Context, content string, event_id string) 
 		}
 
 		if !hasRootTag && len(replyETags) > 0 {
-			log.Println("Reply:: Thread has no root marker but has #e tags so we add the root marker")
 			ev.Tags = ev.Tags.AppendUnique(nostrHandler.Tag{"e", event_id, "", "root"})
 		}
 		if hasRootTag && len(replyETags) > 0 {
@@ -212,7 +204,6 @@ func (nostr *Nostr) Reply(ctx context.Context, content string, event_id string) 
 		log.Println("Reply:: cannot reply")
 		return nostrHandler.Event{}, errors.New("cannot reply")
 	}
-	log.Println("Reply:: Saving reply: ", ev)
 
 	nostr.Storage.SaveEvents(ctx, []*nostrHandler.Event{&ev})
 	return ev, nil
@@ -223,7 +214,6 @@ func (nostr *Nostr) Reply(ctx context.Context, content string, event_id string) 
  * try to get all the usernames metadata from who posted the note.
  */
 func (nostr *Nostr) GetEvents(ctx context.Context, filter nostrHandler.Filter, withProfiles bool) {
-	fmt.Println("Get Event data from relays")
 	var m sync.Map
 	var mu sync.Mutex
 	found := false
@@ -273,17 +263,9 @@ func (nostr *Nostr) GetEvents(ctx context.Context, filter nostrHandler.Filter, w
 	pubkeys = nostr.Storage.SaveEvents(ctx, evs)
 
 	if withProfiles {
-		for i, pubkey := range pubkeys {
-			log.Println(i, pubkey)
-		}
-
 		// Last but not least, try to get the user metadata
 		nostr.updateProfiles(ctx, pubkeys)
 	}
-
-	defer func() {
-		fmt.Println("Done receiving and closed ralay connections")
-	}()
 }
 
 /**
@@ -296,7 +278,6 @@ func (nostr *Nostr) getEventData(ctx context.Context) {
 
 	createdAt = nostr.Storage.getLastTimeStamp(ctx)
 
-	fmt.Println("Last timestamp: ", createdAt)
 	if createdAt < 1 {
 		createdAt = createdAtOffset
 	}
@@ -313,10 +294,6 @@ func (nostr *Nostr) getEventData(ctx context.Context) {
 	}
 
 	nostr.GetEvents(ctx, filter, true)
-
-	defer func() {
-		fmt.Println("Closing shop")
-	}()
 }
 
 /**
@@ -328,7 +305,6 @@ func (nostr *Nostr) updateProfiles(ctx context.Context, pubkeys []string) {
 
 	pubkeys, _ = nostr.Storage.CheckProfiles(ctx, pubkeys, tresholdTime)
 	if (len(pubkeys)) < 1 {
-		fmt.Println("No profiles to update")
 		return
 	}
 
@@ -337,7 +313,6 @@ func (nostr *Nostr) updateProfiles(ctx context.Context, pubkeys []string) {
 		Authors: pubkeys,
 	}
 
-	fmt.Println("Get user data from relays")
 	var m sync.Map
 	nostr.Do(Relay{Read: true}, func(ctx context.Context, relay *nostrHandler.Relay) bool {
 		evs, err := relay.QuerySync(ctx, filter)
@@ -354,13 +329,11 @@ func (nostr *Nostr) updateProfiles(ctx context.Context, pubkeys []string) {
 
 	var evs []*nostrHandler.Event
 	m.Range(func(k, v any) bool {
-		log.Println(k)
 		evs = append(evs, v.(*nostrHandler.Event))
 		return true
 	})
 
 	nostr.Storage.SaveProfiles(ctx, evs)
-	fmt.Println("Done for profiles")
 }
 
 /**
@@ -372,7 +345,6 @@ func (nostr *Nostr) blockPubkey(ctx context.Context, user *BlockPubkey) error {
 		log.Println(err)
 		return err
 	}
-	fmt.Println("Blocked: ", user.Pubkey)
 	return nil
 }
 
@@ -382,7 +354,6 @@ func (nostr *Nostr) FollowPubkey(ctx context.Context, user *FollowPubkey) error 
 		log.Println(err)
 		return err
 	}
-	fmt.Println("Followed: ", user.Pubkey)
 	return nil
 }
 
@@ -392,24 +363,18 @@ func (nostr *Nostr) UnfollowPubkey(ctx context.Context, user *FollowPubkey) erro
 		log.Println(err)
 		return err
 	}
-	fmt.Println("Unfollowed: ", user.Pubkey)
 	return nil
 }
 
 func (nostr *Nostr) GetMetaData(ctx context.Context) (nostrHandler.Event, error) {
 	pubkey := nostr.Cfg.Pubkey
 
-	//var tagMap nostrHandler.TagMap = make(nostrHandler.TagMap, 0)
-	//tagMap["p"] = []string{pubkey}
-
 	filter := nostrHandler.Filter{
 		Kinds:   []int{nostrHandler.KindProfileMetadata},
 		Authors: []string{pubkey},
-		//Tags:    tagMap,
-		Limit: 1,
+		Limit:   1,
 	}
 
-	fmt.Println("Get account data from relays:", filter)
 	var m sync.Map
 	nostr.Do(Relay{Read: true}, func(ctx context.Context, relay *nostrHandler.Relay) bool {
 		evs, err := relay.QuerySync(ctx, filter)
@@ -425,12 +390,9 @@ func (nostr *Nostr) GetMetaData(ctx context.Context) (nostrHandler.Event, error)
 	})
 
 	if v, ok := m.Load(pubkey); ok {
-		//var event *nostrHandler.Event
 		event := v.(*nostrHandler.Event)
-		fmt.Println(*event)
 		return *event, nil
 	}
-	fmt.Println("Done for profile and found nothing: ")
 
 	return nostrHandler.Event{}, nil
 }
@@ -463,8 +425,6 @@ func (nostr *Nostr) SetMetaData(ctx context.Context, user *UserProfile) error {
 			log.Println(err)
 			return false
 		}
-		log.Println("Reply", ev)
-		fmt.Println(ev)
 		success += 1
 		return true
 	})

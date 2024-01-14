@@ -160,7 +160,6 @@ func (st *Storage) SaveProfiles(ctx context.Context, evs []*nostr.Event) {
 		err = json.Unmarshal([]byte(ev.Content), &data)
 		if err != nil {
 			log.Println("Query:: ", err.Error(), ev.Content)
-			//panic(err)
 			continue
 		}
 
@@ -172,7 +171,6 @@ func (st *Storage) SaveProfiles(ctx context.Context, evs []*nostr.Event) {
 			log.Println(err)
 			ctx.Done()
 		}
-		fmt.Println("Profile: ", data.Name)
 
 		/*
 			if data.Nip05 == "" {
@@ -205,8 +203,6 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string 
 		if err != nil {
 			tx.Rollback(ctx)
 		} else {
-			fmt.Println("Ready to save events")
-
 			tx.Commit(ctx)
 		}
 	}()
@@ -221,12 +217,10 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string 
 	var tree Tree
 	for _, ev := range evs {
 		if ev.CreatedAt.Time().Unix() > time.Now().Unix() {
-			log.Println("QUERY:: Ignoring this event because timestamp is in the future")
 			fmt.Fprintf(os.Stderr, "log message: %s", "QUERY:: Ignoring this event because timestamp is in the future."+ev.String())
 			continue
 		}
 
-		fmt.Println("Event ID: ", ev.ID)
 		if len(ev.PubKey) == 64 {
 			pubkeys = append(pubkeys, ev.PubKey)
 		} else {
@@ -259,7 +253,6 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string 
 					log.Println("Query:: P# tag not valid: ", tag)
 					continue
 				} else {
-					log.Println("Query:: Adding pubkey from p# tag: ", tag[1])
 					ptags = append(ptags, tag[1])
 					pubkeys = append(pubkeys, tag[1])
 					ptagsNum = ptagsNum + 1
@@ -458,7 +451,6 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 	}
 
 	countQry := `SELECT COUNT(*) AS cnt FROM (SELECT DISTINCT id, event_id, event_created_at FROM (` + mainQry + `) resultTable) tbl`
-	log.Println("Query:: ", countQry)
 	tx.QueryRow(ctx, countQry).Scan(&recordCount)
 	p.SetTotal(recordCount)
 	p.SetTo()
@@ -471,7 +463,6 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 		selectIdQry = selectIdQry + ` OFFSET ` + fmt.Sprintf("%d", p.Offset)
 	}
 	selectIdQry = selectIdQry + `;`
-	log.Println("Query:: ", selectIdQry)
 	rowsIds, err := tx.Query(ctx, selectIdQry)
 	if err != nil {
 		log.Fatal(err)
@@ -491,7 +482,6 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 	}
 	finalQry := selectQry[:len(selectQry)-1]
 	finalQry = finalQry + ") ORDER BY event_created_at DESC;"
-	log.Println("Query:: ", finalQry)
 	rows, err := tx.Query(ctx, finalQry)
 	if err != nil {
 		log.Println(err)
@@ -605,7 +595,6 @@ func (st *Storage) getChildren(ctx context.Context, tx pgx.Tx, eventMap map[stri
 	}
 	treeQry = treeQry[:len(treeQry)-1] + `) AND e.event_id = t.event_id
 	 AND e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false;`
-	log.Println("Query:: ", "Tree query: ", treeQry)
 	var treeRows pgx.Rows
 	treeRows, err = tx.Query(ctx, treeQry)
 	if err != nil {
@@ -770,8 +759,6 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 		log.Printf("Query:: 404 no event with id %s\n", id)
 	case err != nil:
 		log.Fatalf("Query:: 502 query error: %v\n", err)
-	default:
-		log.Println("Query:: 200 Event: ", event)
 	}
 	event.Tree = 1
 	event.RootId = event.Event.ID
@@ -863,8 +850,6 @@ func (st *Storage) FindRawEvent(ctx context.Context, id string) (nostr.Event, er
 	var qry = `SELECT e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.sig, e.tags_full::json
 	FROM events e 
 	WHERE e.event_id = $1`
-	qryStr := qry[:len(qry)-2] + "'" + id + "'"
-	log.Println("Query:: ", qryStr)
 
 	var event Event
 	event.Event = &nostr.Event{}
@@ -876,8 +861,6 @@ func (st *Storage) FindRawEvent(ctx context.Context, id string) (nostr.Event, er
 		log.Printf("Query:: 404 no event with id %s\n", id)
 	case err != nil:
 		log.Printf("Query:: 502 query error: %v\n", err)
-	default:
-		log.Println("Query:: 200 Event: ", event)
 	}
 
 	return *event.Event, err
@@ -891,7 +874,6 @@ func (st *Storage) CheckProfiles(ctx context.Context, pubkeys []string, epochtim
 	}
 	qry = qry[:len(qry)-1] + `)`
 
-	log.Println("Ignore these pubkeys for data refreshing: ", qry, epochtime)
 	rows, err := st.DbPool.Query(ctx, qry, epochtime)
 	if err != nil {
 		log.Println("Query:: ", err)
@@ -902,19 +884,17 @@ func (st *Storage) CheckProfiles(ctx context.Context, pubkeys []string, epochtim
 	for _, pk := range pubkeys { // Put all pubkeys in a map
 		pubkeysMap[pk] = pk
 	}
-	log.Println("Query:: ", "Map of pubkeys: ", pubkeysMap)
 	for rows.Next() {
 		var pubkey string
 		_ = rows.Scan(&pubkey)
 		delete(pubkeysMap, pubkey) // Ignore all pubkeys from the result
 	}
-	log.Println("Query:: ", "Left over pubkeys to get (map): ", pubkeysMap)
 
 	pubkeysFinal := make([]string, 0) // Create empty []string, i think you can also use []string{}
 	for _, pk := range pubkeysMap {
 		pubkeysFinal = append(pubkeysFinal, pk) // Transform it back to a []string
 	}
-	log.Println("Query:: ", "Left over pubkeys to get (array): ", pubkeysFinal)
+
 	return pubkeysFinal, nil
 }
 
@@ -959,7 +939,6 @@ func (st *Storage) getLastTimeStamp(ctx context.Context) int64 {
 	row := st.DbPool.QueryRow(ctx, "SELECT MAX(created_at) as MaxCreated FROM events")
 	row.Scan(&createdAt)
 
-	fmt.Println("Timestamp from database: ", createdAt)
 	return createdAt.Unix()
 }
 
@@ -967,7 +946,6 @@ func (st *Storage) FindProfile(ctx context.Context, pubkey string) (Profile, err
 	var qry = `SELECT
 	name, about, picture, website, nip05, lud16, display_name
 	FROM profiles WHERE pubkey = $1`
-	log.Println("Query:: ", qry)
 
 	var profile Profile = Profile{}
 

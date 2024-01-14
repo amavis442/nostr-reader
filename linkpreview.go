@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	parse "net/url"
@@ -74,6 +73,10 @@ func URLPreview(ctx context.Context, url string) (map[string]interface{}, error)
 	const ConnectMaxWaitTime = 1 * time.Second
 	//const RequestMaxWaitTime = 5 * time.Second
 
+	if url == "" {
+		return map[string]interface{}{"url": url, "data": nil, "status": "error", "respcode": fmt.Sprint(408), "error": "cannot do request: No url present"}, fmt.Errorf("cannot do request: No url present")
+	}
+
 	meta := HTMLMeta{}
 
 	client := http.Client{
@@ -97,11 +100,9 @@ func URLPreview(ctx context.Context, url string) (map[string]interface{}, error)
 	}
 
 	if e, ok := err.(net.Error); ok && e.Timeout() {
-		log.Printf("Do request timeout: %s\n", err)
-		return map[string]interface{}{"url": url, "data": nil, "status": "error", "respcode": fmt.Sprint(408), "error": "do request timeout: " + err.Error()}, fmt.Errorf("do request timeout: %s", err)
+		return map[string]interface{}{"url": url, "data": nil, "status": "error", "respcode": fmt.Sprint(408), "error": "preview do request timeout: " + err.Error()}, fmt.Errorf("do request timeout: %s", err)
 	} else if err != nil {
-		log.Printf("Cannot do request: %s\n", err)
-		return map[string]interface{}{"url": url, "data": nil, "status": "error", "respcode": fmt.Sprint(400), "error": "cannot do request: " + err.Error()}, fmt.Errorf("cannot do request: %s", err)
+		return map[string]interface{}{"url": url, "data": nil, "status": "error", "respcode": fmt.Sprint(400), "error": "preview cannot do request: " + err.Error()}, fmt.Errorf("cannot do request: %s", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {

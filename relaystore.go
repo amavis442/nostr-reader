@@ -19,13 +19,6 @@ import (
  * Process all the http calls
  */
 func main() {
-	f, err := os.OpenFile("relaystore.log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer f.Close()
-	log.SetOutput(f)
-
 	cfg, err := LoadConfig()
 	if err != nil {
 		log.Println(err.Error())

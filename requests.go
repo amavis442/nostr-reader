@@ -362,14 +362,12 @@ func (req *Requests) PreviewLink(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	t := strings.TrimSpace(url.Url)
 	s := strings.Split(t, "\n")
-	log.Println("Url to preview: ", s[0])
 
 	result, err := URLPreview(ctx, s[0])
 	if err != nil {
 		log.Println(err)
 
 	}
-	log.Println("Preview result: ", result)
 	err = json.NewEncoder(w).Encode(result)
 	if err != nil {
 		panic(err)
