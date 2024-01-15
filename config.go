@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"runtime"
 )
 
 type Server struct {
@@ -33,13 +35,34 @@ type Config struct {
 	Server   *Server
 }
 
+func configDir() (string, error) {
+	switch runtime.GOOS {
+	case "darwin":
+		dir, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(dir, ".config"), nil
+	default:
+		return os.UserConfigDir()
+	}
+}
+
 /**
  * Get the content of config.json file
  */
 func LoadConfig() (*Config, error) {
 	var cfg Config
 
-	content, err := os.ReadFile("./config.json")
+	dir, err := configDir()
+	if err != nil {
+		return nil, err
+	}
+	dir = filepath.Join(dir, "relaystore")
+	fp := filepath.Join(dir, "config.json")
+	os.MkdirAll(filepath.Dir(fp), 0700)
+
+	content, err := os.ReadFile(fp)
 	if err != nil {
 		fmt.Println("Done", err)
 		log.Println("Error when opening file: ", err)
