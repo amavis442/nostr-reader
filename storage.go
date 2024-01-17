@@ -512,6 +512,7 @@ func (st *Storage) procesEventRows(rows pgx.Rows) (map[string]Event, []string, e
 	eventMap := make(map[string]Event)
 	var keys []string
 	for rows.Next() {
+
 		var event Event
 		var id int
 		var name sql.NullString
@@ -530,6 +531,10 @@ func (st *Storage) procesEventRows(rows pgx.Rows) (map[string]Event, []string, e
 			&name, &about, &picture, &website, &nip05, &lud16, &displayname, &followed); err != nil {
 			log.Println("Query:: ", err.Error())
 			panic(err)
+		}
+
+		if _, ok := eventMap[event.Event.ID]; ok {
+			continue
 		}
 
 		event.RootId = event.Event.ID
@@ -697,7 +702,8 @@ func (st *Storage) getChildren(ctx context.Context, tx pgx.Tx, eventMap map[stri
 }
 
 func (st *Storage) getInbox(ctx context.Context, p *Pagination, pubkey string) error {
-	qry := `SELECT 
+	qry := `
+	SELECT
 	e0.id, e0.event_id, e0.pubkey, e0.kind, e0.event_created_at, e0.content, e0.tags_full::json, e0.sig, e0.etags, e0.ptags,  
 	u.name, u.about , u.picture,
 	u.website, u.nip05, u.lud16, u.display_name, f.pubkey follow
@@ -705,7 +711,17 @@ func (st *Storage) getInbox(ctx context.Context, p *Pagination, pubkey string) e
 	events e0 
 	LEFT JOIN follow_pubkeys f ON (f.pubkey = e0.pubkey)
 	LEFT JOIN profiles u ON (u.pubkey = e0.pubkey ) 
-	JOIN (SELECT t.* FROM tree t, events e1 WHERE e1.pubkey = $1 AND e1.event_id = t.event_id) t0 ON e0.event_id = t0.root_event_id
+	JOIN
+	(SELECT
+	DISTINCT e0.event_id
+	FROM 
+	events e0 
+	LEFT JOIN follow_pubkeys f ON (f.pubkey = e0.pubkey)
+	LEFT JOIN profiles u ON (u.pubkey = e0.pubkey ) 
+	JOIN (SELECT t.root_event_id, t.event_id, t.reply_event_id FROM tree t, events e1 WHERE e1.pubkey = $1 AND e1.event_id = t.event_id) t0 ON e0.event_id = t0.root_event_id
+	) tbl 
+	ON
+	tbl.event_id = e0.event_id
 	ORDER BY e0.event_created_at DESC;`
 
 	tx, err := st.DbPool.Begin(ctx)
