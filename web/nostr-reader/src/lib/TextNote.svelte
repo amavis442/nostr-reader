@@ -1,7 +1,7 @@
 <script lang="ts">
   // @ts-nocheck
 
-  import { createEventDispatcher,beforeUpdate } from "svelte";
+  import { createEventDispatcher, beforeUpdate } from "svelte";
   import { toHtml, findLink } from "./util/html";
   import Preview from "./partials/Preview/Preview.svelte";
   import placeholder from "../assets/profile-picture.jpg";
@@ -41,7 +41,7 @@
   function syncnote(note) {
     dispatch("syncNote", note);
   }
-  
+
   function gotoTopOfPage(note) {
     dispatch("topPage", note);
   }
@@ -62,7 +62,7 @@
   function align() {
     if (note.tree == 0) return "";
   }
-  
+
   function firstBlock() {
     if (note.tree === 0) {
       return "border-l-4 border-t-2 " + borderColor;
@@ -84,13 +84,13 @@
 
   beforeUpdate(() => {
     imgUrls = findLink(note.event.content);
-    
+
     if (imgUrls && imgUrls.length > 0) {
       console.log("Img/youtube/rumble urls\n", imgUrls);
       hasImgUrls = true;
     }
 
-    content = toHtml(note.event.content)
+    content = toHtml(note.event.content);
   });
 </script>
 
@@ -173,15 +173,15 @@
                           >
                         </div>
                         <div>
-                          <button
-                            on:click={info(note)}
-                            title="info"
-                            class="p-1"
+                          <button on:click={info(note)} title="info" class="p-1"
                             ><Icon src={FaSolidInfoCircle} size="24" /></button
                           >
                         </div>
                         <div>
-                          <button on:click={syncnote(note)} title="sync note" class="p-1"
+                          <button
+                            on:click={syncnote(note)}
+                            title="sync note"
+                            class="p-1"
                             ><Icon src={FaSolidSync} size="24" /></button
                           >
                         </div>
@@ -198,7 +198,10 @@
                             on:click={gotoTopOfPage(note)}
                             class="p-1"
                             title="block"
-                            ><Icon src={FaSolidLongArrowAltUp} size="24" /></button
+                            ><Icon
+                              src={FaSolidLongArrowAltUp}
+                              size="24"
+                            /></button
                           >
                         </div>
                       </div>
@@ -212,20 +215,29 @@
               <div class="text-left w-full max-w-max break-words items-top">
                 <span class="text-black text-md font-medium break-words">
                   {@html content}
-                </span>  
-                  {#if hasImgUrls}
-                    <!-- svelte-ignore a11y-click-events-have-key-events -->
-                    <div class="mt-4 flex flex-cols-2 gap-4 bg-bg_color" on:click={(e) => e.stopPropagation()}>
-                      {#each imgUrls as imgUrl}
-                      <Preview
-                        endpoint={`${
-                          import.meta.env.VITE_API_LINK
-                        }/api/preview/link`}
-                        url={imgUrl}
-                      />
-                      {/each}
-                    </div>
-                  {/if}
+                </span>
+                {#if hasImgUrls}
+                  <!-- svelte-ignore a11y-click-events-have-key-events -->
+                  {#each imgUrls as s, outerIndex}
+                    {#if outerIndex % 3 === 0}
+                      <div
+                        class="mt-4 flex flex-cols-2 gap-4 bg-bg_color"
+                        on:click={(e) => e.stopPropagation()}
+                      >
+                        {#each imgUrls as imgUrl, i}
+                          {#if i >= outerIndex && i < outerIndex + 3}
+                            <Preview
+                              endpoint={`${
+                                import.meta.env.VITE_API_LINK
+                              }/api/preview/link`}
+                              url={imgUrl}
+                            />
+                          {/if}
+                        {/each}
+                      </div>
+                    {/if}
+                  {/each}
+                {/if}
               </div>
             </div>
 
