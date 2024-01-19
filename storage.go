@@ -214,6 +214,9 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string 
 		RootTag  string
 		ReplyTag string
 	}
+
+	//var re = regexp.MustCompile(`@npub`)
+
 	var tree Tree
 	for _, ev := range evs {
 		if ev.CreatedAt.Time().Unix() > time.Now().Unix() {
@@ -285,6 +288,10 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string 
 				fmt.Println("Got a match", ev.Content)
 			}
 		}
+		if strings.Count(ev.Content, "@npub") > 4 {
+			Garbage = true
+		}
+		//re.MatchString(ev.Content)
 
 		ev.Content = strings.ReplaceAll(ev.Content, "\u0000", "")
 		ptagsSliceSize := ptagsNum
