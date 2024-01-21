@@ -13,6 +13,7 @@
   import FaCommentDots from "svelte-icons-pack/fa/FaCommentDots";
   import FaSolidSync from "svelte-icons-pack/fa/FaSolidSync";
   import FaSolidLongArrowAltUp from "svelte-icons-pack/fa/FaSolidLongArrowAltUp";
+  import { tranlateContent } from "./state/main";
 
   const dispatch = createEventDispatcher();
   export let note;
@@ -92,6 +93,11 @@
 
     content = toHtml(note.event.content);
   });
+
+  let translatedContent = "";
+  async function tranlate() {
+    translatedContent = await tranlateContent(note.event.content);
+  }
 </script>
 
 {#if note && note.event.kind == 1}
@@ -215,6 +221,21 @@
               <div class="text-left w-full max-w-max break-words items-top">
                 <span class="text-black text-md font-medium break-words">
                   {@html content}
+                  {#if import.meta.env.VITE_APP_TRANSLATE_URL && import.meta.env.VITE_APP_TRANSLATE_LANG}
+                  <button
+                    on:click={tranlate}
+                    class="p-1 m-2"
+                    title="Translate">Translate to ({import.meta.env.VITE_APP_TRANSLATE_LANG})</button
+                  >
+                    {#if translatedContent != ""}
+                      <div
+                        id="translateContent_{note.event.id}"
+                        class="rounded-2xl border border-solid border-medium bg-white p-4 mt-2 mb-2"
+                      >
+                        {translatedContent}
+                      </div>
+                    {/if}
+                  {/if}
                 </span>
                 {#if hasImgUrls}
                   <!-- svelte-ignore a11y-click-events-have-key-events -->

@@ -36,7 +36,7 @@ And biggest thanks goes to fiatjaf [go-nostr](https://github.com/nbd-wtf/go-nost
 - [ ] NIP-05: Mapping Nostr keys to DNS-based internet identifiers
 - [ ] NIP-06: Basic key derivation from mnemonic seed phrase
 - [ ] NIP-08: Handling Mentions (just replacement but no search / autocomplete)
-- [ ] NIP-09: Event Deletion
+- [x] NIP-09: Event Deletion
 - [x] NIP-10: Conventions for clients' use of e and p tags in text events.
 - [ ] NIP-11: Relay Information Document
 - [ ] NIP-12: Generic Tag Queries
@@ -70,17 +70,18 @@ npm install
 npm run build
 ```
 
-This will get the packages and build the frontend. it will be storeed in the dist folder. 
+This will get the packages and build the frontend. it will be stored in the dist folder. 
+For the build of the web gui you can set some parameters in .env.local. If you want to use translate then
+install [libretranslate](https://github.com/argosopentech/LibreTranslate-init.git). This is a python app 
+and it downloads some big translate models. Leave VITE_APP_TRANSLATE_URL empty to disable the translate function.
+When you make changes to **.env.local** then you need to rebuild the web frontend with ```npm run build``` 
+
 
 Start relaystore.exe, make sure you have a valid config.json with at least your pubkey and private key.
-Also start the postgresql server on the standard port or change that in the config file. A log file in 
-the project dir will show if something goes wrong and why.
-For now there is a lot of logging in the file like sql query's, event data etc. This is for debugging 
-purposes and will be optional in the future. 
+Also start the postgresql server on the standard port or change that in the config file. If something goes run, then run the app in a console 
+for debugging info.
 
-In browser goto http://localhost:8080/ and press sync to get events. The port is fixed for now and can give problems if you have other
-apps running on that same port. If you want to set another port then change that in config.json and in .env.local and rebuild the server and the 
-frontend.
+In browser goto http://localhost:8080/ and press sync to get events. If you want to set another port then change that in config.json and in .env.local and rebuild the server and the frontend.
 
 
 ## License
