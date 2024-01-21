@@ -41,6 +41,9 @@ type DbConfig struct {
  * Since the above structs should be in sync with the database tables they represent.
  * I put the create statement of the database here even when it more a database thing which is storage.go.
  * Maybe change it later.
+ *
+ * Payload of pg_notify is 8000. It will crash the app when it is beyond that when using "PERFORM pg_notify('submissions',row_to_json(NEW)::text);"
+ * @see https://stackoverflow.com/questions/41057130/postgresql-error-payload-string-too-long
  */
 const CreateQuery string = `
  CREATE TABLE IF NOT EXISTS events (
@@ -61,7 +64,7 @@ const CreateQuery string = `
  CREATE INDEX IF NOT EXISTS idx_events_pubkey ON events (pubkey);
  CREATE INDEX IF NOT EXISTS idx_events_ptags ON events USING gin (etags);
  CREATE INDEX IF NOT EXISTS idx_events_etags ON events USING gin (ptags);
- 
+
  CREATE TABLE IF NOT EXISTS profiles (
 	 id SERIAL Primary Key,
 	 pubkey VARCHAR UNIQUE NOT NULL, 
@@ -107,7 +110,39 @@ const CreateQuery string = `
 	 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
  );
 
- `
+ CREATE OR REPLACE FUNCTION delete_submission() RETURNS trigger AS $$
+BEGIN  
+  IF NEW.kind=5 THEN
+    DELETE FROM events WHERE ARRAY[id] && NEW.etags AND NEW.pubkey=pubkey;
+    RETURN NULL;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION ephemeral_submission() RETURNS trigger AS $$
+BEGIN
+  IF int4range(20000,29999) @> NEW.kind THEN
+    RETURN NULL;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION notify_submission() RETURNS trigger AS $$
+BEGIN
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS delete_trigger ON events;
+DROP TRIGGER IF EXISTS ephemeral_trigger ON events;
+DROP TRIGGER IF EXISTS submission_trigger ON events;
+
+CREATE TRIGGER delete_trigger BEFORE INSERT ON events FOR EACH ROW EXECUTE FUNCTION delete_submission();
+CREATE TRIGGER ephemeral_trigger BEFORE INSERT ON events FOR EACH ROW EXECUTE FUNCTION ephemeral_submission();
+CREATE TRIGGER submission_trigger AFTER INSERT ON events FOR EACH ROW EXECUTE FUNCTION cd we();
+`
 
 func (st *Storage) CheckError(err error) {
 	if err != nil {
@@ -285,7 +320,6 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string 
 			matched, _ := regexp.MatchString(f, ev.Content)
 			if matched {
 				Garbage = true
-				fmt.Println("Got a match", ev.Content)
 			}
 		}
 		if strings.Count(ev.Content, "@npub") > 4 {
@@ -437,7 +471,8 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 	FROM events e 
 	LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
 	LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
-	LEFT JOIN seen s on (s.event_id = e.event_id)`
+	LEFT JOIN seen s on (s.event_id = e.event_id)
+	`
 
 	if follow {
 		mainQry += `
@@ -706,6 +741,10 @@ func (st *Storage) getChildren(ctx context.Context, tx pgx.Tx, eventMap map[stri
 	treeRows.Close()
 
 	return nil
+}
+
+func (st *Storage) buildChildrenTree(ctx context.Context, event Event) {
+
 }
 
 func (st *Storage) getInbox(ctx context.Context, p *Pagination, pubkey string) error {
