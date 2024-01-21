@@ -141,7 +141,7 @@ DROP TRIGGER IF EXISTS submission_trigger ON events;
 
 CREATE TRIGGER delete_trigger BEFORE INSERT ON events FOR EACH ROW EXECUTE FUNCTION delete_submission();
 CREATE TRIGGER ephemeral_trigger BEFORE INSERT ON events FOR EACH ROW EXECUTE FUNCTION ephemeral_submission();
-CREATE TRIGGER submission_trigger AFTER INSERT ON events FOR EACH ROW EXECUTE FUNCTION cd we();
+CREATE TRIGGER submission_trigger AFTER INSERT ON events FOR EACH ROW EXECUTE FUNCTION notify_submission();
 `
 
 func (st *Storage) CheckError(err error) {
