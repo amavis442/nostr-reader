@@ -36,7 +36,7 @@ export function findLink(text: string): array {
  * @author: Stephan Schmitz <eyecatchup@gmail.com>
  * @url: https://stackoverflow.com/a/10315969/624466
  */
-function ytVidId(text: string):array  {
+function ytVidId(text: string): array  {
   let match = text.match(/(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?/gmi);
   return (match && match[0]) ? [match[0]] : [];
 }
@@ -44,7 +44,7 @@ function ytVidId(text: string):array  {
 function imgTag(text: string): array {
   //url = url.replace("<br />", ' ').replace("<br>", ' ')
   let match = text.match(imgUrlRegex);
-  if (match && match.length > 1) {
+  if (match && match.length > 0) {
     var imgUrls = []
     for (var i=0; i < match.length; i++) {
       imgUrls[i] = match[i]
