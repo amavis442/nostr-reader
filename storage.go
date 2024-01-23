@@ -110,6 +110,31 @@ const CreateQuery string = `
 	 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
  );
 
+ DO $$ BEGIN
+    CREATE TYPE vote AS ENUM('like','dislike');
+ EXCEPTION
+    WHEN duplicate_object THEN null;
+ END $$;
+
+ CREATE TABLE IF NOT EXISTS "votes" (
+	"id" SERIAL NOT NULL,
+	"pubkey" VARCHAR NOT NULL,
+	"content" VARCHAR NULL DEFAULT NULL,
+	"current_vote" vote NULL DEFAULT NULL,
+	"target_event_id" TEXT NOT NULL,
+	"from_event_id" TEXT NOT NULL,
+	"created_at" TIMESTAMPTZ NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY ("id"),
+	UNIQUE (pubkey, target_event_id)
+)
+;
+CREATE INDEX IF NOT EXISTS "idx_votes_target_event_id" ON votes ("target_event_id");
+CREATE	INDEX IF NOT EXISTS "idx_votes_from_event_id" ON votes ("from_event_id");
+CREATE	INDEX IF NOT EXISTS "idx_votes_current_vote" ON votes ("current_vote");
+CREATE UNIQUE INDEX IF NOT EXISTS pubkey_target_event_id ON votes (pubkey,target_event_id); 
+
+
+
  CREATE OR REPLACE FUNCTION delete_submission() RETURNS trigger AS $$
 BEGIN  
   IF NEW.kind=5 THEN
@@ -229,7 +254,7 @@ func (st *Storage) SaveProfiles(ctx context.Context, evs []*nostr.Event) {
  */
 func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string {
 	var qry = `INSERT INTO "events" ("event_id", "pubkey", "kind", "event_created_at", "content", "tags_full" , "sig" , "ptags" , "etags", "garbage", "raw", "created_at") 
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW()) ON CONFLICT (event_id) DO NOTHING;`
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW()) ON CONFLICT (event_id) DO NOTHING RETURNING id;`
 
 	var treeQry = `INSERT INTO tree ("event_id","root_event_id", "reply_event_id", "created_at") VALUES ($1, $2, $3, NOW()) ON CONFLICT (event_id) DO NOTHING;`
 
@@ -349,17 +374,34 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string 
 			return []string{}
 		}
 
-		if _, err := tx.Exec(ctx, qry, ev.ID, ev.PubKey, ev.Kind, ev.CreatedAt, ev.Content, string(tagJson), ev.Sig, ptags, etags, Garbage, jsonbuf.Bytes()); err != nil {
-			log.Println(qry)
-			log.Println("Query:: ", err.Error())
-			log.Println("Query:: ", ev.String())
-			log.Println("Query:: ", jsonbuf.Bytes())
-			panic(err)
+		id := 0
+		err = tx.QueryRow(ctx, qry, ev.ID, ev.PubKey, ev.Kind, ev.CreatedAt, ev.Content, string(tagJson), ev.Sig, ptags, etags, Garbage, jsonbuf.Bytes()).Scan(&id)
+		if err != nil {
+			log.Println(err)
+			if err == pgx.ErrNoRows {
+				log.Println("No rows")
+			}
 		}
 
-		if len(tree.RootTag) > 0 {
+		if id > 0 && len(tree.RootTag) > 0 {
 			tx.Exec(ctx, treeQry, ev.ID, tree.RootTag, tree.ReplyTag)
 		}
+
+		// votes
+		if id > 0 && ev.Kind == 7 && len(etags) > 0 {
+			qryVote := `INSERT INTO votes (pubkey,content, current_vote,target_event_id,from_event_id,created_at) 
+			(SELECT e.pubkey,e.content, CASE WHEN e.content = '-' THEN 'dislike'::vote ELSE 'like'::vote end  AS current_vote, e.etags[1] AS target_event_id, e.event_id AS from_event_id, NOW() AS created_at 
+			FROM events e WHERE e.kind = 7 AND e.etags[1] <> '' AND e.id = $1) ON CONFLICT (pubkey,target_event_id) DO NOTHING`
+
+			if _, err = tx.Exec(ctx, qryVote, id); err != nil {
+				log.Println(qry)
+				log.Println("Query:: ", err.Error())
+				log.Println("Query:: ", ev.String())
+				log.Println("Query:: ", jsonbuf.Bytes())
+				panic(err)
+			}
+		}
+
 	}
 
 	return pubkeys
