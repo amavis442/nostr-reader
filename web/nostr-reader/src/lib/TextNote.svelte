@@ -9,6 +9,10 @@
   import FaSolidInfoCircle from "svelte-icons-pack/fa/FaSolidInfoCircle";
   import FaSolidUserMinus from "svelte-icons-pack/fa/FaSolidUserMinus";
   import FaSolidUserPlus from "svelte-icons-pack/fa/FaSolidUserPlus";
+
+  import FaBookmark from "svelte-icons-pack/fa/FaBookmark";
+  import  FaSolidBookmark from "svelte-icons-pack/fa/FaSolidBookmark";
+
   import FaSolidBan from "svelte-icons-pack/fa/FaSolidBan";
   import FaCommentDots from "svelte-icons-pack/fa/FaCommentDots";
   import FaSolidSync from "svelte-icons-pack/fa/FaSolidSync";
@@ -24,6 +28,14 @@
 
   function unfollowUser(pubkey) {
     dispatch("unfollowUser", pubkey);
+  }
+
+  function addBookmark(eventID) {
+    dispatch("addBookmark", eventID);
+  }
+
+  function removeBookmark(eventID) {
+    dispatch("removeBookmark", eventID);
   }
 
   function blockUser(pubkey) {
@@ -169,7 +181,25 @@
                             >
                           {/if}
                         </div>
-
+                        
+                        <div>
+                          {#if note.bookmark}
+                            <button
+                              on:click={removeBookmark(note.event.id)}
+                              title="remove bookmark"
+                              class="p-1"
+                              ><Icon src={FaSolidBookmark} size="24" /></button
+                            >
+                          {:else}
+                            <button
+                              on:click={addBookmark(note.event.id)}
+                              title="add bookmark"
+                              class="p-1"
+                              ><Icon src={FaBookmark} size="24" /></button
+                            >
+                          {/if}
+                        </div>
+                        
                         <div>
                           <button
                             on:click={reply(note)}

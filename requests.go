@@ -28,6 +28,10 @@ type FollowPubkey struct {
 	Pubkey string `json:"pubkey"`
 }
 
+type BookMark struct {
+	EventId string `json:"event_id"`
+}
+
 /**
  * Not all events are processed at once and we do not want to miss out on events, so put them in a queque and use FIFO to process.
  */
@@ -273,6 +277,102 @@ func (req *Requests) UnfollowUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (req *Requests) FollowUserNotes(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var p Page
+	err := json.NewDecoder(r.Body).Decode(&p)
+	if err != nil {
+		panic(err)
+	}
+
+	pagination := Pagination{}
+	pagination.SetLimit(p.Limit)
+	pagination.SetCurrentPage(p.Page)
+	pagination.SetSince(p.Since)
+	err = req.Cfg.Storage.GetEventPagination(ctx, &pagination, true)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
+	w.WriteHeader(http.StatusOK)
+
+	if err != nil {
+		log.Println(err)
+	}
+	err = json.NewEncoder(w).Encode(&pagination)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (req *Requests) BookMark(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var j BookMark
+	err := json.NewDecoder(r.Body).Decode(&j)
+	if err != nil {
+		log.Println(err)
+		panic(err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
+	w.WriteHeader(http.StatusOK)
+
+	err = req.Cfg.Storage.BookMark(ctx, j.EventId)
+
+	result := map[string]string{}
+	result["status"] = "ok"
+	result["msg"] = "Bookmark"
+	if err != nil {
+		result["status"] = "error"
+		result["msg"] = err.Error()
+	}
+
+	result["data"] = j.EventId
+	err = json.NewEncoder(w).Encode(result)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (req *Requests) RemoveBookMark(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var j BookMark
+	err := json.NewDecoder(r.Body).Decode(&j)
+	if err != nil {
+		log.Println(err)
+		panic(err)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
+	w.WriteHeader(http.StatusOK)
+
+	err = req.Cfg.Storage.RemoveBookMark(ctx, j.EventId)
+
+	fmt.Println("Remove bookmark: ", j.EventId)
+	result := map[string]string{}
+	result["status"] = "ok"
+	result["msg"] = "Remove bookmark"
+	if err != nil {
+		result["status"] = "error"
+		result["msg"] = err.Error()
+	}
+
+	result["data"] = j.EventId
+	err = json.NewEncoder(w).Encode(result)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (req *Requests) GetBookMarked(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

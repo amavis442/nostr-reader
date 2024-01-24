@@ -82,6 +82,13 @@ func main() {
 	mux.HandleFunc("/api/getfollownotes", req.FollowUserNotes)
 
 	/**
+	 * Bookmark events you want to keep track of
+	 */
+	mux.HandleFunc("/api/bookmark", req.BookMark)
+	mux.HandleFunc("/api/removebookmark", req.RemoveBookMark)
+	mux.HandleFunc("/api/getbookmarked", req.GetBookMarked)
+
+	/**
 	 * Find an event based on event id. This can be a reply
 	 */
 	mux.HandleFunc("/api/searchevent", req.SearchEvent)

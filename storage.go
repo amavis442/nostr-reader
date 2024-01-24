@@ -110,6 +110,12 @@ const CreateQuery string = `
 	 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
  );
 
+ CREATE TABLE IF NOT EXISTS bookmark (
+	id SERIAL Primary Key,
+	event_id VARCHAR UNIQUE NOT NULL,
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
  DO $$ BEGIN
     CREATE TYPE vote AS ENUM('like','dislike');
  EXCEPTION
@@ -509,11 +515,12 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 	//Only root events.
 	mainQry := `SELECT e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full::json, e.sig, e.etags, e.ptags,  
 	u.name, u.about , u.picture,
-	u.website, u.nip05, u.lud16, u.display_name, f.pubkey follow
+	u.website, u.nip05, u.lud16, u.display_name, f.pubkey follow, bm.event_id bookmarked
 	FROM events e 
 	LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
 	LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
 	LEFT JOIN seen s on (s.event_id = e.event_id)
+	LEFT JOIN bookmark bm ON (bm.event_id = e.event_id)
 	`
 
 	if follow {
@@ -608,11 +615,12 @@ func (st *Storage) procesEventRows(rows pgx.Rows) (map[string]Event, []string, e
 		var lud16 sql.NullString
 		var displayname sql.NullString
 		var followed sql.NullString
+		var bookmarked sql.NullString
 
 		event.Event = &nostr.Event{}
 		if err := rows.Scan(&id, &event.Event.ID, &event.Event.PubKey, &event.Event.Kind, &event.Event.CreatedAt, &event.Event.Content, &event.Event.Tags, &event.Event.Sig,
 			&event.Etags, &event.Ptags,
-			&name, &about, &picture, &website, &nip05, &lud16, &displayname, &followed); err != nil {
+			&name, &about, &picture, &website, &nip05, &lud16, &displayname, &followed, &bookmarked); err != nil {
 			log.Println("Query:: ", err.Error())
 			panic(err)
 		}
@@ -653,6 +661,10 @@ func (st *Storage) procesEventRows(rows pgx.Rows) (map[string]Event, []string, e
 		if followed.Valid {
 			event.Profile.Followed = true
 		}
+		event.Bookmark = false
+		if bookmarked.Valid {
+			event.Bookmark = true
+		}
 
 		//nostr.Event = json.Unmarshal()
 		//sdk.ParseReferences(&nostr.Event{event})
@@ -680,12 +692,13 @@ func (st *Storage) getChildren(ctx context.Context, tx pgx.Tx, eventMap map[stri
 	treeQry := `SELECT t.root_event_id, t.reply_event_id, 
 	 e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content,e.tags_full::json,e.sig, 
 	 e.etags, e.ptags , u.name, u.about , u.picture,
-	 u.website, u.nip05, u.lud16, u.display_name, f.pubkey follow
+	 u.website, u.nip05, u.lud16, u.display_name, f.pubkey follow, bm.event_id bookmarked
 	 FROM tree t, events e 
 	 LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
 	 LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
 	 LEFT JOIN seen s on (s.event_id = e.event_id)
 	 LEFT JOIN follow_pubkeys f ON (f.pubkey = e.pubkey)
+	 LEFT JOIN bookmark bm ON (bm.event_id = e.event_id)
 	 WHERE root_event_id IN (`
 	for k := range eventMap {
 		treeQry = treeQry + `'` + k + `',`
@@ -711,12 +724,13 @@ func (st *Storage) getChildren(ctx context.Context, tx pgx.Tx, eventMap map[stri
 		var lud16 sql.NullString
 		var displayname sql.NullString
 		var followed sql.NullString
+		var bookmarked sql.NullString
 		childEvent.Event = &nostr.Event{}
 
 		if err := treeRows.Scan(&root_event_id, &reply_event_id, &id,
 			&childEvent.Event.ID, &childEvent.Event.PubKey, &childEvent.Event.Kind, &childEvent.Event.CreatedAt, &childEvent.Event.Content, &childEvent.Event.Tags, &childEvent.Event.Sig,
 			&childEvent.Etags, &childEvent.Ptags, &name, &about, &picture,
-			&website, &nip05, &lud16, &displayname, &followed); err != nil {
+			&website, &nip05, &lud16, &displayname, &followed, &bookmarked); err != nil {
 			log.Println(err.Error())
 			panic(err)
 		}
@@ -753,6 +767,11 @@ func (st *Storage) getChildren(ctx context.Context, tx pgx.Tx, eventMap map[stri
 		if followed.Valid {
 			childEvent.Profile.Followed = true
 		}
+		childEvent.Bookmark = false
+		if bookmarked.Valid {
+			childEvent.Bookmark = true
+		}
+
 		if item, ok := eventMap[root_event_id]; ok {
 
 			if reply_event_id.Valid {
@@ -808,18 +827,17 @@ func (st *Storage) getInbox(ctx context.Context, p *Pagination, pubkey string) e
 	SELECT
 	e0.id, e0.event_id, e0.pubkey, e0.kind, e0.event_created_at, e0.content, e0.tags_full::json, e0.sig, e0.etags, e0.ptags,  
 	u.name, u.about , u.picture,
-	u.website, u.nip05, u.lud16, u.display_name, f.pubkey follow
+	u.website, u.nip05, u.lud16, u.display_name, f.pubkey follow, bm.event_id bookmarked
 	FROM 
 	events e0 
 	LEFT JOIN follow_pubkeys f ON (f.pubkey = e0.pubkey)
+	LEFT JOIN bookmark bm ON (bm.event_id = e0.event_id)
 	LEFT JOIN profiles u ON (u.pubkey = e0.pubkey ) 
 	JOIN
 	(SELECT
 	DISTINCT e0.event_id
 	FROM 
 	events e0 
-	LEFT JOIN follow_pubkeys f ON (f.pubkey = e0.pubkey)
-	LEFT JOIN profiles u ON (u.pubkey = e0.pubkey ) 
 	JOIN (SELECT t.root_event_id, t.event_id, t.reply_event_id FROM tree t, events e1 WHERE e1.pubkey = $1 AND e1.event_id = t.event_id) t0 ON e0.event_id = t0.root_event_id
 	) tbl 
 	ON
@@ -1052,6 +1070,26 @@ func (st *Storage) FollowPubkey(ctx context.Context, pubkey string) error {
 
 func (st *Storage) UnfollowPubkey(ctx context.Context, pubkey string) error {
 	_, err := st.DbPool.Exec(ctx, `DELETE FROM "follow_pubkeys" WHERE pubkey = $1;`, pubkey)
+	if err != nil {
+		log.Println("Query:: ", err)
+		return err
+	}
+
+	return nil
+}
+
+func (st *Storage) BookMark(ctx context.Context, eventID string) error {
+	_, err := st.DbPool.Exec(ctx, `INSERT INTO "bookmark" (event_id, created_at) VALUES ($1, NOW()) ON CONFLICT (event_id) DO NOTHING;`, eventID)
+	if err != nil {
+		log.Println("Query:: ", err)
+		return err
+	}
+
+	return nil
+}
+
+func (st *Storage) RemoveBookMark(ctx context.Context, eventID string) error {
+	_, err := st.DbPool.Exec(ctx, `DELETE FROM "bookmark" WHERE event_id = $1;`, eventID)
 	if err != nil {
 		log.Println("Query:: ", err)
 		return err

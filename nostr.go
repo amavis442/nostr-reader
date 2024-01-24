@@ -42,6 +42,7 @@ type Event struct {
 	Children map[string]*Event   `json:"children"`
 	Tree     int64               `json:"tree"`
 	RootId   string              `json:"root_id"`
+	Bookmark bool                `json:"bookmark"`
 }
 type RelayUrl string
 
