@@ -765,35 +765,6 @@ func (st *Storage) getChildren(ctx context.Context, tx pgx.Tx, eventMap map[stri
 				if reply_event_id.String != "" {
 					fmt.Println("Child [", childEvent.Event.ID, "] :: replied to ["+reply_event_id.String+"] "+childEvent.Event.Content)
 					walk(&item, childEvent, reply_event_id.String, 1)
-
-					/*
-						if ch, ok := item.Children[reply_event_id.String]; ok {
-							childEvent.Tree = 3
-							childEvent.Children = make(map[string]*Event, 0)
-							if ch.Children == nil {
-								ch.Children = make(map[string]*Event, 0)
-							}
-							ch.Children[childEvent.Event.ID] = &childEvent
-							//eventMap[root_event_id] = item
-						} else {
-
-							fmt.Println("Child [", childEvent.Event.ID, "] :: replied to ["+reply_event_id.String+"] "+childEvent.Event.Content)
-							walk(&item, childEvent, reply_event_id.String, 1)
-
-								for _, e := range item.Children {
-									if e.Event.ID == reply_event_id.String {
-										fmt.Println("Found parent:", e.Event.ID, e.Event.Content)
-										childEvent.Tree = 4
-										if e.Children == nil {
-											e.Children = make(map[string]*Event, 0)
-										}
-										e.Children[childEvent.Event.ID] = &childEvent
-										break
-									}
-								}
-
-						}
-					*/
 				}
 			}
 
@@ -808,7 +779,7 @@ func (st *Storage) getChildren(ctx context.Context, tx pgx.Tx, eventMap map[stri
 }
 
 func walk(parent *Event, payload Event, reply_event_id string, level int64) bool {
-	if level > 5 {
+	if level > 8 {
 		return false
 	}
 
