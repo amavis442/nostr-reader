@@ -808,6 +808,10 @@ func (st *Storage) getChildren(ctx context.Context, tx pgx.Tx, eventMap map[stri
 }
 
 func walk(parent *Event, payload Event, reply_event_id string, level int64) bool {
+	if level > 5 {
+		return false
+	}
+
 	if parent.Event.ID == reply_event_id {
 		fmt.Println("Found parent:: [", parent.Event.ID, "] :: ", parent.Event.Content)
 		payload.Tree = level
