@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	parse "net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -74,7 +75,7 @@ func URLPreview(ctx context.Context, url string) (map[string]interface{}, error)
 	//const RequestMaxWaitTime = 5 * time.Second
 
 	if url == "" {
-		return map[string]interface{}{"url": url, "data": nil, "status": "error", "respcode": fmt.Sprint(408), "error": "cannot do request: No url present"}, fmt.Errorf("cannot do request: No url present")
+		return map[string]interface{}{"url": url, "data": nil, "status": "error", "respcode": fmt.Sprint(408), "error": "cannot do request: No url present"}, errors.New("cannot do request: No url present")
 	}
 
 	meta := HTMLMeta{}
@@ -100,13 +101,13 @@ func URLPreview(ctx context.Context, url string) (map[string]interface{}, error)
 	}
 
 	if e, ok := err.(net.Error); ok && e.Timeout() {
-		return map[string]interface{}{"url": url, "data": nil, "status": "error", "respcode": fmt.Sprint(408), "error": "preview do request timeout: " + err.Error()}, fmt.Errorf("do request timeout: %s", err)
+		return map[string]interface{}{"url": url, "data": nil, "status": "error", "respcode": fmt.Sprint(408), "error": "preview do request timeout: " + err.Error()}, errors.New("do request timeout: " + err.Error())
 	} else if err != nil {
-		return map[string]interface{}{"url": url, "data": nil, "status": "error", "respcode": fmt.Sprint(400), "error": "preview cannot do request: " + err.Error()}, fmt.Errorf("cannot do request: %s", err)
+		return map[string]interface{}{"url": url, "data": nil, "status": "error", "respcode": fmt.Sprint(400), "error": "preview cannot do request: " + err.Error()}, errors.New("cannot do request: " + err.Error())
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return map[string]interface{}{"url": url, "data": nil, "status": "error", "respcode": fmt.Sprint(resp.StatusCode), "error": "request not succesfull"}, fmt.Errorf("request not succesfull %d", resp.StatusCode)
+		return map[string]interface{}{"url": url, "data": nil, "status": "error", "respcode": fmt.Sprint(resp.StatusCode), "error": "request not succesfull"}, errors.New("request not succesfull " + strconv.Itoa(resp.StatusCode))
 	}
 
 	contentType := resp.Header.Get("Content-type")
