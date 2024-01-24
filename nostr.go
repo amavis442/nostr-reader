@@ -39,7 +39,7 @@ type Event struct {
 	Etags    []string            `json:"etags"`
 	Ptags    []string            `json:"ptags"`
 	Garbage  bool                `json:"gargabe"`
-	Children map[string]Event    `json:"children"`
+	Children map[string]*Event   `json:"children"`
 	Tree     int64               `json:"tree"`
 	RootId   string              `json:"root_id"`
 }

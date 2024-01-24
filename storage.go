@@ -657,7 +657,7 @@ func (st *Storage) procesEventRows(rows pgx.Rows) (map[string]Event, []string, e
 		//nostr.Event = json.Unmarshal()
 		//sdk.ParseReferences(&nostr.Event{event})
 
-		event.Children = make(map[string]Event, 0)
+		event.Children = make(map[string]*Event, 0)
 		eventMap[event.Event.ID] = event
 		keys = append(keys, event.Event.ID) // Make sure the order stays the same @see https://go.dev/blog/maps
 	}
@@ -691,7 +691,7 @@ func (st *Storage) getChildren(ctx context.Context, tx pgx.Tx, eventMap map[stri
 		treeQry = treeQry + `'` + k + `',`
 	}
 	treeQry = treeQry[:len(treeQry)-1] + `) AND e.event_id = t.event_id
-	 AND e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false;`
+	 AND e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false ORDER BY e.event_created_at;`
 	var treeRows pgx.Rows
 	treeRows, err = tx.Query(ctx, treeQry)
 	if err != nil {
@@ -758,20 +758,42 @@ func (st *Storage) getChildren(ctx context.Context, tx pgx.Tx, eventMap map[stri
 			if reply_event_id.Valid {
 				if reply_event_id.String == "" {
 					childEvent.Tree = 2
-					childEvent.Children = make(map[string]Event, 0)
-					item.Children[childEvent.Event.ID] = childEvent
-					eventMap[root_event_id] = item
+					childEvent.Children = make(map[string]*Event, 0)
+					item.Children[childEvent.Event.ID] = &childEvent
+					//eventMap[root_event_id] = item
 				}
 				if reply_event_id.String != "" {
-					if ch, ok := item.Children[reply_event_id.String]; ok {
-						childEvent.Tree = 3
-						childEvent.Children = make(map[string]Event, 0)
-						if ch.Children == nil {
-							ch.Children = make(map[string]Event, 0)
+					fmt.Println("Child [", childEvent.Event.ID, "] :: replied to ["+reply_event_id.String+"] "+childEvent.Event.Content)
+					walk(&item, childEvent, reply_event_id.String, 1)
+
+					/*
+						if ch, ok := item.Children[reply_event_id.String]; ok {
+							childEvent.Tree = 3
+							childEvent.Children = make(map[string]*Event, 0)
+							if ch.Children == nil {
+								ch.Children = make(map[string]*Event, 0)
+							}
+							ch.Children[childEvent.Event.ID] = &childEvent
+							//eventMap[root_event_id] = item
+						} else {
+
+							fmt.Println("Child [", childEvent.Event.ID, "] :: replied to ["+reply_event_id.String+"] "+childEvent.Event.Content)
+							walk(&item, childEvent, reply_event_id.String, 1)
+
+								for _, e := range item.Children {
+									if e.Event.ID == reply_event_id.String {
+										fmt.Println("Found parent:", e.Event.ID, e.Event.Content)
+										childEvent.Tree = 4
+										if e.Children == nil {
+											e.Children = make(map[string]*Event, 0)
+										}
+										e.Children[childEvent.Event.ID] = &childEvent
+										break
+									}
+								}
+
 						}
-						item.Children[reply_event_id.String].Children[childEvent.Event.ID] = childEvent
-						eventMap[root_event_id] = item
-					}
+					*/
 				}
 			}
 
@@ -785,8 +807,25 @@ func (st *Storage) getChildren(ctx context.Context, tx pgx.Tx, eventMap map[stri
 	return nil
 }
 
-func (st *Storage) buildChildrenTree(ctx context.Context, event Event) {
+func walk(parent *Event, payload Event, reply_event_id string, level int64) bool {
+	if parent.Event.ID == reply_event_id {
+		fmt.Println("Found parent:: [", parent.Event.ID, "] :: ", parent.Event.Content)
+		payload.Tree = level
+		if parent.Children == nil {
+			parent.Children = make(map[string]*Event, 0)
+		}
+		parent.Children[payload.Event.ID] = &payload
+		return true
+	}
 
+	if len(parent.Children) > 0 {
+		for _, Node := range parent.Children {
+			if ok := walk(Node, payload, reply_event_id, level+1); ok {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (st *Storage) getInbox(ctx context.Context, p *Pagination, pubkey string) error {
@@ -874,7 +913,7 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 	}
 	event.Tree = 1
 	event.RootId = event.Event.ID
-	event.Children = make(map[string]Event, 0)
+	event.Children = make(map[string]*Event, 0)
 
 	treeQry := `SELECT t.root_event_id, t.reply_event_id, 
 	e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content,e.tags_full::json,e.sig, 
@@ -920,7 +959,7 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 
 		childEvent.RootId = event.Event.ID
 		childEvent.Tree = 2
-		childEvent.Children = make(map[string]Event, 0)
+		childEvent.Children = make(map[string]*Event, 0)
 
 		if name.Valid {
 			childEvent.Profile.Name = name.String
@@ -952,7 +991,7 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 			childEvent.Profile.Followed = true
 		}
 
-		event.Children[childEvent.Event.ID] = childEvent
+		event.Children[childEvent.Event.ID] = &childEvent
 	}
 
 	return event, err
