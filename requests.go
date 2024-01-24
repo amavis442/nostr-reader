@@ -363,11 +363,7 @@ func (req *Requests) PreviewLink(w http.ResponseWriter, r *http.Request) {
 	t := strings.TrimSpace(url.Url)
 	s := strings.Split(t, "\n")
 
-	result, err := URLPreview(ctx, s[0])
-	if err != nil {
-		log.Println(err)
-
-	}
+	result, _ := URLPreview(ctx, s[0])
 	err = json.NewEncoder(w).Encode(result)
 	if err != nil {
 		panic(err)
