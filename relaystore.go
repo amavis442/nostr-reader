@@ -142,6 +142,9 @@ func main() {
 		}
 	}()
 
+	fmt.Println("Get nostr data from relays")
+	nostr.getEventData(ctx, false)
+
 	fmt.Println("Server running: http://localhost:" + port)
 	//log.Fatal(http.ListenAndServe(":"+port, mux))
 	log.Fatal(srv.ListenAndServe())
@@ -158,6 +161,7 @@ func main() {
 
 	// Printed when the ticker is turned off
 	//fmt.Println("Ticker is turned off!")
+
 }
 
 func intervalTask(nostr Nostr) {
@@ -165,5 +169,5 @@ func intervalTask(nostr Nostr) {
 	defer cancel()
 
 	EventsQueue = EventsQueue[:0]
-	nostr.getEventData(ctx)
+	nostr.getEventData(ctx, true)
 }

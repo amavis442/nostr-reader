@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -17,6 +18,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/nbd-wtf/go-nostr"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 /**
@@ -27,6 +31,7 @@ type Storage struct {
 	DbPool *pgxpool.Pool
 	Filter []string
 	Count  int64
+	GormDB *gorm.DB
 }
 
 type DbConfig struct {
@@ -62,8 +67,8 @@ const CreateQuery string = `
 	 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
  );
  CREATE INDEX IF NOT EXISTS idx_events_pubkey ON events (pubkey);
- CREATE INDEX IF NOT EXISTS idx_events_ptags ON events USING gin (etags);
- CREATE INDEX IF NOT EXISTS idx_events_etags ON events USING gin (ptags);
+ CREATE INDEX IF NOT EXISTS idx_events_etags ON events USING gin (etags);
+ CREATE INDEX IF NOT EXISTS idx_events_ptags ON events USING gin (ptags);
 
  CREATE TABLE IF NOT EXISTS profiles (
 	 id SERIAL Primary Key,
@@ -195,7 +200,33 @@ func (st *Storage) Connect(ctx context.Context, cfg *Config) error {
 
 	var err error
 	st.DbPool, err = pgxpool.New(ctx, connStr)
-	fmt.Println("Connected!")
+	if err != nil {
+		return err
+	}
+	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable TimeZone=Europe/Amsterdam",
+		cfg.Database.Host,
+		cfg.Database.User,
+		cfg.Database.Password,
+		cfg.Database.Dbname,
+		cfg.Database.Port)
+
+	st.GormDB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+
+	st.GormDB.AutoMigrate(&EventTable{})
+	st.GormDB.AutoMigrate(&ProfileTable{})
+	st.GormDB.AutoMigrate(&BlockPubkeyTable{})
+	st.GormDB.AutoMigrate(&FollowPubkeyTable{})
+	st.GormDB.AutoMigrate(&SeenTable{})
+	st.GormDB.AutoMigrate(&TreeTable{})
+	st.GormDB.AutoMigrate(&BookmarkTable{})
+
+	st.GormDB.Exec(`DO $$ BEGIN
+    		CREATE TYPE vote AS ENUM('like','dislike');
+ 				EXCEPTION
+    			WHEN duplicate_object THEN null;
+ 			END $$;`)
+	st.GormDB.AutoMigrate(&VoteTable{})
+	fmt.Println("Connected to database:", cfg.Database.Dbname)
 	return err
 }
 
@@ -228,6 +259,22 @@ func (st *Storage) SaveProfiles(ctx context.Context, evs []*nostr.Event) {
 			log.Println("Query:: ", err.Error(), ev.Content)
 			continue
 		}
+
+		profile := ProfileTable{
+			Pubkey:      ev.PubKey,
+			Name:        data.Name,
+			About:       data.About,
+			Picture:     data.Picture,
+			Website:     data.Website,
+			Nip05:       data.Nip05,
+			Lud16:       data.Lud16,
+			DisplayName: data.DisplayName,
+			Raw:         ev.String()}
+		//st.GormDB.Clauses(clause.OnConflict{DoNothing: true}).Create(&profile)
+		st.GormDB.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "pubkey"}},
+			DoUpdates: clause.AssignmentColumns([]string{"name", "about", "picture", "website", "nip05", "lud16", "display_name", "raw"}),
+		}).Create(&profile)
 
 		_, err = tx.Exec(ctx, qry, ev.PubKey, data.Name, data.About, data.Picture, data.Website, data.Nip05, data.Lud16, data.DisplayName, ev.String(), ev.CreatedAt)
 		if err != nil {
@@ -380,6 +427,25 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string 
 			return []string{}
 		}
 
+		profileTable := ProfileTable{Pubkey: ev.PubKey}
+		st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&profileTable)
+
+		eventTable := EventTable{}
+		eventTable.EventId = ev.ID
+		eventTable.Pubkey = ev.PubKey
+		eventTable.Kind = ev.Kind
+		eventTable.EventCreatedAt = ev.CreatedAt.Time().Unix()
+		eventTable.Content = ev.Content
+		eventTable.TagsFull = string(tagJson)
+		eventTable.Sig = ev.Sig
+		eventTable.Ptags = ptags
+		eventTable.Etags = etags
+		eventTable.Garbage = Garbage
+		eventTable.Raw = jsonbuf.Bytes()
+
+		st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&eventTable)
+		//fmt.Println("Inserted id for event: ", eventTable.ID)
+
 		id := 0
 		err = tx.QueryRow(ctx, qry, ev.ID, ev.PubKey, ev.Kind, ev.CreatedAt, ev.Content, string(tagJson), ev.Sig, ptags, etags, Garbage, jsonbuf.Bytes()).Scan(&id)
 		if err != nil {
@@ -390,24 +456,44 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string 
 		}
 
 		if id > 0 && len(tree.RootTag) > 0 {
+			treeTable := TreeTable{EventId: ev.ID, RootEventId: tree.RootTag, ReplyEventId: tree.ReplyTag}
+			st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&treeTable)
+
 			tx.Exec(ctx, treeQry, ev.ID, tree.RootTag, tree.ReplyTag)
 		}
 
 		// votes
 		if id > 0 && ev.Kind == 7 && len(etags) > 0 {
-			qryVote := `INSERT INTO votes (pubkey,content, current_vote,target_event_id,from_event_id,created_at) 
-			(SELECT e.pubkey,e.content, CASE WHEN e.content = '-' THEN 'dislike'::vote ELSE 'like'::vote end  AS current_vote, e.etags[1] AS target_event_id, e.event_id AS from_event_id, NOW() AS created_at 
-			FROM events e WHERE e.kind = 7 AND e.etags[1] <> '' AND e.id = $1) ON CONFLICT (pubkey,target_event_id) DO NOTHING`
+			t := ev.Tags.GetFirst([]string{"e"})
+			if t != nil {
+				targetEventId := t.Value()
 
-			if _, err = tx.Exec(ctx, qryVote, id); err != nil {
-				log.Println(qry)
-				log.Println("Query:: ", err.Error())
-				log.Println("Query:: ", ev.String())
-				log.Println("Query:: ", jsonbuf.Bytes())
-				panic(err)
+				var result EventTable
+				st.GormDB.WithContext(ctx).Where("event_id = ?", targetEventId).Find(&result) // only add votes for existing
+
+				if result.ID > 0 {
+
+					//fmt.Println("Vote target event_id is: ", targetEventId)
+					voteTable := VoteTable{
+						Pubkey:        ev.PubKey,
+						Content:       ev.Content,
+						CurrentVote:   Like,
+						TargetEventId: targetEventId,
+						FromEventId:   ev.ID,
+						EventTableID:  eventTable.ID}
+					if ev.Content == "-" {
+						voteTable.CurrentVote = Dislike
+					}
+
+					err = st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&voteTable).Error
+					if err != nil {
+						log.Println(qry)
+						log.Println("Query error:: ", err.Error())
+						panic(err)
+					}
+				}
 			}
 		}
-
 	}
 
 	return pubkeys
@@ -492,12 +578,17 @@ func (st *Storage) GetEvents(ctx context.Context, limit int) (*[]Event, error) {
 	return &events, nil
 }
 
+type Options struct {
+	Follow   bool
+	BookMark bool
+}
+
 /**
  * Do not show all data in an endless scrol page, but paginate it for easy access
  * and ignore the garbage tagged posts
  *
  */
-func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow bool) error {
+func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, options Options) error {
 	tx, err := st.DbPool.Begin(ctx)
 	defer func() {
 		if err != nil {
@@ -520,10 +611,9 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 	LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
 	LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
 	LEFT JOIN seen s on (s.event_id = e.event_id)
-	LEFT JOIN bookmark bm ON (bm.event_id = e.event_id)
 	`
 
-	if follow {
+	if options.Follow {
 		mainQry += `
 		JOIN follow_pubkeys f ON (f.pubkey = e.pubkey)
 		`
@@ -532,24 +622,41 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 		LEFT JOIN follow_pubkeys f ON (f.pubkey = e.pubkey)
 		`
 	}
+
+	if options.BookMark {
+		mainQry += `
+		JOIN bookmark bm ON (bm.event_id = e.event_id)
+		`
+	} else {
+		mainQry += `
+		LEFT JOIN bookmark bm ON (bm.event_id = e.event_id)
+		`
+	}
+
 	mainQry += `WHERE e.kind = 1 AND e.etags='{}' AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false`
-	if !p.Renew && !follow {
+	if !p.Renew && !options.Follow && !options.BookMark {
 		mainQry += ` AND e.id <= ` + fmt.Sprintf("%d", p.MaxId)
 	}
+
 	if p.Since != 0 {
 		since := time.Now().Unix() - int64(p.Since*60*60*24)
 		mainQry = mainQry + ` AND e.event_created_at > ` + fmt.Sprintf("%d", since)
 	}
+
+	fmt.Println(options)
 
 	countQry := `SELECT COUNT(*) AS cnt FROM (SELECT DISTINCT id, event_id, event_created_at FROM (` + mainQry + `) resultTable) tbl`
 	err = tx.QueryRow(ctx, countQry).Scan(&recordCount)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	fmt.Println(countQry, recordCount)
+
 	p.SetTotal(recordCount)
 	p.SetTo()
 	if recordCount < 1 {
-		return nil
+		return errors.New("no records found")
 	}
 
 	selectIdQry := `SELECT id FROM (SELECT DISTINCT id, event_id, event_created_at FROM ( ` + mainQry + `) resultInnerTable ORDER BY event_created_at DESC) tbl  LIMIT ` + strconv.Itoa(p.Limit)
@@ -561,6 +668,8 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 	if err != nil {
 		log.Fatal(err)
 	}
+	var finalQry string
+	//if !options.BookMark && !options.Follow {
 	selectQry := mainQry + ` AND e.id IN (`
 	var maxId int64 = 0
 	for rowsIds.Next() {
@@ -578,8 +687,13 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 	if p.Renew {
 		p.MaxId = maxId
 	}
-	finalQry := selectQry[:len(selectQry)-1]
+	finalQry = selectQry[:len(selectQry)-1]
 	finalQry = finalQry + ") ORDER BY event_created_at DESC;"
+	//} else {
+	//	finalQry = mainQry + " ORDER BY event_created_at DESC;"
+	//}
+
+	fmt.Println(finalQry)
 
 	rows, err := tx.Query(ctx, finalQry)
 	if err != nil {
@@ -1046,6 +1160,9 @@ func (st *Storage) CheckProfiles(ctx context.Context, pubkeys []string, epochtim
  * Some users just posting garbage, so we try to block those by putting them on the naugthy list
  */
 func (st *Storage) BlockPubkey(ctx context.Context, pubkey string) error {
+	blockPubkey := BlockPubkeyTable{Pubkey: pubkey}
+	st.GormDB.Clauses(clause.OnConflict{DoNothing: true}).Create(&blockPubkey)
+
 	_, err := st.DbPool.Exec(ctx, `INSERT INTO "block_pubkeys" (pubkey, created_at) VALUES ($1, NOW()) ON CONFLICT (pubkey) DO NOTHING;`, pubkey)
 	if err != nil {
 		log.Println("Query:: ", err)
@@ -1059,6 +1176,9 @@ func (st *Storage) BlockPubkey(ctx context.Context, pubkey string) error {
  * And there are user we like, so put them on the good list
  */
 func (st *Storage) FollowPubkey(ctx context.Context, pubkey string) error {
+	followPubkey := FollowPubkeyTable{Pubkey: pubkey}
+	st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&followPubkey)
+
 	_, err := st.DbPool.Exec(ctx, `INSERT INTO "follow_pubkeys" (pubkey, created_at) VALUES ($1, NOW()) ON CONFLICT (pubkey) DO NOTHING;`, pubkey)
 	if err != nil {
 		log.Println("Query:: ", err)
@@ -1069,6 +1189,8 @@ func (st *Storage) FollowPubkey(ctx context.Context, pubkey string) error {
 }
 
 func (st *Storage) UnfollowPubkey(ctx context.Context, pubkey string) error {
+	st.GormDB.WithContext(ctx).Where("pubkey = ?", pubkey).Delete(&FollowPubkeyTable{})
+
 	_, err := st.DbPool.Exec(ctx, `DELETE FROM "follow_pubkeys" WHERE pubkey = $1;`, pubkey)
 	if err != nil {
 		log.Println("Query:: ", err)
@@ -1078,7 +1200,13 @@ func (st *Storage) UnfollowPubkey(ctx context.Context, pubkey string) error {
 	return nil
 }
 
-func (st *Storage) BookMark(ctx context.Context, eventID string) error {
+func (st *Storage) createBookMark(ctx context.Context, eventID string) error {
+	var eventTable EventTable
+	st.GormDB.WithContext(ctx).Where("event_id = ?", eventID).Find(&eventTable)
+
+	bookmark := BookmarkTable{EventId: eventID, EventTableID: eventTable.ID}
+	st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&bookmark)
+
 	_, err := st.DbPool.Exec(ctx, `INSERT INTO "bookmark" (event_id, created_at) VALUES ($1, NOW()) ON CONFLICT (event_id) DO NOTHING;`, eventID)
 	if err != nil {
 		log.Println("Query:: ", err)
@@ -1089,6 +1217,8 @@ func (st *Storage) BookMark(ctx context.Context, eventID string) error {
 }
 
 func (st *Storage) RemoveBookMark(ctx context.Context, eventID string) error {
+	st.GormDB.WithContext(ctx).Where("event_id = ?", eventID).Delete(&BookmarkTable{})
+
 	_, err := st.DbPool.Exec(ctx, `DELETE FROM "bookmark" WHERE event_id = $1;`, eventID)
 	if err != nil {
 		log.Println("Query:: ", err)

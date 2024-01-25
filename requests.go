@@ -70,7 +70,7 @@ func (req *Requests) getRoot(w http.ResponseWriter, r *http.Request) {
 	pagination.SetRenew(p.Renew)
 	pagination.SetMaxId(p.MaxId)
 
-	err = req.Cfg.Storage.GetEventPagination(ctx, &pagination, false)
+	err = req.Cfg.Storage.GetEventPagination(ctx, &pagination, Options{Follow: false, BookMark: false})
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -120,7 +120,7 @@ func (req *Requests) StartSync(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	EventsQueue = EventsQueue[:0]
-	req.Nostr.getEventData(ctx)
+	req.Nostr.getEventData(ctx, true)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -291,7 +291,7 @@ func (req *Requests) FollowUserNotes(w http.ResponseWriter, r *http.Request) {
 	pagination.SetLimit(p.Limit)
 	pagination.SetCurrentPage(p.Page)
 	pagination.SetSince(p.Since)
-	err = req.Cfg.Storage.GetEventPagination(ctx, &pagination, true)
+	err = req.Cfg.Storage.GetEventPagination(ctx, &pagination, Options{Follow: true, BookMark: false})
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -322,7 +322,7 @@ func (req *Requests) BookMark(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
 	w.WriteHeader(http.StatusOK)
 
-	err = req.Cfg.Storage.BookMark(ctx, j.EventId)
+	err = req.Cfg.Storage.createBookMark(ctx, j.EventId)
 
 	result := map[string]string{}
 	result["status"] = "ok"
@@ -387,7 +387,7 @@ func (req *Requests) GetBookMarked(w http.ResponseWriter, r *http.Request) {
 	pagination.SetLimit(p.Limit)
 	pagination.SetCurrentPage(p.Page)
 	pagination.SetSince(p.Since)
-	err = req.Cfg.Storage.GetEventPagination(ctx, &pagination, true)
+	err = req.Cfg.Storage.GetEventPagination(ctx, &pagination, Options{Follow: false, BookMark: true})
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS

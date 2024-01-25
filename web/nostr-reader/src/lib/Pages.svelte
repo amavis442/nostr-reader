@@ -20,16 +20,22 @@
   import { addBookmark, removeBookmark } from "./state/bookmark";
 
   export let apiUrl: string = "";
+  export let renewData: boolean = false;
+
+
   onMount(async () => {
     setApiUrl(apiUrl);
+    
     pageData.set([]);
+   /*
     await refreshView({
       page: 1,
       limit: $pageMetaData.limit,
       since: $pageMetaData.since,
-      renew: true,
+      renew: renewData,
       maxid: $pageMetaData.maxid,
     });
+    */
     document.getElementById("realNotesContainer").scrollTo(0, 0);
   });
 

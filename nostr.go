@@ -273,7 +273,7 @@ func (nostr *Nostr) GetEvents(ctx context.Context, filter nostrHandler.Filter, w
  * Before we try to get events, first get the last timestamp so we do not query all the events all the time but only the lastests.
  * We do not want to spam the relays when we just synced, so wait 60 seconds before we accept a new sync
  */
-func (nostr *Nostr) getEventData(ctx context.Context) {
+func (nostr *Nostr) getEventData(ctx context.Context, withOffset bool) {
 	var createdAt int64
 	var createdAtOffset int64 = time.Now().Unix() - 60
 
@@ -282,7 +282,7 @@ func (nostr *Nostr) getEventData(ctx context.Context) {
 	if createdAt < 1 {
 		createdAt = createdAtOffset
 	}
-	if createdAt > createdAtOffset {
+	if createdAt > createdAtOffset && withOffset {
 		fmt.Printf("Time lapse is to short for getting new data %d %d", createdAt, createdAtOffset)
 		return
 	}
