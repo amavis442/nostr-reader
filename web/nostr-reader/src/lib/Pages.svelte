@@ -27,7 +27,7 @@
     setApiUrl(apiUrl);
     
     pageData.set([]);
-   /*
+   
     await refreshView({
       page: 1,
       limit: $pageMetaData.limit,
@@ -35,7 +35,7 @@
       renew: renewData,
       maxid: $pageMetaData.maxid,
     });
-    */
+    
     document.getElementById("realNotesContainer").scrollTo(0, 0);
   });
 

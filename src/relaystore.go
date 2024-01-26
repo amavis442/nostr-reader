@@ -1,6 +1,8 @@
 package main
 
 import (
+	"amavis442/relaystore/database"
+	"amavis442/relaystore/nostr/wrapper"
 	"context"
 	"fmt"
 	"log"
@@ -26,31 +28,19 @@ func main() {
 	}
 
 	var ctx context.Context = context.Background()
-	var st Storage
-	err = st.Connect(ctx, cfg) // Does not make a connection immediatly but prepares so it does not yet know if the pg server is available.
-	if err != nil {
-		log.Println(err.Error())
-		os.Exit(0)
-	}
-	// close database
-	defer st.Close()
-
-	err = st.CreateTables(ctx) // Here it knows if the pg database is available.
+	var st database.Storage
+	var nostrWrapper wrapper.NostrWrapper
+	err = st.Connect(ctx, cfg.Database) // Does not make a connection immediatly but prepares so it does not yet know if the pg server is available.
 	if err != nil {
 		log.Println(err.Error())
 		os.Exit(0)
 	}
 
-	st.Filter = cfg.Filter
-	cfg.Storage = &st
-
-	var nostr Nostr
-	nostr.Cfg = cfg
-	nostr.Storage = &st
-
+	nostrWrapper.SetConfig(&cfg.Config)
 	var req Requests
 	req.Cfg = cfg
-	req.Nostr = &nostr
+	req.Db = &st
+	req.Nostr = &nostrWrapper
 
 	// Windows may be missing this
 	mime.AddExtensionType(".js", "application/javascript")
@@ -65,8 +55,8 @@ func main() {
 	/**
 	 * This will sync the local database with that of the relays (Only public events and not channels and such)
 	 */
-	mux.HandleFunc("/api/sync", req.StartSync)
-	mux.HandleFunc("/api/syncnote", req.SyncNote)
+	//mux.HandleFunc("/api/sync", req.StartSync)
+	//mux.HandleFunc("/api/syncnote", req.SyncNote)
 
 	/**
 	 * Put a user on the naughty list
@@ -84,7 +74,7 @@ func main() {
 	/**
 	 * Bookmark events you want to keep track of
 	 */
-	mux.HandleFunc("/api/bookmark", req.BookMark)
+	mux.HandleFunc("/api/bookmark", req.AddBookMark)
 	mux.HandleFunc("/api/removebookmark", req.RemoveBookMark)
 	mux.HandleFunc("/api/getbookmarked", req.GetBookMarked)
 
@@ -110,7 +100,7 @@ func main() {
 	mux.HandleFunc("/api/setmetadata", req.SetMetaData)
 	mux.HandleFunc("/api/getprofile", req.GetProfile)
 
-	mux.Handle("/", http.FileServer(http.Dir("web/nostr-reader/dist")))
+	mux.Handle("/", http.FileServer(http.Dir("../web/nostr-reader/dist")))
 
 	var port string = "8080"
 	if cfg.Server.Port > 0 {
@@ -137,13 +127,12 @@ func main() {
 			// interval task
 			case tm := <-ticker.C:
 				fmt.Println("The Current time is: ", tm)
-				intervalTask(nostr)
+				go intervalTask(&req)
 			}
 		}
 	}()
 
-	fmt.Println("Get nostr data from relays")
-	nostr.getEventData(ctx, false)
+	go intervalTask(&req)
 
 	fmt.Println("Server running: http://localhost:" + port)
 	//log.Fatal(http.ListenAndServe(":"+port, mux))
@@ -164,10 +153,14 @@ func main() {
 
 }
 
-func intervalTask(nostr Nostr) {
+func intervalTask(req *Requests) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
 	EventsQueue = EventsQueue[:0]
-	nostr.getEventData(ctx, true)
+	createdAt := req.Db.GetLastTimeStamp(ctx)
+	filter := req.Nostr.GetEventData(ctx, createdAt, true)
+
+	evs := req.Nostr.GetEvents(ctx, filter)
+	req.Db.SaveEvents(ctx, evs)
 }
