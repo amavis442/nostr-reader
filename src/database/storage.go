@@ -604,7 +604,7 @@ func (st *Storage) getChildren(ctx context.Context, eventMap map[string]Event) e
 	 * Get all child notes
 	 */
 
-	tx := st.GormDB.Model(&Note{}).
+	tx := st.GormDB.Debug().Model(&Note{}).
 		Select(`trees.root_event_id, trees.reply_event_id, notes.id, notes.event_id, notes.pubkey, notes.kind, notes.event_created_at, 
 		notes.content, notes.tags_full::json, notes.sig, notes.etags, notes.ptags,
 		profiles.name, profiles.about , profiles.picture,
@@ -617,7 +617,6 @@ func (st *Storage) getChildren(ctx context.Context, eventMap map[string]Event) e
 		Joins("LEFT JOIN follows ON (follows.pubkey = notes.pubkey)").
 		Joins("LEFT JOIN bookmarks ON (bookmarks.event_id = notes.event_id)").
 		Where("notes.kind = 1").
-		Where("notes.etags='{}'").
 		Where("blocks.pubkey IS NULL").
 		Where("seens.event_id IS NULL").
 		Where("notes.garbage = false")
@@ -628,6 +627,7 @@ func (st *Storage) getChildren(ctx context.Context, eventMap map[string]Event) e
 		eventIds = eventIds + `'` + k + `',`
 		numIds++
 	}
+	fmt.Println("Number of children : ", numIds)
 	if numIds < 1 {
 		return nil
 	}
