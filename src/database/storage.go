@@ -1,4 +1,4 @@
-package main
+package database
 
 import (
 	"bytes"
@@ -7,16 +7,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
+	"math"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/lib/pq"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/nbd-wtf/go-nostr"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+	"gorm.io/gorm/logger"
 )
 
 /**
@@ -24,9 +26,9 @@ import (
  * The filter is used for certain words in de posts we want to filter out, because they can be spam
  */
 type Storage struct {
-	DbPool *pgxpool.Pool
 	Filter []string
 	Count  int64
+	GormDB *gorm.DB
 }
 
 type DbConfig struct {
@@ -37,6 +39,30 @@ type DbConfig struct {
 	Host     string
 }
 
+type UserProfile struct {
+	Name        string `json:"name"`
+	About       string `json:"about"`
+	Picture     string `json:"picture"`
+	Website     string `json:"website"`
+	Nip05       string `json:"nip05"`
+	Lud16       string `json:"lud16"`
+	DisplayName string `json:"display_name"`
+	Pubkey      string `json:"pubkey"`
+	Followed    bool   `json:"followed"`
+}
+
+type Event struct {
+	Event    *nostr.Event      `json:"event"`
+	Profile  UserProfile       `json:"profile"`
+	Etags    []string          `json:"etags"`
+	Ptags    []string          `json:"ptags"`
+	Garbage  bool              `json:"gargabe"`
+	Children map[string]*Event `json:"children"`
+	Tree     int64             `json:"tree"`
+	RootId   string            `json:"root_id"`
+	Bookmark bool              `json:"bookmark"`
+}
+
 /**
  * Since the above structs should be in sync with the database tables they represent.
  * I put the create statement of the database here even when it more a database thing which is storage.go.
@@ -45,206 +71,107 @@ type DbConfig struct {
  * Payload of pg_notify is 8000. It will crash the app when it is beyond that when using "PERFORM pg_notify('submissions',row_to_json(NEW)::text);"
  * @see https://stackoverflow.com/questions/41057130/postgresql-error-payload-string-too-long
  */
-const CreateQuery string = `
- CREATE TABLE IF NOT EXISTS events (
-	 id SERIAL Primary Key,
-	 event_id TEXT UNIQUE NOT NULL, 
-	 pubkey TEXT NOT NULL, 
-	 kind INTEGER NOT NULL, 
-	 event_created_at INTEGER NOT NULL, 
-	 content TEXT, 
-	 tags_full TEXT, 
-	 ptags text[],
-	 etags text[],
-	 sig TEXT,
-	 garbage boolean DEFAULT false,
-	 raw json,
-	 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
- );
- CREATE INDEX IF NOT EXISTS idx_events_pubkey ON events (pubkey);
- CREATE INDEX IF NOT EXISTS idx_events_ptags ON events USING gin (etags);
- CREATE INDEX IF NOT EXISTS idx_events_etags ON events USING gin (ptags);
-
- CREATE TABLE IF NOT EXISTS profiles (
-	 id SERIAL Primary Key,
-	 pubkey VARCHAR UNIQUE NOT NULL, 
-	 name TEXT,
-	 about TEXT,
-	 picture TEXT,
-	 website TEXT,
-	 nip05 TEXT,
-	 lud16 TEXT,
-	 display_name TEXT,
-	 raw TEXT,
-	 profile_created_at INTEGER,
-	 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
- );
- CREATE INDEX IF NOT EXISTS idx_profile_pubkey ON profiles (pubkey);
- 
- CREATE TABLE IF NOT EXISTS block_pubkeys (
-	 id SERIAL Primary Key, 
-	 pubkey VARCHAR UNIQUE NOT NULL, 
-	 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
- );
- CREATE INDEX IF NOT EXISTS idx_block_pubkeys_pubkey ON block_pubkeys (pubkey);
- 
- CREATE TABLE IF NOT EXISTS follow_pubkeys (
-	 id SERIAL Primary Key,
-	 pubkey VARCHAR UNIQUE NOT NULL, 
-	 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
- );
- CREATE INDEX IF NOT EXISTS idx_follow_pubkeys_pubkey ON follow_pubkeys (pubkey);
- 
- CREATE TABLE IF NOT EXISTS seen (
-	 id SERIAL Primary Key,
-	 event_id VARCHAR UNIQUE NOT NULL, 
-	 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
- );
- CREATE INDEX IF NOT EXISTS seen_by_event_id ON seen (event_id);
- 
- CREATE TABLE IF NOT EXISTS tree (
-	 id SERIAL Primary Key,
-	 event_id VARCHAR UNIQUE NOT NULL,
-	 root_event_id VARCHAR,
-	 reply_event_id VARCHAR, 
-	 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
- );
-
- DO $$ BEGIN
-    CREATE TYPE vote AS ENUM('like','dislike');
- EXCEPTION
-    WHEN duplicate_object THEN null;
- END $$;
-
- CREATE TABLE IF NOT EXISTS "votes" (
-	"id" SERIAL NOT NULL,
-	"pubkey" VARCHAR NOT NULL,
-	"content" VARCHAR NULL DEFAULT NULL,
-	"current_vote" vote NULL DEFAULT NULL,
-	"target_event_id" TEXT NOT NULL,
-	"from_event_id" TEXT NOT NULL,
-	"created_at" TIMESTAMPTZ NULL DEFAULT CURRENT_TIMESTAMP,
-	PRIMARY KEY ("id"),
-	UNIQUE (pubkey, target_event_id)
-)
-;
-CREATE INDEX IF NOT EXISTS "idx_votes_target_event_id" ON votes ("target_event_id");
-CREATE	INDEX IF NOT EXISTS "idx_votes_from_event_id" ON votes ("from_event_id");
-CREATE	INDEX IF NOT EXISTS "idx_votes_current_vote" ON votes ("current_vote");
-CREATE UNIQUE INDEX IF NOT EXISTS pubkey_target_event_id ON votes (pubkey,target_event_id); 
-
-
-
- CREATE OR REPLACE FUNCTION delete_submission() RETURNS trigger AS $$
-BEGIN  
-  IF NEW.kind=5 THEN
-    DELETE FROM events WHERE ARRAY[id] && NEW.etags AND NEW.pubkey=pubkey;
-    RETURN NULL;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION ephemeral_submission() RETURNS trigger AS $$
-BEGIN
-  IF int4range(20000,29999) @> NEW.kind THEN
-    RETURN NULL;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION notify_submission() RETURNS trigger AS $$
-BEGIN
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS delete_trigger ON events;
-DROP TRIGGER IF EXISTS ephemeral_trigger ON events;
-DROP TRIGGER IF EXISTS submission_trigger ON events;
-
-CREATE TRIGGER delete_trigger BEFORE INSERT ON events FOR EACH ROW EXECUTE FUNCTION delete_submission();
-CREATE TRIGGER ephemeral_trigger BEFORE INSERT ON events FOR EACH ROW EXECUTE FUNCTION ephemeral_submission();
-CREATE TRIGGER submission_trigger AFTER INSERT ON events FOR EACH ROW EXECUTE FUNCTION notify_submission();
-`
-
 func (st *Storage) CheckError(err error) {
 	if err != nil {
 		log.Println("Query:: ", err.Error())
 		panic(err)
 	}
 }
-func (st *Storage) CreateTables(ctx context.Context) error {
-	_, err := st.DbPool.Exec(ctx, CreateQuery)
-	return err
+
+func (st *Storage) Paginate(value interface{}, pagination *Pagination, db *gorm.DB) func(db *gorm.DB) *gorm.DB {
+	var totalRows int64
+	st.GormDB.Model(value).Count(&totalRows)
+
+	pagination.TotalRows = totalRows
+	totalPages := int(math.Ceil(float64(totalRows) / float64(pagination.Limit)))
+	pagination.TotalPages = totalPages
+
+	return func(db *gorm.DB) *gorm.DB {
+		return db.Offset(pagination.GetOffset()).Limit(pagination.GetLimit()).Order(pagination.GetSort())
+	}
 }
 
 /**
  * Connect to postgresql database
  */
-func (st *Storage) Connect(ctx context.Context, cfg *Config) error {
-	// connection string
-	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s", cfg.Database.User, cfg.Database.Password, cfg.Database.Host, cfg.Database.Port, cfg.Database.Dbname)
-
+func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
 	var err error
-	st.DbPool, err = pgxpool.New(ctx, connStr)
-	fmt.Println("Connected!")
+
+	// connection string
+	/*
+		connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s", cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Dbname)
+
+		st.DbPool, err = pgxpool.New(ctx, connStr)
+		if err != nil {
+			return err
+		}
+	*/
+	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable TimeZone=Europe/Amsterdam",
+		cfg.Host,
+		cfg.User,
+		cfg.Password,
+		cfg.Dbname,
+		cfg.Port)
+
+	st.GormDB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+
+	st.GormDB.Logger.LogMode(logger.Silent)
+
+	st.GormDB.AutoMigrate(&Note{}, &Profile{}, &Block{}, &Follow{}, &Seen{}, &Tree{}, &Bookmark{})
+
+	st.GormDB.Exec(`DO $$ BEGIN
+    		CREATE TYPE vote AS ENUM('like','dislike');
+ 				EXCEPTION
+    			WHEN duplicate_object THEN null;
+ 			END $$;`)
+	st.GormDB.AutoMigrate(&Reaction{})
+	fmt.Println("Connected to database:", cfg.Dbname)
 	return err
 }
 
-func (st *Storage) Close() {
-	st.DbPool.Close()
+func (st *Storage) SaveProfile(ctx context.Context, ev *nostr.Event) {
+	var data Profile
+	err := json.Unmarshal([]byte(ev.Content), &data)
+	if err != nil {
+		//log.Println("Query:: ", err.Error(), ev.Content)
+		return
+	}
+
+	profile := Profile{
+		Pubkey:      ev.PubKey,
+		Name:        data.Name,
+		About:       data.About,
+		Picture:     data.Picture,
+		Website:     data.Website,
+		Nip05:       data.Nip05,
+		Lud16:       data.Lud16,
+		DisplayName: data.DisplayName,
+		Raw:         ev.String()}
+	//st.GormDB.Clauses(clause.OnConflict{DoNothing: true}).Create(&profile)
+	st.GormDB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "pubkey"}},
+		DoUpdates: clause.AssignmentColumns([]string{"name", "about", "picture", "website", "nip05", "lud16", "display_name", "raw"}),
+	}).Create(&profile)
+
+	if err := st.GormDB.WithContext(ctx).Exec("UPDATE notes SET profile_id=?,updated_at=NOW() WHERE pubkey =?", profile.ID, ev.PubKey).Error; err != nil {
+		fmt.Println(err)
+	}
+	/*if err := st.GormDB.WithContext(ctx).Model(&Note{}).Where("pubkey = ?", ev.PubKey).Update("profile_id", profile.ID).Error; err != nil {
+		fmt.Println(err)
+	}*/
+
+	// Should be in a dynamic list, so you can add to it or remove items.
+	if data.Picture != "" && len(data.Picture) > len("https://randomuser.me") && data.Picture[0:len("https://randomuser.me")] == "https://randomuser.me" {
+		st.CreateBlock(ctx, ev.PubKey)
+	}
 }
 
 /**
  * Save user profiles for easy lookup
  */
 func (st *Storage) SaveProfiles(ctx context.Context, evs []*nostr.Event) {
-	var qry = `INSERT INTO "profiles" ("pubkey", "name","about", "picture",  "website", "nip05",
-	"lud16", "display_name", "raw", "profile_created_at", "created_at")
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()) ON CONFLICT (pubkey) DO 
-		UPDATE SET "pubkey" = $1, "name" = $2,"about" = $3, "picture" = $4,  "website" = $5, "nip05" = $6,
-		"lud16" = $7, "display_name" = $8, "raw" = $9, "profile_created_at" = $10, "created_at" = NOW()
-		
-		;`
-
-	var tx pgx.Tx
-	tx, err := st.DbPool.Begin(ctx)
-	if err != nil {
-		log.Println(err.Error())
-		panic(err)
-	}
 	for _, ev := range evs {
-		var data Profile
-		err = json.Unmarshal([]byte(ev.Content), &data)
-		if err != nil {
-			log.Println("Query:: ", err.Error(), ev.Content)
-			continue
-		}
-
-		_, err = tx.Exec(ctx, qry, ev.PubKey, data.Name, data.About, data.Picture, data.Website, data.Nip05, data.Lud16, data.DisplayName, ev.String(), ev.CreatedAt)
-		if err != nil {
-			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
-				log.Printf("Query:: Update profile: unable to rollback: %v", rollbackErr)
-			}
-			log.Println(err)
-			ctx.Done()
-		}
-
-		/*
-			if data.Nip05 == "" {
-				st.BlockPubkey(ctx, ev.PubKey)
-			}
-		*/
-		// Should be in a dynamic list, so you can add to it or remove items.
-		if data.Picture != "" && len(data.Picture) > len("https://randomuser.me") && data.Picture[0:len("https://randomuser.me")] == "https://randomuser.me" {
-			st.BlockPubkey(ctx, ev.PubKey)
-		}
-	}
-	if err := tx.Commit(ctx); err != nil {
-		log.Println(err.Error())
-		panic(err)
+		st.SaveProfile(ctx, ev)
 	}
 }
 
@@ -253,34 +180,20 @@ func (st *Storage) SaveProfiles(ctx context.Context, evs []*nostr.Event) {
  * This will normalize the content tag of the events with all the unwanted markup (Myaby put this in a helper function)
  */
 func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string {
-	var qry = `INSERT INTO "events" ("event_id", "pubkey", "kind", "event_created_at", "content", "tags_full" , "sig" , "ptags" , "etags", "garbage", "raw", "created_at") 
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW()) ON CONFLICT (event_id) DO NOTHING RETURNING id;`
-
-	var treeQry = `INSERT INTO tree ("event_id","root_event_id", "reply_event_id", "created_at") VALUES ($1, $2, $3, NOW()) ON CONFLICT (event_id) DO NOTHING;`
-
-	tx, err := st.DbPool.Begin(ctx)
-	defer func() {
-		if err != nil {
-			tx.Rollback(ctx)
-		} else {
-			tx.Commit(ctx)
-		}
-	}()
-
 	var pubkeys = make([]string, 0)
 	ptags, etags := make([]string, 0), make([]string, 0)
 
-	type Tree struct {
+	type EventTree struct {
 		RootTag  string
 		ReplyTag string
 	}
 
 	//var re = regexp.MustCompile(`@npub`)
 
-	var tree Tree
+	var tree EventTree
 	for _, ev := range evs {
 		if ev.CreatedAt.Time().Unix() > time.Now().Unix() {
-			fmt.Fprintf(os.Stderr, "log message: %s", "QUERY:: Ignoring this event because timestamp is in the future."+ev.String())
+			//fmt.Fprintf(os.Stderr, "log message: %s", "QUERY:: Ignoring this event because timestamp is in the future."+ev.String())
 			continue
 		}
 
@@ -374,55 +287,88 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string 
 			return []string{}
 		}
 
-		id := 0
-		err = tx.QueryRow(ctx, qry, ev.ID, ev.PubKey, ev.Kind, ev.CreatedAt, ev.Content, string(tagJson), ev.Sig, ptags, etags, Garbage, jsonbuf.Bytes()).Scan(&id)
-		if err != nil {
-			log.Println(err)
-			if err == pgx.ErrNoRows {
-				log.Println("No rows")
-			}
+		note, _ := st.SaveNote(ctx, ev, tagJson, ptags, etags, Garbage, jsonbuf.Bytes())
+
+		if note.ID > 0 && len(tree.RootTag) > 0 {
+			treeData := Tree{EventId: ev.ID, RootEventId: tree.RootTag, ReplyEventId: tree.ReplyTag}
+			st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&treeData)
 		}
 
-		if id > 0 && len(tree.RootTag) > 0 {
-			tx.Exec(ctx, treeQry, ev.ID, tree.RootTag, tree.ReplyTag)
+		if note.ID > 0 && ev.Kind == 0 {
+			st.SaveProfile(ctx, ev)
 		}
 
 		// votes
-		if id > 0 && ev.Kind == 7 && len(etags) > 0 {
-			qryVote := `INSERT INTO votes (pubkey,content, current_vote,target_event_id,from_event_id,created_at) 
-			(SELECT e.pubkey,e.content, CASE WHEN e.content = '-' THEN 'dislike'::vote ELSE 'like'::vote end  AS current_vote, e.etags[1] AS target_event_id, e.event_id AS from_event_id, NOW() AS created_at 
-			FROM events e WHERE e.kind = 7 AND e.etags[1] <> '' AND e.id = $1) ON CONFLICT (pubkey,target_event_id) DO NOTHING`
+		if note.ID > 0 && ev.Kind == 7 && len(etags) > 0 {
+			t := ev.Tags.GetFirst([]string{"e"})
+			if t != nil {
+				targetEventId := t.Value()
 
-			if _, err = tx.Exec(ctx, qryVote, id); err != nil {
-				log.Println(qry)
-				log.Println("Query:: ", err.Error())
-				log.Println("Query:: ", ev.String())
-				log.Println("Query:: ", jsonbuf.Bytes())
-				panic(err)
+				var result Note
+				st.GormDB.WithContext(ctx).Where("event_id = ?", targetEventId).Find(&result) // only add votes for existing
+
+				if result.ID > 0 {
+					st.SaveReaction(ctx, ev, targetEventId, note.ID)
+				}
 			}
 		}
-
 	}
 
 	return pubkeys
+}
+
+func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event, tagJson []byte, ptags []string, etags []string, Garbage bool, json []byte) (Note, error) {
+	note := Note{}
+	note.EventId = ev.ID
+	note.Pubkey = ev.PubKey
+	note.Kind = ev.Kind
+	note.EventCreatedAt = ev.CreatedAt.Time().Unix()
+	note.Content = ev.Content
+	note.TagsFull = string(tagJson)
+	note.Sig = ev.Sig
+	note.Ptags = ptags
+	note.Etags = etags
+	note.Garbage = Garbage
+	note.Raw = json
+
+	err := st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&note).Error
+
+	if err != nil {
+		return Note{}, err
+	}
+
+	return note, nil
+}
+
+func (st *Storage) SaveReaction(ctx context.Context, ev *nostr.Event, targetEventId string, noteId uint) {
+	vote := Reaction{
+		Pubkey:        ev.PubKey,
+		Content:       ev.Content,
+		CurrentVote:   Like,
+		TargetEventId: targetEventId,
+		FromEventId:   ev.ID,
+		NoteID:        noteId}
+	if ev.Content == "-" {
+		vote.CurrentVote = Dislike
+	}
+
+	err := st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&vote).Error
+	if err != nil {
+		log.Println("Query error:: ", err.Error())
+		panic(err)
+	}
 }
 
 /**
  * Get a limitted amount of stored events
  */
 func (st *Storage) GetEvents(ctx context.Context, limit int) (*[]Event, error) {
-	tx, err := st.DbPool.Begin(ctx)
-	defer func() {
-		if err != nil {
-			tx.Rollback(ctx)
-		} else {
-			tx.Commit(ctx)
-		}
-	}()
-
-	rows, err := tx.Query(ctx, `SELECT e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full::json,e.sig, e.etags, e.ptags, u.name, u.about , u.picture,
-	u.website, u.nip05, u.lud16, u.display_name FROM events e LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) LEFT JOIN seen s on (s.event_id = e.event_id)
-	WHERE e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false ORDER BY e.event_created_at DESC LIMIT $1`, limit)
+	rows, err := st.GormDB.WithContext(ctx).Raw(`SELECT e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full::json,e.sig, e.etags, e.ptags, u.name, u.about , u.picture,
+	u.website, u.nip05, u.lud16, u.display_name FROM notes e 
+	LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
+	LEFT JOIN blocks b on (b.pubkey = e.pubkey) 
+	LEFT JOIN seens s on (s.event_id = e.event_id)
+	WHERE e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false ORDER BY e.event_created_at DESC LIMIT $1`, limit).Rows()
 
 	if err != nil {
 		log.Println("Query:: ", err)
@@ -486,102 +432,74 @@ func (st *Storage) GetEvents(ctx context.Context, limit int) (*[]Event, error) {
 	return &events, nil
 }
 
+type Options struct {
+	Follow   bool
+	BookMark bool
+}
+
 /**
  * Do not show all data in an endless scrol page, but paginate it for easy access
  * and ignore the garbage tagged posts
  *
  */
-func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow bool) error {
-	tx, err := st.DbPool.Begin(ctx)
-	defer func() {
-		if err != nil {
-			tx.Rollback(ctx)
-		} else {
-			tx.Commit(ctx)
-		}
-	}()
+func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, options Options) error {
 
-	var (
-		recordCount int64
-		recordId    int64
-	)
+	tx := st.GormDB.Model(&Note{}).
+		Select(`notes.id, notes.event_id, notes.pubkey, notes.kind, notes.event_created_at, 
+		notes.content, notes.tags_full::json, notes.sig, notes.etags, notes.ptags,
+		profiles.name, profiles.about , profiles.picture,
+		profiles.website, profiles.nip05, profiles.lud16, profiles.display_name, 
+		follows.pubkey follow, bookmarks.event_id bookmarked`).
+		Joins("LEFT JOIN profiles ON (profiles.pubkey = notes.pubkey)").
+		Joins("LEFT JOIN blocks  on (blocks.pubkey = notes.pubkey)").
+		Joins("LEFT JOIN seens on (seens.event_id = notes.event_id)").
+		Where("notes.kind = 1").
+		Where("notes.etags='{}'").
+		Where("blocks.pubkey IS NULL").
+		Where("seens.event_id IS NULL").
+		Where("notes.garbage = false")
 
-	//Only root events.
-	mainQry := `SELECT e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full::json, e.sig, e.etags, e.ptags,  
-	u.name, u.about , u.picture,
-	u.website, u.nip05, u.lud16, u.display_name, f.pubkey follow
-	FROM events e 
-	LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
-	LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
-	LEFT JOIN seen s on (s.event_id = e.event_id)
-	`
-
-	if follow {
-		mainQry += `
-		JOIN follow_pubkeys f ON (f.pubkey = e.pubkey)
-		`
-	} else {
-		mainQry += `
-		LEFT JOIN follow_pubkeys f ON (f.pubkey = e.pubkey)
-		`
-	}
-	mainQry += `WHERE e.kind = 1 AND e.etags='{}' AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false`
-	if !p.Renew && !follow {
-		mainQry += ` AND e.id <= ` + fmt.Sprintf("%d", p.MaxId)
-	}
-	if p.Since != 0 {
+	if p.Since > 0 && (!options.BookMark && !options.Follow) {
 		since := time.Now().Unix() - int64(p.Since*60*60*24)
-		mainQry = mainQry + ` AND e.event_created_at > ` + fmt.Sprintf("%d", since)
+		tx.Where("notes.event_created_at > ?", fmt.Sprintf("%d", since))
 	}
 
-	countQry := `SELECT COUNT(*) AS cnt FROM (SELECT DISTINCT id, event_id, event_created_at FROM (` + mainQry + `) resultTable) tbl`
-	err = tx.QueryRow(ctx, countQry).Scan(&recordCount)
-	if err != nil {
-		log.Fatal(err)
-	}
-	p.SetTotal(recordCount)
-	p.SetTo()
-	if recordCount < 1 {
-		return nil
+	if options.Follow {
+		tx.Joins("JOIN follows ON (follows.pubkey = notes.pubkey)")
+	} else {
+		tx.Joins("LEFT JOIN follows ON (follows.pubkey = notes.pubkey)")
 	}
 
-	selectIdQry := `SELECT id FROM (SELECT DISTINCT id, event_id, event_created_at FROM ( ` + mainQry + `) resultInnerTable ORDER BY event_created_at DESC) tbl  LIMIT ` + strconv.Itoa(p.Limit)
+	if options.BookMark {
+		tx.Joins("JOIN bookmarks ON (bookmarks.event_id = notes.event_id)")
+	} else {
+		tx.Joins("LEFT JOIN bookmarks ON (bookmarks.event_id = notes.event_id)")
+	}
+
+	if p.MaxId > 0 && !p.Renew && !options.Follow && !options.BookMark {
+		tx.Where("notes.id <= ?", fmt.Sprintf("%d", p.MaxId))
+	}
+
+	var count int64
+	tx.Count(&count)
+
+	tx.Limit(p.Limit)
 	if p.Offset > 0 {
-		selectIdQry = selectIdQry + ` OFFSET ` + fmt.Sprintf("%d", p.Offset)
+		tx.Offset(int(p.Offset))
 	}
-	selectIdQry = selectIdQry + `;`
-	rowsIds, err := tx.Query(ctx, selectIdQry)
+
+	tx.Order("notes.event_created_at DESC")
+	rows, err := tx.Rows()
 	if err != nil {
 		log.Fatal(err)
 	}
-	selectQry := mainQry + ` AND e.id IN (`
-	var maxId int64 = 0
-	for rowsIds.Next() {
-		err = rowsIds.Scan(&recordId)
-		if err != nil {
-			log.Fatal(err)
-		}
+	defer rows.Close()
 
-		selectQry = selectQry + fmt.Sprintf("%d", recordId) + ","
-		if recordId > maxId {
-			maxId = recordId
-		}
-	}
-	rowsIds.Close()
-	if p.Renew {
-		p.MaxId = maxId
-	}
-	finalQry := selectQry[:len(selectQry)-1]
-	finalQry = finalQry + ") ORDER BY event_created_at DESC;"
+	p.SetTotal(count)
+	p.SetTo()
+	eventMap, keys, _ := st.procesEventRows(rows)
 
-	rows, err := tx.Query(ctx, finalQry)
-	if err != nil {
-		log.Println(err)
-		return nil
-	}
-	eventMap, keys, err := st.procesEventRows(rows)
-
-	st.getChildren(ctx, tx, eventMap)
+	st.getChildren(ctx, eventMap)
 	events := make([]Event, 0)
 	// Make sure the order stays the same
 	for _, k := range keys {
@@ -592,12 +510,12 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, follow
 	return nil
 }
 
-func (st *Storage) procesEventRows(rows pgx.Rows) (map[string]Event, []string, error) {
+func (st *Storage) procesEventRows(rows *sql.Rows) (map[string]Event, []string, error) {
 	eventMap := make(map[string]Event)
 	var keys []string
-	for rows.Next() {
 
-		var event Event
+	for rows.Next() {
+		var note Event
 		var id int
 		var name sql.NullString
 		var about sql.NullString
@@ -608,92 +526,117 @@ func (st *Storage) procesEventRows(rows pgx.Rows) (map[string]Event, []string, e
 		var lud16 sql.NullString
 		var displayname sql.NullString
 		var followed sql.NullString
+		var bookmarked sql.NullString
 
-		event.Event = &nostr.Event{}
-		if err := rows.Scan(&id, &event.Event.ID, &event.Event.PubKey, &event.Event.Kind, &event.Event.CreatedAt, &event.Event.Content, &event.Event.Tags, &event.Event.Sig,
-			&event.Etags, &event.Ptags,
-			&name, &about, &picture, &website, &nip05, &lud16, &displayname, &followed); err != nil {
+		note.Event = &nostr.Event{}
+		if err := rows.Scan(&id,
+			&note.Event.ID, &note.Event.PubKey,
+			&note.Event.Kind, &note.Event.CreatedAt,
+			&note.Event.Content, &note.Event.Tags, &note.Event.Sig,
+			(pq.Array)(&note.Etags), (pq.Array)(&note.Ptags),
+			&name, &about, &picture, &website, &nip05, &lud16, &displayname, &followed, &bookmarked); err != nil {
 			log.Println("Query:: ", err.Error())
 			panic(err)
 		}
 
-		if _, ok := eventMap[event.Event.ID]; ok {
+		if _, ok := eventMap[note.Event.ID]; ok {
 			continue
 		}
 
-		event.RootId = event.Event.ID
-		event.Tree = 1
+		note.RootId = note.Event.ID
+		note.Tree = 1
 
 		if name.Valid {
-			event.Profile.Name = name.String
+			note.Profile.Name = name.String
 		} else {
-			event.Profile.Name = event.Event.PubKey
+			note.Profile.Name = note.Event.PubKey
 		}
 		if about.Valid {
-			event.Profile.About = about.String
+			note.Profile.About = about.String
 		}
 		if picture.Valid {
-			event.Profile.Picture = picture.String
+			note.Profile.Picture = picture.String
 		}
 
 		if website.Valid {
-			event.Profile.Website = website.String
+			note.Profile.Website = website.String
 		}
 		if nip05.Valid {
-			event.Profile.Nip05 = nip05.String
+			note.Profile.Nip05 = nip05.String
 		}
 		if lud16.Valid {
-			event.Profile.Lud16 = lud16.String
+			note.Profile.Lud16 = lud16.String
 		}
 		if displayname.Valid {
-			event.Profile.DisplayName = displayname.String
+			note.Profile.DisplayName = displayname.String
 		}
 
-		event.Profile.Followed = false
+		note.Profile.Followed = false
 		if followed.Valid {
-			event.Profile.Followed = true
+			note.Profile.Followed = true
+		}
+		note.Bookmark = false
+		if bookmarked.Valid {
+			note.Bookmark = true
 		}
 
 		//nostr.Event = json.Unmarshal()
 		//sdk.ParseReferences(&nostr.Event{event})
 
-		event.Children = make(map[string]*Event, 0)
-		eventMap[event.Event.ID] = event
-		keys = append(keys, event.Event.ID) // Make sure the order stays the same @see https://go.dev/blog/maps
+		note.Children = make(map[string]*Event, 0)
+		eventMap[note.Event.ID] = note
+		keys = append(keys, note.Event.ID) // Make sure the order stays the same @see https://go.dev/blog/maps
 	}
 	// Check for errors from iterating over rows.
 	if err := rows.Err(); err != nil {
 		log.Println("Query:: ", err)
 		return nil, nil, err
 	}
-	rows.Close()
+	defer rows.Close()
 
 	return eventMap, keys, nil
 }
 
-func (st *Storage) getChildren(ctx context.Context, tx pgx.Tx, eventMap map[string]Event) error {
+func (st *Storage) getChildren(ctx context.Context, eventMap map[string]Event) error {
 	var err error
 
 	/**
 	 * Get all child notes
 	 */
-	treeQry := `SELECT t.root_event_id, t.reply_event_id, 
-	 e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content,e.tags_full::json,e.sig, 
-	 e.etags, e.ptags , u.name, u.about , u.picture,
-	 u.website, u.nip05, u.lud16, u.display_name, f.pubkey follow
-	 FROM tree t, events e 
-	 LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
-	 LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
-	 LEFT JOIN seen s on (s.event_id = e.event_id)
-	 LEFT JOIN follow_pubkeys f ON (f.pubkey = e.pubkey)
-	 WHERE root_event_id IN (`
+
+	tx := st.GormDB.Model(&Note{}).
+		Select(`trees.root_event_id, trees.reply_event_id, notes.id, notes.event_id, notes.pubkey, notes.kind, notes.event_created_at, 
+		notes.content, notes.tags_full::json, notes.sig, notes.etags, notes.ptags,
+		profiles.name, profiles.about , profiles.picture,
+		profiles.website, profiles.nip05, profiles.lud16, profiles.display_name, 
+		follows.pubkey follow, bookmarks.event_id bookmarked`).
+		Joins("JOIN trees ON (trees.event_id = notes.event_id)").
+		Joins("LEFT JOIN profiles ON (profiles.pubkey = notes.pubkey)").
+		Joins("LEFT JOIN blocks ON (blocks.pubkey = notes.pubkey)").
+		Joins("LEFT JOIN seens on (seens.event_id = notes.event_id)").
+		Joins("LEFT JOIN follows ON (follows.pubkey = notes.pubkey)").
+		Joins("LEFT JOIN bookmarks ON (bookmarks.event_id = notes.event_id)").
+		Where("notes.kind = 1").
+		Where("notes.etags='{}'").
+		Where("blocks.pubkey IS NULL").
+		Where("seens.event_id IS NULL").
+		Where("notes.garbage = false")
+
+	var eventIds string
+	var numIds int = 0
 	for k := range eventMap {
-		treeQry = treeQry + `'` + k + `',`
+		eventIds = eventIds + `'` + k + `',`
+		numIds++
 	}
-	treeQry = treeQry[:len(treeQry)-1] + `) AND e.event_id = t.event_id
-	 AND e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false ORDER BY e.event_created_at;`
-	var treeRows pgx.Rows
-	treeRows, err = tx.Query(ctx, treeQry)
+	if numIds < 1 {
+		return nil
+	}
+
+	eventIds = eventIds[:len(eventIds)-1]
+
+	tx.Where("trees.root_event_id IN (" + eventIds + ")")
+
+	treeRows, err := tx.Rows()
 	if err != nil {
 		log.Println(err)
 	}
@@ -711,12 +654,13 @@ func (st *Storage) getChildren(ctx context.Context, tx pgx.Tx, eventMap map[stri
 		var lud16 sql.NullString
 		var displayname sql.NullString
 		var followed sql.NullString
+		var bookmarked sql.NullString
 		childEvent.Event = &nostr.Event{}
 
 		if err := treeRows.Scan(&root_event_id, &reply_event_id, &id,
 			&childEvent.Event.ID, &childEvent.Event.PubKey, &childEvent.Event.Kind, &childEvent.Event.CreatedAt, &childEvent.Event.Content, &childEvent.Event.Tags, &childEvent.Event.Sig,
-			&childEvent.Etags, &childEvent.Ptags, &name, &about, &picture,
-			&website, &nip05, &lud16, &displayname, &followed); err != nil {
+			(pq.Array)(&childEvent.Etags), (pq.Array)(&childEvent.Ptags), &name, &about, &picture,
+			&website, &nip05, &lud16, &displayname, &followed, &bookmarked); err != nil {
 			log.Println(err.Error())
 			panic(err)
 		}
@@ -753,6 +697,11 @@ func (st *Storage) getChildren(ctx context.Context, tx pgx.Tx, eventMap map[stri
 		if followed.Valid {
 			childEvent.Profile.Followed = true
 		}
+		childEvent.Bookmark = false
+		if bookmarked.Valid {
+			childEvent.Bookmark = true
+		}
+
 		if item, ok := eventMap[root_event_id]; ok {
 
 			if reply_event_id.Valid {
@@ -763,7 +712,7 @@ func (st *Storage) getChildren(ctx context.Context, tx pgx.Tx, eventMap map[stri
 					//eventMap[root_event_id] = item
 				}
 				if reply_event_id.String != "" {
-					fmt.Println("Child [", childEvent.Event.ID, "] :: replied to ["+reply_event_id.String+"] "+childEvent.Event.Content)
+					//fmt.Println("Child [", childEvent.Event.ID, "] :: replied to ["+reply_event_id.String+"] "+childEvent.Event.Content)
 					walk(&item, childEvent, reply_event_id.String, 1)
 				}
 			}
@@ -784,7 +733,7 @@ func walk(parent *Event, payload Event, reply_event_id string, level int64) bool
 	}
 
 	if parent.Event.ID == reply_event_id {
-		fmt.Println("Found parent:: [", parent.Event.ID, "] :: ", parent.Event.Content)
+		//fmt.Println("Found parent:: [", parent.Event.ID, "] :: ", parent.Event.Content)
 		payload.Tree = level
 		if parent.Children == nil {
 			parent.Children = make(map[string]*Event, 0)
@@ -803,50 +752,41 @@ func walk(parent *Event, payload Event, reply_event_id string, level int64) bool
 	return false
 }
 
-func (st *Storage) getInbox(ctx context.Context, p *Pagination, pubkey string) error {
+func (st *Storage) GetInbox(ctx context.Context, p *Pagination, pubkey string) error {
 	qry := `
 	SELECT
 	e0.id, e0.event_id, e0.pubkey, e0.kind, e0.event_created_at, e0.content, e0.tags_full::json, e0.sig, e0.etags, e0.ptags,  
 	u.name, u.about , u.picture,
-	u.website, u.nip05, u.lud16, u.display_name, f.pubkey follow
+	u.website, u.nip05, u.lud16, u.display_name, f.pubkey follow, bm.event_id bookmarked
 	FROM 
-	events e0 
-	LEFT JOIN follow_pubkeys f ON (f.pubkey = e0.pubkey)
+	notes e0 
+	LEFT JOIN follows f ON (f.pubkey = e0.pubkey)
+	LEFT JOIN bookmarks bm ON (bm.event_id = e0.event_id)
 	LEFT JOIN profiles u ON (u.pubkey = e0.pubkey ) 
 	JOIN
 	(SELECT
 	DISTINCT e0.event_id
 	FROM 
-	events e0 
-	LEFT JOIN follow_pubkeys f ON (f.pubkey = e0.pubkey)
-	LEFT JOIN profiles u ON (u.pubkey = e0.pubkey ) 
-	JOIN (SELECT t.root_event_id, t.event_id, t.reply_event_id FROM tree t, events e1 WHERE e1.pubkey = $1 AND e1.event_id = t.event_id) t0 ON e0.event_id = t0.root_event_id
+	notes e0 
+	JOIN (SELECT t.root_event_id, t.event_id, t.reply_event_id FROM trees t, notes e1 WHERE e1.pubkey = $1 AND e1.event_id = t.event_id) t0 ON e0.event_id = t0.root_event_id
 	) tbl 
 	ON
 	tbl.event_id = e0.event_id
 	ORDER BY e0.event_created_at DESC;`
 
-	tx, err := st.DbPool.Begin(ctx)
-	defer func() {
-		if err != nil {
-			tx.Rollback(ctx)
-		} else {
-			tx.Commit(ctx)
-		}
-	}()
-
-	rows, err := tx.Query(ctx, qry, pubkey)
+	//rows, err := tx.Query(ctx, qry, pubkey)
+	rows, err := st.GormDB.WithContext(ctx).Raw(qry, pubkey).Rows()
 	if err != nil {
 		log.Println("Query:: ", err)
 		return nil
 	}
 	defer rows.Close()
 
-	eventMap, keys, err := st.procesEventRows(rows)
+	eventMap, keys, _ := st.procesEventRows(rows)
 	p.SetTotal(int64(len(keys)))
 	p.SetTo()
 
-	st.getChildren(ctx, tx, eventMap)
+	st.getChildren(ctx, eventMap)
 	events := make([]Event, 0)
 	// Make sure the order stays the same
 	for _, k := range keys {
@@ -862,7 +802,8 @@ func (st *Storage) getInbox(ctx context.Context, p *Pagination, pubkey string) e
 func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 	var qry = `SELECT e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full::json, e.sig, e.etags, e.ptags, 
 	u.name, u.about , u.picture, u.website, u.nip05, u.lud16, u.display_name
-	FROM events e LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
+	FROM notes e LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
+	LEFT JOIN blocks b on (b.pubkey = e.pubkey) 
 	WHERE e.event_id = $1`
 	//qry = qry + "'" + id + "'"
 	log.Println("Query:: ", qry)
@@ -878,8 +819,9 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 	var displayname sql.NullString
 	event.Event = &nostr.Event{}
 
-	err := st.DbPool.QueryRow(ctx, qry, id).Scan(&event.Event.ID, &event.Event.PubKey, &event.Event.Kind, &event.Event.CreatedAt, &event.Event.Content, &event.Event.Tags, &event.Event.Sig,
-		&event.Etags, &event.Ptags, &name, &about, &picture, &website, &nip05, &lud16, &displayname)
+	row := st.GormDB.WithContext(ctx).Raw(qry, id).Row()
+	err := row.Scan(&event.Event.ID, &event.Event.PubKey, &event.Event.Kind, &event.Event.CreatedAt, &event.Event.Content, &event.Event.Tags, &event.Event.Sig,
+		(pq.Array)(&event.Etags), (pq.Array)(&event.Ptags), &name, &about, &picture, &website, &nip05, &lud16, &displayname)
 	switch {
 	case err == sql.ErrNoRows:
 		log.Printf("Query:: 404 no event with id %s\n", id)
@@ -894,17 +836,17 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 	e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content,e.tags_full::json,e.sig, 
 	e.etags, e.ptags , u.name, u.about , u.picture,
 	u.website, u.nip05, u.lud16, u.display_name, f.pubkey follow
-	FROM tree t, events e 
+	FROM trees t, notes e 
 	LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
-	LEFT JOIN block_pubkeys b on (b.pubkey = e.pubkey) 
-	LEFT JOIN seen s on (s.event_id = e.event_id)
-	LEFT JOIN follow_pubkeys f ON (f.pubkey = e.pubkey)
+	LEFT JOIN blocks b on (b.pubkey = e.pubkey) 
+	LEFT JOIN seens s on (s.event_id = e.event_id)
+	LEFT JOIN follows f ON (f.pubkey = e.pubkey)
 	WHERE root_event_id IN (` + `'` + event.Event.ID + `')` +
 		` AND e.event_id = t.event_id
 	AND e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false;`
 
-	var treeRows pgx.Rows
-	treeRows, err = st.DbPool.Query(ctx, treeQry)
+	var treeRows *sql.Rows
+	treeRows, err = st.GormDB.WithContext(ctx).Raw(treeQry).Rows()
 	if err != nil {
 		log.Println("Query:: ", err)
 	}
@@ -926,7 +868,7 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 
 		if err := treeRows.Scan(&root_event_id, &reply_event_id, &id,
 			&childEvent.Event.ID, &childEvent.Event.PubKey, &childEvent.Event.Kind, &childEvent.Event.CreatedAt, &childEvent.Event.Content, &childEvent.Event.Tags, &childEvent.Event.Sig,
-			&childEvent.Etags, &childEvent.Ptags, &name, &about, &picture,
+			(pq.Array)(&childEvent.Etags), (pq.Array)(&childEvent.Ptags), &name, &about, &picture,
 			&website, &nip05, &lud16, &displayname, &followed); err != nil {
 			log.Println("Query:: ", err.Error())
 			panic(err)
@@ -974,13 +916,15 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 
 func (st *Storage) FindRawEvent(ctx context.Context, id string) (nostr.Event, error) {
 	var qry = `SELECT e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.sig, e.tags_full::json
-	FROM events e 
+	FROM notes e 
 	WHERE e.event_id = $1`
 
 	var event Event
 	event.Event = &nostr.Event{}
 
-	err := st.DbPool.QueryRow(ctx, qry, id).Scan(&event.Event.ID, &event.Event.PubKey, &event.Event.Kind, &event.Event.CreatedAt,
+	row := st.GormDB.WithContext(ctx).Raw(qry, id).Row()
+
+	err := row.Scan(&event.Event.ID, &event.Event.PubKey, &event.Event.Kind, &event.Event.CreatedAt,
 		&event.Event.Content, &event.Event.Sig, &event.Event.Tags)
 	switch {
 	case err == sql.ErrNoRows:
@@ -1000,7 +944,7 @@ func (st *Storage) CheckProfiles(ctx context.Context, pubkeys []string, epochtim
 	}
 	qry = qry[:len(qry)-1] + `)`
 
-	rows, err := st.DbPool.Query(ctx, qry, epochtime)
+	rows, err := st.GormDB.WithContext(ctx).Raw(qry, epochtime).Rows()
 	if err != nil {
 		log.Println("Query:: ", err)
 		return []string{}, err
@@ -1027,11 +971,16 @@ func (st *Storage) CheckProfiles(ctx context.Context, pubkeys []string, epochtim
 /**
  * Some users just posting garbage, so we try to block those by putting them on the naugthy list
  */
-func (st *Storage) BlockPubkey(ctx context.Context, pubkey string) error {
-	_, err := st.DbPool.Exec(ctx, `INSERT INTO "block_pubkeys" (pubkey, created_at) VALUES ($1, NOW()) ON CONFLICT (pubkey) DO NOTHING;`, pubkey)
-	if err != nil {
-		log.Println("Query:: ", err)
-		return err
+func (st *Storage) CreateBlock(ctx context.Context, pubkey string) error {
+	blockPubkey := Block{Pubkey: pubkey}
+	//st.GormDB.Clauses(clause.OnConflict{DoNothing: true}).Create(&blockPubkey)
+
+	if err := st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&blockPubkey).Error; err != nil {
+		fmt.Println(err)
+	}
+
+	if err := st.GormDB.WithContext(ctx).Model(&Note{}).Where("pubkey = ?", pubkey).Update("block_id", blockPubkey.ID).Error; err != nil {
+		fmt.Println(err)
 	}
 
 	return nil
@@ -1040,8 +989,37 @@ func (st *Storage) BlockPubkey(ctx context.Context, pubkey string) error {
 /**
  * And there are user we like, so put them on the good list
  */
-func (st *Storage) FollowPubkey(ctx context.Context, pubkey string) error {
-	_, err := st.DbPool.Exec(ctx, `INSERT INTO "follow_pubkeys" (pubkey, created_at) VALUES ($1, NOW()) ON CONFLICT (pubkey) DO NOTHING;`, pubkey)
+func (st *Storage) CreateFollow(ctx context.Context, pubkey string) error {
+	followPubkey := Follow{Pubkey: pubkey}
+	if err := st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&followPubkey).Error; err != nil {
+		fmt.Println(err)
+	}
+
+	if err := st.GormDB.WithContext(ctx).Model(&Note{}).Where("pubkey = ?", pubkey).Update("follow_id", followPubkey.ID).Error; err != nil {
+		fmt.Println(err)
+	}
+
+	return nil
+}
+
+func (st *Storage) RemoveFollow(ctx context.Context, pubkey string) error {
+	if err := st.GormDB.WithContext(ctx).Where("pubkey = ?", pubkey).Delete(&Follow{}); err != nil {
+		fmt.Println(err)
+	}
+
+	if err := st.GormDB.WithContext(ctx).Model(&Note{}).Where("pubkey = ?", pubkey).Update("follow_id", gorm.Expr("NULL")); err != nil {
+		fmt.Println(err)
+	}
+
+	return nil
+}
+
+func (st *Storage) CreateBookMark(ctx context.Context, eventID string) error {
+	var note Note
+	st.GormDB.WithContext(ctx).Where("event_id = ?", eventID).Find(&note)
+
+	bookmark := Bookmark{EventId: eventID, NoteID: note.ID}
+	err := st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&bookmark).Error
 	if err != nil {
 		log.Println("Query:: ", err)
 		return err
@@ -1050,8 +1028,8 @@ func (st *Storage) FollowPubkey(ctx context.Context, pubkey string) error {
 	return nil
 }
 
-func (st *Storage) UnfollowPubkey(ctx context.Context, pubkey string) error {
-	_, err := st.DbPool.Exec(ctx, `DELETE FROM "follow_pubkeys" WHERE pubkey = $1;`, pubkey)
+func (st *Storage) RemoveBookMark(ctx context.Context, eventID string) error {
+	err := st.GormDB.WithContext(ctx).Where("event_id = ?", eventID).Delete(&Bookmark{}).Error
 	if err != nil {
 		log.Println("Query:: ", err)
 		return err
@@ -1060,10 +1038,9 @@ func (st *Storage) UnfollowPubkey(ctx context.Context, pubkey string) error {
 	return nil
 }
 
-func (st *Storage) getLastTimeStamp(ctx context.Context) int64 {
+func (st *Storage) GetLastTimeStamp(ctx context.Context) int64 {
 	var createdAt time.Time
-	row := st.DbPool.QueryRow(ctx, "SELECT MAX(created_at) as MaxCreated FROM events")
-	row.Scan(&createdAt)
+	st.GormDB.WithContext(ctx).Raw("SELECT MAX(created_at) as MaxCreated FROM notes").Scan(&createdAt)
 
 	return createdAt.Unix()
 }
@@ -1083,7 +1060,8 @@ func (st *Storage) FindProfile(ctx context.Context, pubkey string) (Profile, err
 	var lud16 sql.NullString
 	var displayname sql.NullString
 
-	err := st.DbPool.QueryRow(ctx, qry, pubkey).Scan(&name, &about, &picture, &website, &nip05, &lud16, &displayname)
+	row := st.GormDB.WithContext(ctx).Raw(qry, pubkey).Row()
+	err := row.Scan(&name, &about, &picture, &website, &nip05, &lud16, &displayname)
 	switch {
 	case err == sql.ErrNoRows:
 		log.Printf("Query:: 404 no profile with pubkey %s\n", pubkey)

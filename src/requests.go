@@ -1,6 +1,8 @@
 package main
 
 import (
+	"amavis442/relaystore/database"
+	nostrWrapper "amavis442/relaystore/nostr/wrapper"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,29 +11,30 @@ import (
 	"strings"
 	"time"
 
-	nostrHandler "github.com/nbd-wtf/go-nostr"
+	"github.com/nbd-wtf/go-nostr"
 )
 
 type Requests struct {
 	Cfg   *Config
-	Nostr *Nostr
+	Db    *database.Storage
+	Nostr *nostrWrapper.NostrWrapper
 }
 
 /**
  * I put this here because this will be returned as json for the api
  */
-type BlockPubkey struct {
+type Pubkey struct {
 	Pubkey string `json:"pubkey"`
 }
 
-type FollowPubkey struct {
-	Pubkey string `json:"pubkey"`
+type BookMark struct {
+	EventId string `json:"event_id"`
 }
 
 /**
  * Not all events are processed at once and we do not want to miss out on events, so put them in a queque and use FIFO to process.
  */
-var EventsQueue = make([]nostrHandler.Event, 0)
+var EventsQueue = make([]nostr.Event, 0)
 
 // var ptagsQueue = make([]string, 0)
 var syncHash string = ""
@@ -58,7 +61,7 @@ func (req *Requests) getRoot(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	pagination := Pagination{}
+	pagination := database.Pagination{}
 	pagination.SetLimit(p.Limit)
 	pagination.SetCurrentPage(p.Page)
 	pagination.SetSince(p.Since)
@@ -66,7 +69,7 @@ func (req *Requests) getRoot(w http.ResponseWriter, r *http.Request) {
 	pagination.SetRenew(p.Renew)
 	pagination.SetMaxId(p.MaxId)
 
-	err = req.Cfg.Storage.GetEventPagination(ctx, &pagination, false)
+	err = req.Db.GetEventPagination(ctx, &pagination, database.Options{Follow: false, BookMark: false})
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -92,11 +95,11 @@ func (req *Requests) getInbox(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	pagination := Pagination{}
+	pagination := database.Pagination{}
 	pagination.SetLimit(p.Limit)
 	pagination.SetCurrentPage(p.Page)
 	pagination.SetSince(p.Since)
-	err = req.Cfg.Storage.getInbox(ctx, &pagination, req.Cfg.Pubkey)
+	err = req.Db.GetInbox(ctx, &pagination, req.Cfg.Pubkey)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -116,7 +119,20 @@ func (req *Requests) StartSync(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	EventsQueue = EventsQueue[:0]
-	req.Nostr.getEventData(ctx)
+	createdAt := req.Db.GetLastTimeStamp(ctx)
+
+	filter := req.Nostr.GetEventData(ctx, createdAt, true)
+	evs := req.Nostr.GetEvents(ctx, filter)
+	var pubkeys = make([]string, 0)
+	pubkeys = req.Db.SaveEvents(ctx, evs)
+
+	// Todo build check for ttl so user data is not refreshed every time.
+	var tresholdTime int64 = time.Now().Unix() - 60*60*24
+
+	pubkeys, _ = req.Db.CheckProfiles(ctx, pubkeys, tresholdTime)
+	// Last but not least, try to get the user metadata
+	req.Nostr.UpdateProfiles(ctx, pubkeys)
+	req.Db.SaveProfiles(ctx, evs)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -146,15 +162,18 @@ func (req *Requests) SyncNote(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 	log.Println("Sync event with Id: ", j.ID)
-	var tagMap nostrHandler.TagMap = make(nostrHandler.TagMap, 0)
+	var tagMap nostr.TagMap = make(nostr.TagMap, 0)
 	tagMap["e"] = []string{j.ID}
-	filter := nostrHandler.Filter{
+	filter := nostr.Filter{
 		Tags:  tagMap,
 		Limit: 1,
 	}
 
-	req.Nostr.GetEvents(ctx, filter, false)
-	ev, _ := req.Cfg.Storage.FindEvent(ctx, j.ID)
+	evs := req.Nostr.GetEvents(ctx, filter)
+
+	req.Db.SaveEvents(ctx, evs)
+
+	ev, _ := req.Db.FindEvent(ctx, j.ID)
 
 	log.Println("Need to get it", j.ID, filter)
 
@@ -165,9 +184,9 @@ func (req *Requests) SyncNote(w http.ResponseWriter, r *http.Request) {
 	syncHash = fmt.Sprint(time.Now().Unix())
 
 	type Result struct {
-		Status  string `json:"status"`
-		Message string `json:"message"`
-		Data    Event  `json:"data"`
+		Status  string         `json:"status"`
+		Message string         `json:"message"`
+		Data    database.Event `json:"data"`
 	}
 	var test = Result{}
 	//test := make(map[string]string)
@@ -185,21 +204,21 @@ func (req *Requests) BlockUser(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var j BlockPubkey
-	err := json.NewDecoder(r.Body).Decode(&j)
+	var user Pubkey
+	err := json.NewDecoder(r.Body).Decode(&user)
 	if err != nil {
 		log.Println(err)
 		panic(err)
 	}
 
-	req.Nostr.blockPubkey(ctx, &j)
+	req.Db.CreateBlock(ctx, user.Pubkey)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
 	w.WriteHeader(http.StatusOK)
 	test := map[string]string{}
 	test["status"] = "ok"
-	test["blocked"] = j.Pubkey
+	test["blocked"] = user.Pubkey
 	err = json.NewEncoder(w).Encode(test)
 	if err != nil {
 		panic(err)
@@ -211,14 +230,14 @@ func (req *Requests) FollowUser(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var user FollowPubkey
+	var user Pubkey
 	err := json.NewDecoder(r.Body).Decode(&user)
 	if err != nil {
 		log.Println(err)
 		panic(err)
 	}
 
-	err = req.Nostr.FollowPubkey(ctx, &user)
+	err = req.Db.CreateFollow(ctx, user.Pubkey)
 
 	fmt.Println("Follow user: ", user.Pubkey)
 	w.Header().Set("Content-Type", "application/json")
@@ -244,14 +263,14 @@ func (req *Requests) UnfollowUser(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var user FollowPubkey
+	var user Pubkey
 	err := json.NewDecoder(r.Body).Decode(&user)
 	if err != nil {
 		log.Println(err)
 		panic(err)
 	}
 
-	err = req.Nostr.UnfollowPubkey(ctx, &user)
+	err = req.Db.RemoveFollow(ctx, user.Pubkey)
 
 	fmt.Println("Unfollow user: ", user.Pubkey)
 	w.Header().Set("Content-Type", "application/json")
@@ -283,11 +302,107 @@ func (req *Requests) FollowUserNotes(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	pagination := Pagination{}
+	pagination := database.Pagination{}
 	pagination.SetLimit(p.Limit)
 	pagination.SetCurrentPage(p.Page)
 	pagination.SetSince(p.Since)
-	err = req.Cfg.Storage.GetEventPagination(ctx, &pagination, true)
+	err = req.Db.GetEventPagination(ctx, &pagination, database.Options{Follow: true, BookMark: false})
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
+	w.WriteHeader(http.StatusOK)
+
+	if err != nil {
+		log.Println(err)
+	}
+	err = json.NewEncoder(w).Encode(&pagination)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (req *Requests) AddBookMark(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var j BookMark
+	err := json.NewDecoder(r.Body).Decode(&j)
+	if err != nil {
+		log.Println(err)
+		panic(err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
+	w.WriteHeader(http.StatusOK)
+
+	err = req.Db.CreateBookMark(ctx, j.EventId)
+
+	result := map[string]string{}
+	result["status"] = "ok"
+	result["msg"] = "Bookmark"
+	if err != nil {
+		result["status"] = "error"
+		result["msg"] = err.Error()
+	}
+
+	result["data"] = j.EventId
+	err = json.NewEncoder(w).Encode(result)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (req *Requests) RemoveBookMark(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var j BookMark
+	err := json.NewDecoder(r.Body).Decode(&j)
+	if err != nil {
+		log.Println(err)
+		panic(err)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
+	w.WriteHeader(http.StatusOK)
+
+	err = req.Db.RemoveBookMark(ctx, j.EventId)
+
+	fmt.Println("Remove bookmark: ", j.EventId)
+	result := map[string]string{}
+	result["status"] = "ok"
+	result["msg"] = "Remove bookmark"
+	if err != nil {
+		result["status"] = "error"
+		result["msg"] = err.Error()
+	}
+
+	result["data"] = j.EventId
+	err = json.NewEncoder(w).Encode(result)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (req *Requests) GetBookMarked(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var p Page
+	err := json.NewDecoder(r.Body).Decode(&p)
+	if err != nil {
+		panic(err)
+	}
+
+	pagination := database.Pagination{}
+	pagination.SetLimit(p.Limit)
+	pagination.SetCurrentPage(p.Page)
+	pagination.SetSince(p.Since)
+	err = req.Db.GetEventPagination(ctx, &pagination, database.Options{Follow: false, BookMark: true})
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -316,18 +431,20 @@ func (req *Requests) SearchEvent(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 	log.Println("Searching event with Id: ", j.ID)
-	ev, _ := req.Cfg.Storage.FindEvent(ctx, j.ID)
+	ev, _ := req.Db.FindEvent(ctx, j.ID)
 	if ev.Event.ID == "" {
-		filter := nostrHandler.Filter{
+		filter := nostr.Filter{
 			IDs:   []string{j.ID},
 			Limit: 1,
 		}
 
-		req.Nostr.GetEvents(ctx, filter, false)
+		evs := req.Nostr.GetEvents(ctx, filter)
+
+		req.Db.SaveEvents(ctx, evs)
 
 		log.Println("Need to get it", j.ID, filter)
 	}
-	ev, _ = req.Cfg.Storage.FindEvent(ctx, j.ID)
+	ev, _ = req.Db.FindEvent(ctx, j.ID)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -372,7 +489,7 @@ func (req *Requests) PreviewLink(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	type Msg struct {
@@ -391,30 +508,32 @@ func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	log.Println("Msg to publish: ", msg.Msg)
-	var postEv nostrHandler.Event
+	var postEv nostr.Event
 	if msg.Event_id == "" {
-		postEv, _ = req.Nostr.Post(ctx, msg.Msg)
+		req.Db.SaveEvents(ctx, []*nostr.Event{&postEv})
 	}
 
+	result := map[string]string{}
 	if msg.Event_id != "" {
-		postEv, _ = req.Nostr.Reply(ctx, msg.Msg, msg.Event_id)
+		replyEv, _ := req.Db.FindRawEvent(ctx, msg.Event_id)
+		postEv, _ = req.Nostr.Reply(ctx, msg.Msg, replyEv)
+
+		req.Db.SaveEvents(ctx, []*nostr.Event{&postEv})
 	}
 
-	test := map[string]string{}
-
-	test["status"] = "ok"
-	test["msg"] = msg.Msg
-	test["reply_to_event_id"] = msg.Event_id
+	result["status"] = "ok"
+	result["msg"] = msg.Msg
+	result["reply_to_event_id"] = msg.Event_id
 	jsonPostEv, _ := json.Marshal(postEv)
-	test["post"] = string(jsonPostEv)
+	result["post"] = string(jsonPostEv)
 
 	if err != nil {
 		log.Println(err)
-		test["status"] = "error"
-		test["msg"] = err.Error()
+		result["status"] = "error"
+		result["msg"] = err.Error()
 	}
 
-	err = json.NewEncoder(w).Encode(test)
+	err = json.NewEncoder(w).Encode(result)
 	if err != nil {
 		panic(err)
 	}
@@ -427,7 +546,7 @@ func (req *Requests) GetMetaData(w http.ResponseWriter, r *http.Request) {
 
 	event, _ := req.Nostr.GetMetaData(ctx)
 
-	req.Cfg.Storage.SaveProfiles(ctx, []*nostrHandler.Event{&event})
+	req.Db.SaveProfiles(ctx, []*nostr.Event{&event})
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -443,7 +562,7 @@ func (req *Requests) SetMetaData(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	var user UserProfile
+	var user nostrWrapper.Profile
 	err := json.NewDecoder(r.Body).Decode(&user)
 	if err != nil {
 		log.Println(err)
@@ -467,7 +586,7 @@ func (req *Requests) GetProfile(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	profile, _ := req.Cfg.Storage.FindProfile(ctx, req.Cfg.Pubkey)
+	profile, _ := req.Db.FindProfile(ctx, req.Cfg.Pubkey)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS

@@ -8,7 +8,6 @@
   import { openModal } from "svelte-modals";
   import {
     refreshView,
-    refresh,
     blockUser,
     followUser,
     unfollowUser,
@@ -18,18 +17,25 @@
     pageMetaData,
     syncNote,
   } from "./state/main";
+  import { addBookmark, removeBookmark } from "./state/bookmark";
 
   export let apiUrl: string = "";
+  export let renewData: boolean = false;
+
+
   onMount(async () => {
     setApiUrl(apiUrl);
+    
     pageData.set([]);
+   
     await refreshView({
       page: 1,
       limit: $pageMetaData.limit,
       since: $pageMetaData.since,
-      renew: true,
+      renew: renewData,
       maxid: $pageMetaData.maxid,
     });
+    
     document.getElementById("realNotesContainer").scrollTo(0, 0);
   });
 
@@ -49,7 +55,7 @@
   }
 
   function topOfPage(ev) {
-    document.getElementById('realNotesContainer').scrollTo(0, 0);
+    document.getElementById("realNotesContainer").scrollTo(0, 0);
   }
 </script>
 
@@ -131,6 +137,8 @@
             {note}
             on:followUser={(ev) => followUser(ev.detail)}
             on:unfollowUser={(ev) => unfollowUser(ev.detail)}
+            on:addBookmark={(ev) => addBookmark(ev.detail)}
+            on:removeBookmark={(ev) => removeBookmark(ev.detail)}
             on:blockUser={(ev) => blockUser(ev.detail)}
             on:syncNote={(ev) => syncNote(ev.detail)}
             on:reply={(ev) => {

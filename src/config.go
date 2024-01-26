@@ -1,6 +1,8 @@
 package main
 
 import (
+	"amavis442/relaystore/database"
+	nostrWrapper "amavis442/relaystore/nostr/wrapper"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -13,26 +15,15 @@ type Server struct {
 	Port int64
 }
 
-type Relay struct {
-	Read   bool `json:"read"`
-	Write  bool `json:"write"`
-	Search bool `json:"search"`
-}
-
 /**
  * Used to store the config.json file and some database related stuff for easy access
  *
  */
 type Config struct {
-	Database *DbConfig
-	Relays   map[string]Relay
-	Pubkey   string
-	Npub     string
-	Pk       string
-	Nsec     string
-	Filter   []string
-	Storage  *Storage
-	Server   *Server
+	Database *database.DbConfig
+	nostrWrapper.Config
+	Storage *database.Storage
+	Server  *Server
 }
 
 func configDir() (string, error) {
