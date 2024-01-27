@@ -69,6 +69,7 @@
               page: $pageMetaData.current_page,
               limit: $pageMetaData.limit,
               since: $pageMetaData.since,
+              total: $pageMetaData.total,
               renew: true,
               maxid: $pageMetaData.maxid,
             });
@@ -84,6 +85,7 @@
               page: $pageMetaData.current_page,
               limit: $pageMetaData.limit,
               since: $pageMetaData.since,
+              total: $pageMetaData.total,
               renew: false,
               maxid: $pageMetaData.maxid,
             });
@@ -105,6 +107,7 @@
               page: $pageMetaData.current_page,
               limit: $pageMetaData.limit,
               since: $pageMetaData.since,
+              total: $pageMetaData.total,
               renew: false,
               maxid: $pageMetaData.maxid,
             })}
@@ -124,6 +127,7 @@
                 limit: $pageMetaData.limit,
                 since: $pageMetaData.since,
                 renew: false,
+                total: $pageMetaData.total,
                 maxid: $pageMetaData.maxid,
               });
             }}

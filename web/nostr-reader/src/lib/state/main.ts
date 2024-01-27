@@ -39,11 +39,11 @@ export async function refreshView(params) {
       let total = 0;
       
       maxId = params.maxid;
-      total = params.total
+      //total = params.total
 
       if (params.renew || params.maxid == 0) {
         maxId = data.maxid
-        total = data.total
+        //total = data.total
       }
 
       pageMetaData.set({
@@ -52,7 +52,7 @@ export async function refreshView(params) {
         to: data.to,
         per_page: data.per_page,
         last_page: data.last_page > 10 ? 10 : data.last_page,
-        total: total,
+        total: data.total,
         limit: data.limit,
         since: data.since,
         renew: data.renew,
