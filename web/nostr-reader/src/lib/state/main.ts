@@ -1,4 +1,3 @@
-
 import { writable, get } from 'svelte/store';
 export let pageData = writable([]);
 
@@ -35,6 +34,17 @@ export async function refreshView(params) {
     })
     .then((data) => {
       console.log("Json is ", data);
+      
+      let maxId = 0;
+      let total = 0;
+      const pageMData = get(pageMetaData)
+      maxId = pageMData.maxid;
+      total = pageMData.total
+
+      if (data.renew) {
+        maxId = data.maxid
+        total = data.total
+      }
 
       pageMetaData.set({
         current_page: data.current_page,
@@ -42,11 +52,11 @@ export async function refreshView(params) {
         to: data.to,
         per_page: data.per_page,
         last_page: data.last_page > 10 ? 10 : data.last_page,
-        total: data.total,
+        total: total,
         limit: data.limit,
         since: data.since,
         renew: data.renew,
-        maxid: data.maxid
+        maxid: maxId
       })
 
       pageData.update(() => { return data.data });
