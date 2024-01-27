@@ -97,15 +97,6 @@ func (st *Storage) Paginate(value interface{}, pagination *Pagination, db *gorm.
 func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
 	var err error
 
-	// connection string
-	/*
-		connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s", cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Dbname)
-
-		st.DbPool, err = pgxpool.New(ctx, connStr)
-		if err != nil {
-			return err
-		}
-	*/
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable TimeZone=Europe/Amsterdam",
 		cfg.Host,
 		cfg.User,
@@ -113,9 +104,9 @@ func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
 		cfg.Dbname,
 		cfg.Port)
 
-	st.GormDB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
-
-	st.GormDB.Logger.LogMode(logger.Silent)
+	st.GormDB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
 
 	st.GormDB.AutoMigrate(&Note{}, &Profile{}, &Block{}, &Follow{}, &Seen{}, &Tree{}, &Bookmark{})
 
@@ -153,13 +144,6 @@ func (st *Storage) SaveProfile(ctx context.Context, ev *nostr.Event) {
 		DoUpdates: clause.AssignmentColumns([]string{"name", "about", "picture", "website", "nip05", "lud16", "display_name", "raw"}),
 	}).Create(&profile)
 
-	if err := st.GormDB.WithContext(ctx).Exec("UPDATE notes SET profile_id=?,updated_at=NOW() WHERE pubkey =?", profile.ID, ev.PubKey).Error; err != nil {
-		fmt.Println(err)
-	}
-	/*if err := st.GormDB.WithContext(ctx).Model(&Note{}).Where("pubkey = ?", ev.PubKey).Update("profile_id", profile.ID).Error; err != nil {
-		fmt.Println(err)
-	}*/
-
 	// Should be in a dynamic list, so you can add to it or remove items.
 	if data.Picture != "" && len(data.Picture) > len("https://randomuser.me") && data.Picture[0:len("https://randomuser.me")] == "https://randomuser.me" {
 		st.CreateBlock(ctx, ev.PubKey)
@@ -179,127 +163,24 @@ func (st *Storage) SaveProfiles(ctx context.Context, evs []*nostr.Event) {
  * Save the events, mostly notes. Ignore duplicate events based on unique event id
  * This will normalize the content tag of the events with all the unwanted markup (Myaby put this in a helper function)
  */
-func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string {
+func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) ([]string, error) {
 	var pubkeys = make([]string, 0)
-	ptags, etags := make([]string, 0), make([]string, 0)
-
-	type EventTree struct {
-		RootTag  string
-		ReplyTag string
-	}
-
-	//var re = regexp.MustCompile(`@npub`)
-
-	var tree EventTree
 	for _, ev := range evs {
 		if ev.CreatedAt.Time().Unix() > time.Now().Unix() {
-			//fmt.Fprintf(os.Stderr, "log message: %s", "QUERY:: Ignoring this event because timestamp is in the future."+ev.String())
 			continue
 		}
 
-		if len(ev.PubKey) == 64 {
-			pubkeys = append(pubkeys, ev.PubKey)
-		} else {
-			fmt.Println("Incorrect pubkey to long max 64: ", ev.PubKey)
-		}
-		ptags = ptags[:0]
-		etags = etags[:0]
-		ptagsNum := 0
-		etagsNum := 0
-
-		tree.RootTag = ""
-		tree.ReplyTag = ""
-		for _, tag := range ev.Tags {
-			switch {
-			case tag[0] == "e":
-				if len(tag) < 1 || len(tag[1]) != 64 {
-					continue
-				} else {
-					etags = append(etags, tag[1])
-					etagsNum = etagsNum + 1
-				}
-				if len(tag) == 4 && tag[3] == "root" {
-					tree.RootTag = tag[1]
-				}
-				if len(tag) == 4 && tag[3] == "reply" {
-					tree.ReplyTag = tag[1]
-				}
-			case tag[0] == "p":
-				if len(tag) < 1 || len(tag[1]) != 64 {
-					log.Println("Query:: P# tag not valid: ", tag)
-					continue
-				} else {
-					ptags = append(ptags, tag[1])
-					pubkeys = append(pubkeys, tag[1])
-					ptagsNum = ptagsNum + 1
-				}
-			}
-		}
-
-		tagJson, err := json.Marshal(ev.Tags)
+		note, err := st.SaveNote(ctx, ev)
 		if err != nil {
-			log.Println(err)
+			return []string{}, err
 		}
-
-		p := bluemonday.StrictPolicy()
-
-		// The policy can then be used to sanitize lots of input and it is safe to use the policy in multiple goroutines
-		ev.Content = p.Sanitize(ev.Content)
-		ev.Content = strings.ReplaceAll(ev.Content, "&#39;", "'")
-		ev.Content = strings.ReplaceAll(ev.Content, "&#34;", "\"")
-		ev.Content = strings.ReplaceAll(ev.Content, "&lt;", "<")
-		ev.Content = strings.ReplaceAll(ev.Content, "&gt;", ">")
-		ev.Content = strings.ReplaceAll(ev.Content, "&amp;", "&")
-		ev.Content = strings.ReplaceAll(ev.Content, "<br>", "\n")
-		ev.Content = strings.ReplaceAll(ev.Content, "<br/>", "\n")
-
-		var Garbage bool = false
-		for _, f := range st.Filter {
-			matched, _ := regexp.MatchString(f, ev.Content)
-			if matched {
-				Garbage = true
-			}
-		}
-		if strings.Count(ev.Content, "@npub") > 4 {
-			Garbage = true
-		}
-		//re.MatchString(ev.Content)
-
-		ev.Content = strings.ReplaceAll(ev.Content, "\u0000", "")
-		ptagsSliceSize := ptagsNum
-		if ptagsNum > 8 {
-			ptagsSliceSize = 8
-		}
-		etagsSliceSize := etagsNum
-		if etagsNum > 8 {
-			etagsSliceSize = 8
-		}
-		ptags = ptags[0:ptagsSliceSize] // Idiots who put a lot of ptags in it. Bad clients
-		etags = etags[0:etagsSliceSize] // Same story as with ptags.
-
-		jsonbuf := bytes.NewBuffer(nil)
-		jsonbuf.Reset()
-		enc := json.NewEncoder(jsonbuf)
-		// turn off stupid go json encoding automatically doing HTML escaping...
-		enc.SetEscapeHTML(false)
-		if err := enc.Encode(ev); err != nil {
-			log.Println(err)
-			return []string{}
-		}
-
-		note, _ := st.SaveNote(ctx, ev, tagJson, ptags, etags, Garbage, jsonbuf.Bytes())
-
-		if note.ID > 0 && len(tree.RootTag) > 0 {
-			treeData := Tree{EventId: ev.ID, RootEventId: tree.RootTag, ReplyEventId: tree.ReplyTag}
-			st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&treeData)
-		}
-
+		pubkeys = append(pubkeys, note.Pubkey)
 		if note.ID > 0 && ev.Kind == 0 {
 			st.SaveProfile(ctx, ev)
 		}
 
 		// votes
-		if note.ID > 0 && ev.Kind == 7 && len(etags) > 0 {
+		if note.ID > 0 && ev.Kind == 7 && len(note.Etags) > 0 {
 			t := ev.Tags.GetFirst([]string{"e"})
 			if t != nil {
 				targetEventId := t.Value()
@@ -313,11 +194,109 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) []string 
 			}
 		}
 	}
-
-	return pubkeys
+	return pubkeys, nil
 }
 
-func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event, tagJson []byte, ptags []string, etags []string, Garbage bool, json []byte) (Note, error) {
+type EventTree struct {
+	RootTag  string
+	ReplyTag string
+}
+
+func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event) (Note, error) {
+	var tree EventTree
+	var pubkeys = make([]string, 0)
+	ptags, etags := make([]string, 0), make([]string, 0)
+
+	if len(ev.PubKey) == 64 {
+		pubkeys = append(pubkeys, ev.PubKey)
+	} else {
+		fmt.Println("Incorrect pubkey to long max 64: ", ev.PubKey)
+	}
+	ptags = ptags[:0]
+	etags = etags[:0]
+	ptagsNum := 0
+	etagsNum := 0
+
+	tree.RootTag = ""
+	tree.ReplyTag = ""
+	for _, tag := range ev.Tags {
+		switch {
+		case tag[0] == "e":
+			if len(tag) < 1 || len(tag[1]) != 64 {
+				continue
+			} else {
+				etags = append(etags, tag[1])
+				etagsNum = etagsNum + 1
+			}
+			if len(tag) == 4 && tag[3] == "root" {
+				tree.RootTag = tag[1]
+			}
+			if len(tag) == 4 && tag[3] == "reply" {
+				tree.ReplyTag = tag[1]
+			}
+		case tag[0] == "p":
+			if len(tag) < 1 || len(tag[1]) != 64 {
+				log.Println("Query:: P# tag not valid: ", tag)
+				continue
+			} else {
+				ptags = append(ptags, tag[1])
+				pubkeys = append(pubkeys, tag[1])
+				ptagsNum = ptagsNum + 1
+			}
+		}
+	}
+
+	tagJson, err := json.Marshal(ev.Tags)
+	if err != nil {
+		log.Println(err)
+	}
+
+	p := bluemonday.StrictPolicy()
+
+	// The policy can then be used to sanitize lots of input and it is safe to use the policy in multiple goroutines
+	ev.Content = p.Sanitize(ev.Content)
+	ev.Content = strings.ReplaceAll(ev.Content, "&#39;", "'")
+	ev.Content = strings.ReplaceAll(ev.Content, "&#34;", "\"")
+	ev.Content = strings.ReplaceAll(ev.Content, "&lt;", "<")
+	ev.Content = strings.ReplaceAll(ev.Content, "&gt;", ">")
+	ev.Content = strings.ReplaceAll(ev.Content, "&amp;", "&")
+	ev.Content = strings.ReplaceAll(ev.Content, "<br>", "\n")
+	ev.Content = strings.ReplaceAll(ev.Content, "<br/>", "\n")
+
+	var Garbage bool = false
+	for _, f := range st.Filter {
+		matched, _ := regexp.MatchString(f, ev.Content)
+		if matched {
+			Garbage = true
+		}
+	}
+	if strings.Count(ev.Content, "@npub") > 4 {
+		Garbage = true
+	}
+	//re.MatchString(ev.Content)
+
+	ev.Content = strings.ReplaceAll(ev.Content, "\u0000", "")
+	ptagsSliceSize := ptagsNum
+	if ptagsNum > 8 {
+		ptagsSliceSize = 8
+	}
+	etagsSliceSize := etagsNum
+	if etagsNum > 8 {
+		etagsSliceSize = 8
+	}
+	ptags = ptags[0:ptagsSliceSize] // Idiots who put a lot of ptags in it. Bad clients
+	etags = etags[0:etagsSliceSize] // Same story as with ptags.
+
+	jsonbuf := bytes.NewBuffer(nil)
+	jsonbuf.Reset()
+	enc := json.NewEncoder(jsonbuf)
+	// turn off stupid go json encoding automatically doing HTML escaping...
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(ev); err != nil {
+		log.Println(err)
+		return Note{}, err
+	}
+
 	note := Note{}
 	note.EventId = ev.ID
 	note.Pubkey = ev.PubKey
@@ -329,12 +308,17 @@ func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event, tagJson []byte
 	note.Ptags = ptags
 	note.Etags = etags
 	note.Garbage = Garbage
-	note.Raw = json
+	note.Raw = jsonbuf.Bytes()
 
-	err := st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&note).Error
+	err = st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&note).Error
 
 	if err != nil {
 		return Note{}, err
+	}
+
+	if note.ID > 0 && len(tree.RootTag) > 0 {
+		treeData := Tree{EventId: ev.ID, RootEventId: tree.RootTag, ReplyEventId: tree.ReplyTag}
+		st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&treeData)
 	}
 
 	return note, nil
@@ -497,7 +481,7 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, option
 
 	p.SetTotal(count)
 	p.SetTo()
-	eventMap, keys, _ := st.procesEventRows(rows)
+	eventMap, keys, _ := st.procesEventRows(rows, p)
 
 	st.getChildren(ctx, eventMap)
 	events := make([]Event, 0)
@@ -510,13 +494,12 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, option
 	return nil
 }
 
-func (st *Storage) procesEventRows(rows *sql.Rows) (map[string]Event, []string, error) {
+func (st *Storage) procesEventRows(rows *sql.Rows, p *Pagination) (map[string]Event, []string, error) {
 	eventMap := make(map[string]Event)
 	var keys []string
-
 	for rows.Next() {
 		var note Event
-		var id int
+		var id int64
 		var name sql.NullString
 		var about sql.NullString
 		var picture sql.NullString
@@ -539,6 +522,9 @@ func (st *Storage) procesEventRows(rows *sql.Rows) (map[string]Event, []string, 
 			panic(err)
 		}
 
+		if p.MaxId < id {
+			p.MaxId = id
+		}
 		if _, ok := eventMap[note.Event.ID]; ok {
 			continue
 		}
@@ -782,7 +768,7 @@ func (st *Storage) GetInbox(ctx context.Context, p *Pagination, pubkey string) e
 	}
 	defer rows.Close()
 
-	eventMap, keys, _ := st.procesEventRows(rows)
+	eventMap, keys, _ := st.procesEventRows(rows, p)
 	p.SetTotal(int64(len(keys)))
 	p.SetTo()
 

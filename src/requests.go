@@ -1,8 +1,8 @@
 package main
 
 import (
-	"amavis442/relaystore/database"
-	nostrWrapper "amavis442/relaystore/nostr/wrapper"
+	"amavis442/nostr-reader/database"
+	nostrWrapper "amavis442/nostr-reader/nostr/wrapper"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -34,7 +34,7 @@ type BookMark struct {
 /**
  * Not all events are processed at once and we do not want to miss out on events, so put them in a queque and use FIFO to process.
  */
-var EventsQueue = make([]nostr.Event, 0)
+//var EventsQueue = make([]nostr.Event, 0)
 
 // var ptagsQueue = make([]string, 0)
 var syncHash string = ""
@@ -118,13 +118,23 @@ func (req *Requests) StartSync(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	EventsQueue = EventsQueue[:0]
+	response := make(map[string]string)
+	response["status"] = "ok"
+	syncHash = fmt.Sprint(time.Now().Unix())
+	response["message"] = syncHash
+
+	//EventsQueue = EventsQueue[:0]
 	createdAt := req.Db.GetLastTimeStamp(ctx)
 
 	filter := req.Nostr.GetEventData(ctx, createdAt, true)
 	evs := req.Nostr.GetEvents(ctx, filter)
 	var pubkeys = make([]string, 0)
-	pubkeys = req.Db.SaveEvents(ctx, evs)
+	var err error
+	pubkeys, err = req.Db.SaveEvents(ctx, evs)
+	if err != nil {
+		response["status"] = "error"
+		response["message"] = err.Error()
+	}
 
 	// Todo build check for ttl so user data is not refreshed every time.
 	var tresholdTime int64 = time.Now().Unix() - 60*60*24
@@ -138,12 +148,7 @@ func (req *Requests) StartSync(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
 	w.WriteHeader(http.StatusOK)
 
-	syncHash = fmt.Sprint(time.Now().Unix())
-
-	test := make(map[string]string)
-	test["status"] = "ok"
-	test["message"] = syncHash
-	err := json.NewEncoder(w).Encode(test)
+	err = json.NewEncoder(w).Encode(response)
 	if err != nil {
 		panic(err)
 	}

@@ -1,8 +1,8 @@
 package main
 
 import (
-	"amavis442/relaystore/database"
-	"amavis442/relaystore/nostr/wrapper"
+	"amavis442/nostr-reader/database"
+	"amavis442/nostr-reader/nostr/wrapper"
 	"context"
 	"fmt"
 	"log"
@@ -157,7 +157,7 @@ func intervalTask(req *Requests) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	EventsQueue = EventsQueue[:0]
+	//EventsQueue = EventsQueue[:0]
 	createdAt := req.Db.GetLastTimeStamp(ctx)
 	filter := req.Nostr.GetEventData(ctx, createdAt, true)
 

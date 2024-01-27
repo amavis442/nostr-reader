@@ -1,8 +1,8 @@
 package main
 
 import (
-	"amavis442/relaystore/database"
-	nostrWrapper "amavis442/relaystore/nostr/wrapper"
+	"amavis442/nostr-reader/database"
+	nostrWrapper "amavis442/nostr-reader/nostr/wrapper"
 	"encoding/json"
 	"fmt"
 	"log"

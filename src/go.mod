@@ -1,4 +1,4 @@
-module amavis442/relaystore
+module amavis442/nostr-reader
 
 go 1.21
 
