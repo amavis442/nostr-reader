@@ -99,7 +99,7 @@ func (req *Requests) getInbox(w http.ResponseWriter, r *http.Request) {
 	pagination.SetLimit(p.Limit)
 	pagination.SetCurrentPage(p.Page)
 	pagination.SetSince(p.Since)
-	err = req.Db.GetInbox(ctx, &pagination, req.Cfg.Pubkey)
+	err = req.Db.GetInbox(ctx, &pagination, req.Cfg.PubKey)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -573,7 +573,7 @@ func (req *Requests) SetMetaData(w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 		panic(err)
 	}
-	user.Pubkey = req.Cfg.Pubkey
+	user.Pubkey = req.Cfg.PubKey
 	_ = req.Nostr.SetMetaData(ctx, &user)
 
 	//fmt.Println("Follow user: ", user.Pubkey)
@@ -591,7 +591,7 @@ func (req *Requests) GetProfile(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	profile, _ := req.Db.FindProfile(ctx, req.Cfg.Pubkey)
+	profile, _ := req.Db.FindProfile(ctx, req.Cfg.PubKey)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS

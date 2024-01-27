@@ -30,13 +30,15 @@ func main() {
 	var ctx context.Context = context.Background()
 	var st database.Storage
 	var nostrWrapper wrapper.NostrWrapper
+	nostrWrapper.SetConfig(&cfg.Config)
+	nostrWrapper.GetKeysFromPrivateKey(cfg.PrivateKey)
+
 	err = st.Connect(ctx, cfg.Database) // Does not make a connection immediatly but prepares so it does not yet know if the pg server is available.
 	if err != nil {
 		log.Println(err.Error())
 		os.Exit(0)
 	}
 
-	nostrWrapper.SetConfig(&cfg.Config)
 	var req Requests
 	req.Cfg = cfg
 	req.Db = &st
@@ -100,7 +102,7 @@ func main() {
 	mux.HandleFunc("/api/setmetadata", req.SetMetaData)
 	mux.HandleFunc("/api/getprofile", req.GetProfile)
 
-	mux.Handle("/", http.FileServer(http.Dir("../web/nostr-reader/dist")))
+	mux.Handle("/", http.FileServer(http.Dir(cfg.Server.Frontend)))
 
 	var port string = "8080"
 	if cfg.Server.Port > 0 {

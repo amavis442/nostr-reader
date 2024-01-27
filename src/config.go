@@ -12,7 +12,8 @@ import (
 )
 
 type Server struct {
-	Port int64
+	Port     int64
+	Frontend string
 }
 
 /**
@@ -22,8 +23,7 @@ type Server struct {
 type Config struct {
 	Database *database.DbConfig
 	nostrWrapper.Config
-	Storage *database.Storage
-	Server  *Server
+	Server *Server
 }
 
 func configDir() (string, error) {
@@ -49,7 +49,7 @@ func LoadConfig() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	dir = filepath.Join(dir, "relaystore")
+	dir = filepath.Join(dir, "nostr-reader")
 	fp := filepath.Join(dir, "config.json")
 	os.MkdirAll(filepath.Dir(fp), 0700)
 
@@ -66,9 +66,10 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 
-	//log.Println("Content nieuw", *settings)
-	// Let's print the unmarshalled data!
-	fmt.Printf("dbName: %s\n", cfg.Database.Dbname)
-	fmt.Printf("Pubkey: %s\n", cfg.Pubkey)
+	if cfg.PrivateKey == "" {
+		log.Println("You need to add your private key. This key will never be transmitted and stays local")
+		os.Exit(0)
+	}
+
 	return &cfg, nil
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/nbd-wtf/go-nostr/nip19"
 )
 
 type Relay struct {
@@ -19,12 +20,12 @@ type Relay struct {
 }
 
 type Config struct {
-	Relays map[string]Relay
-	Pubkey string
-	Npub   string
-	Pk     string
-	Nsec   string
-	Filter []string
+	Relays     map[string]Relay
+	PubKey     string
+	Npub       string
+	PrivateKey string
+	Nsec       string
+	Filter     []string
 }
 
 type Profile struct {
@@ -48,6 +49,34 @@ type NostrWrapper struct {
 
 func (nostrWrapper *NostrWrapper) SetConfig(cfg *Config) {
 	nostrWrapper.Cfg = *cfg
+}
+
+func (nostrWrapper *NostrWrapper) GetKeysFromPrivateKey(privateKey string) (*Config, error) {
+	var pubKey string
+	if privateKey[:4] == "nsec" {
+		if _, s, err := nip19.Decode(privateKey); err == nil {
+			if pubKey, err = nostr.GetPublicKey(s.(string)); err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
+	} else {
+		pubKey, _ = nostr.GetPublicKey(privateKey)
+	}
+
+	nsec, _ := nip19.EncodePrivateKey(privateKey)
+	npub, _ := nip19.EncodePublicKey(pubKey)
+
+	nostrWrapper.Cfg.PubKey = pubKey
+	nostrWrapper.Cfg.Nsec = nsec
+	nostrWrapper.Cfg.Npub = npub
+
+	return &Config{
+		PubKey:     pubKey,
+		Npub:       npub,
+		PrivateKey: privateKey,
+		Nsec:       nsec}, nil
 }
 
 /*
@@ -94,7 +123,7 @@ func (nostrWrapper *NostrWrapper) Post(ctx context.Context, content string) (nos
 	ev := nostr.Event{}
 	ev.Tags = nostr.Tags{}
 
-	ev.PubKey = nostrWrapper.Cfg.Pubkey
+	ev.PubKey = nostrWrapper.Cfg.PubKey
 	ev.CreatedAt = nostr.Now()
 	ev.Kind = nostr.KindTextNote
 	ev.Content = content
@@ -102,7 +131,7 @@ func (nostrWrapper *NostrWrapper) Post(ctx context.Context, content string) (nos
 	var success int
 	nostrWrapper.Do(Relay{Write: true}, func(ctx context.Context, relay *nostr.Relay) bool {
 		// calling Sign sets the event ID field and the event Sig field
-		if err := ev.Sign(nostrWrapper.Cfg.Pk); err != nil {
+		if err := ev.Sign(nostrWrapper.Cfg.PrivateKey); err != nil {
 			return false
 		}
 
@@ -135,7 +164,7 @@ func (nostrWrapper *NostrWrapper) Reply(ctx context.Context, content string, rep
 	ev.Tags = nostr.Tags{}
 	replyETags := replyEv.Tags.GetAll([]string{"e"})
 
-	ev.PubKey = nostrWrapper.Cfg.Pubkey
+	ev.PubKey = nostrWrapper.Cfg.PubKey
 	ev.CreatedAt = nostr.Now()
 	ev.Kind = nostr.KindTextNote
 	ev.Content = content
@@ -175,7 +204,7 @@ func (nostrWrapper *NostrWrapper) Reply(ctx context.Context, content string, rep
 	var success int
 	nostrWrapper.Do(Relay{Write: true}, func(ctx context.Context, relay *nostr.Relay) bool {
 		// calling Sign sets the event ID field and the event Sig field
-		if err := ev.Sign(nostrWrapper.Cfg.Pk); err != nil {
+		if err := ev.Sign(nostrWrapper.Cfg.PrivateKey); err != nil {
 			return false
 		}
 
@@ -308,7 +337,7 @@ func (nostrWrapper *NostrWrapper) UpdateProfiles(ctx context.Context, pubkeys []
 }
 
 func (nostrWrapper *NostrWrapper) GetMetaData(ctx context.Context) (nostr.Event, error) {
-	pubkey := nostrWrapper.Cfg.Pubkey
+	pubkey := nostrWrapper.Cfg.PubKey
 
 	filter := nostr.Filter{
 		Kinds:   []int{nostr.KindProfileMetadata},
@@ -342,7 +371,7 @@ func (nostrWrapper *NostrWrapper) SetMetaData(ctx context.Context, user *Profile
 	ev := nostr.Event{}
 	ev.Tags = nostr.Tags{}
 
-	ev.PubKey = nostrWrapper.Cfg.Pubkey
+	ev.PubKey = nostrWrapper.Cfg.PubKey
 	ev.CreatedAt = nostr.Now()
 	ev.Kind = nostr.KindProfileMetadata
 	c, err := json.Marshal(*user)
@@ -356,7 +385,7 @@ func (nostrWrapper *NostrWrapper) SetMetaData(ctx context.Context, user *Profile
 	var success int
 	nostrWrapper.Do(Relay{Write: true}, func(ctx context.Context, relay *nostr.Relay) bool {
 		// calling Sign sets the event ID field and the event Sig field
-		if err := ev.Sign(nostrWrapper.Cfg.Pk); err != nil {
+		if err := ev.Sign(nostrWrapper.Cfg.PrivateKey); err != nil {
 			return false
 		}
 
