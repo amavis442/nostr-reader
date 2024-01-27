@@ -37,11 +37,11 @@ export async function refreshView(params) {
       
       let maxId = 0;
       let total = 0;
-      const pageMData = get(pageMetaData)
-      maxId = pageMData.maxid;
-      total = pageMData.total
+      
+      maxId = params.maxid;
+      total = params.total
 
-      if (data.renew) {
+      if (params.renew || params.maxid == 0) {
         maxId = data.maxid
         total = data.total
       }
@@ -97,7 +97,6 @@ export function blockUser(pubkey: string) {
       return res.json();
     })
     .then((data) => {
-      console.log("Json is ", data);
       const pageData = get(pageMetaData)
       refreshView({
         page: pageData.current_page,
@@ -125,7 +124,6 @@ export function followUser(pubkey: string) {
       return res.json();
     })
     .then((data) => {
-      console.log("Json is ", data);
       const pageData = get(pageMetaData)
       refreshView({
         page: pageData.current_page,
@@ -153,7 +151,6 @@ export function unfollowUser(pubkey: string) {
       return res.json();
     })
     .then((data) => {
-      console.log("Json is ", data);
       const pageData = get(pageMetaData)
       refreshView({
         page: pageData.current_page,

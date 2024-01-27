@@ -81,9 +81,11 @@ func (nostrWrapper *NostrWrapper) Do(r Relay, f func(context.Context, *nostr.Rel
 				log.Println(err)
 				return
 			}
+
 			if !f(ctx, relay) { // Custom function call that takes nostr.Relay as an argument. The function f will probally be an anonymous function
 				ctx.Done()
 			}
+
 			relay.Close()
 		}(&wg, relayUrl, v)
 	}
@@ -216,7 +218,6 @@ func (nostrWrapper *NostrWrapper) GetEvents(ctx context.Context, filter nostr.Fi
 
 		evs, err := relay.QuerySync(ctx, filter)
 		if err != nil {
-			mu.Unlock()
 			return true
 		}
 		/**

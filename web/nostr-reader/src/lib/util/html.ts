@@ -15,7 +15,7 @@ export function findLink(text: string): array {
 
   let p = imgTag(text);
   if (p) {
-    console.debug("Found img url matches in:\n [", text, "]\nResult: ", p)
+    //console.debug("Found img url matches in:\n [", text, "]\nResult: ", p)
     //Check if there a spaces in the output then seperate them
     var imgArray = [];
     for (var i = 0; i < p.length;i++) {
@@ -121,7 +121,7 @@ export function toHtml(content: string): string {
     },
   };
   content = linkifyHtml(content, options);
-  console.log(":After linkify", content)
+  //console.log(":After linkify", content)
 
 
   /* content = escapeHtml(content)
@@ -135,6 +135,6 @@ export function toHtml(content: string): string {
   
     ;
 */
-  console.log(":Content is [", content, "]")
+  //console.log(":Content is [", content, "]")
   return `<div>${content}</div>`;
 }

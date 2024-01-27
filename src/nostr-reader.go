@@ -51,8 +51,8 @@ func main() {
 	 * Get events that already are stored in the database
 	 * This will not SYNC the local database with that of the relays.
 	 */
-	mux.HandleFunc("/api/events", req.getRoot)
-	mux.HandleFunc("/api/inbox", req.getInbox)
+	mux.HandleFunc("/api/getnotes", req.GetNotes)
+	mux.HandleFunc("/api/getinbox", req.GetInbox)
 	/**
 	 * This will sync the local database with that of the relays (Only public events and not channels and such)
 	 */
@@ -68,9 +68,9 @@ func main() {
 	 * Put a user on the follow list
 	 * This is all local and will not send an event for followlist
 	 */
-	mux.HandleFunc("/api/followuser", req.FollowUser)
-	mux.HandleFunc("/api/unfollowuser", req.UnfollowUser)
-	mux.HandleFunc("/api/getfollownotes", req.FollowUserNotes)
+	mux.HandleFunc("/api/followuser", req.Follow)
+	mux.HandleFunc("/api/unfollowuser", req.Unfollow)
+	mux.HandleFunc("/api/getfollownotes", req.GetFollowed)
 
 	/**
 	 * Bookmark events you want to keep track of
@@ -108,6 +108,7 @@ func main() {
 		port = fmt.Sprint(cfg.Server.Port)
 	}
 
+	/* Check if this solves io timeout for websocket
 	srv := &http.Server{
 		Addr:           ":" + port,
 		Handler:        mux,
@@ -115,6 +116,7 @@ func main() {
 		WriteTimeout:   60 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
+	*/
 
 	ticker := time.NewTicker(300 * time.Second)
 	// Creating channel using make
@@ -136,8 +138,8 @@ func main() {
 	go intervalTask(&req)
 
 	fmt.Println("Server running: http://localhost:" + port)
-	//log.Fatal(http.ListenAndServe(":"+port, mux))
-	log.Fatal(srv.ListenAndServe())
+	log.Fatal(http.ListenAndServe(":"+port, mux))
+	//log.Fatal(srv.ListenAndServe())
 
 	// Turn off ticker after 10 seconds
 	// Calling Sleep() method

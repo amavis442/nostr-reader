@@ -21,7 +21,7 @@ type Pagination struct {
 	To          int   `json:"to"`
 	Since       int   `json:"since"`
 	Renew       bool  `json:"renew"`
-	MaxId       int64 `json:"maxid"`
+	Maxid       int64 `json:"maxid"`
 }
 
 func (p *Pagination) GetOffset() int {
@@ -95,8 +95,8 @@ func (p *Pagination) SetTo() {
 	}
 }
 
-func (p *Pagination) SetMaxId(maxid int64) {
-	p.MaxId = maxid
+func (p *Pagination) SetMaxId(maxid int) {
+	p.Maxid = int64(maxid)
 }
 
 func (p *Pagination) SetRenew(renew bool) {

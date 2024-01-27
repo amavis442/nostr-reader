@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -43,14 +44,14 @@ type Page struct {
 	Page  int
 	Limit int
 	Since int
-	MaxId int64
+	Maxid int
 	Renew bool
 }
 
 /**
 * The API requests
  */
-func (req *Requests) getRoot(w http.ResponseWriter, r *http.Request) {
+func (req *Requests) GetNotes(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -67,9 +68,9 @@ func (req *Requests) getRoot(w http.ResponseWriter, r *http.Request) {
 	pagination.SetSince(p.Since)
 
 	pagination.SetRenew(p.Renew)
-	pagination.SetMaxId(p.MaxId)
+	pagination.SetMaxId(p.Maxid)
 
-	err = req.Db.GetEventPagination(ctx, &pagination, database.Options{Follow: false, BookMark: false})
+	err = req.Db.GetPagination(ctx, &pagination, database.Options{Follow: false, BookMark: false})
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -84,7 +85,7 @@ func (req *Requests) getRoot(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) getInbox(w http.ResponseWriter, r *http.Request) {
+func (req *Requests) GetInbox(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -230,7 +231,7 @@ func (req *Requests) BlockUser(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) FollowUser(w http.ResponseWriter, r *http.Request) {
+func (req *Requests) Follow(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -263,7 +264,7 @@ func (req *Requests) FollowUser(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) UnfollowUser(w http.ResponseWriter, r *http.Request) {
+func (req *Requests) Unfollow(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -296,7 +297,7 @@ func (req *Requests) UnfollowUser(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) FollowUserNotes(w http.ResponseWriter, r *http.Request) {
+func (req *Requests) GetFollowed(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -311,7 +312,9 @@ func (req *Requests) FollowUserNotes(w http.ResponseWriter, r *http.Request) {
 	pagination.SetLimit(p.Limit)
 	pagination.SetCurrentPage(p.Page)
 	pagination.SetSince(p.Since)
-	err = req.Db.GetEventPagination(ctx, &pagination, database.Options{Follow: true, BookMark: false})
+	pagination.SetRenew(p.Renew)
+	pagination.SetMaxId(p.Maxid)
+	err = req.Db.GetPagination(ctx, &pagination, database.Options{Follow: true, BookMark: false})
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -407,7 +410,9 @@ func (req *Requests) GetBookMarked(w http.ResponseWriter, r *http.Request) {
 	pagination.SetLimit(p.Limit)
 	pagination.SetCurrentPage(p.Page)
 	pagination.SetSince(p.Since)
-	err = req.Db.GetEventPagination(ctx, &pagination, database.Options{Follow: false, BookMark: true})
+	pagination.SetRenew(p.Renew)
+	pagination.SetMaxId(p.Maxid)
+	err = req.Db.GetPagination(ctx, &pagination, database.Options{Follow: false, BookMark: true})
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
@@ -464,6 +469,8 @@ func (req *Requests) SearchEvent(w http.ResponseWriter, r *http.Request) {
  * Need an easy way to cancel this request when a new nextpage or refreshpage comes in
  */
 func (req *Requests) PreviewLink(w http.ResponseWriter, r *http.Request) {
+	var mu sync.Mutex
+
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -485,7 +492,10 @@ func (req *Requests) PreviewLink(w http.ResponseWriter, r *http.Request) {
 	t := strings.TrimSpace(url.Url)
 	s := strings.Split(t, "\n")
 
+	mu.Lock()
 	result, _ := URLPreview(ctx, s[0])
+	mu.Unlock()
+
 	err = json.NewEncoder(w).Encode(result)
 	if err != nil {
 		panic(err)

@@ -105,7 +105,8 @@ func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
 		cfg.Port)
 
 	st.GormDB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
+		Logger:      logger.Default.LogMode(logger.Silent),
+		PrepareStmt: true,
 	})
 
 	st.GormDB.AutoMigrate(&Note{}, &Profile{}, &Block{}, &Follow{}, &Seen{}, &Tree{}, &Bookmark{})
@@ -116,6 +117,7 @@ func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
     			WHEN duplicate_object THEN null;
  			END $$;`)
 	st.GormDB.AutoMigrate(&Reaction{})
+
 	fmt.Println("Connected to database:", cfg.Dbname)
 	return err
 }
@@ -426,7 +428,7 @@ type Options struct {
  * and ignore the garbage tagged posts
  *
  */
-func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, options Options) error {
+func (st *Storage) GetPagination(ctx context.Context, p *Pagination, options Options) error {
 
 	tx := st.GormDB.Model(&Note{}).
 		Select(`notes.id, notes.event_id, notes.pubkey, notes.kind, notes.event_created_at, 
@@ -443,8 +445,16 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, option
 		Where("seens.event_id IS NULL").
 		Where("notes.garbage = false")
 
+	// Needs a time stamp that stays the same else total will change with every call
 	if p.Since > 0 && (!options.BookMark && !options.Follow) {
-		since := time.Now().Unix() - int64(p.Since*60*60*24)
+		var maxTimeStamp int64 = time.Now().Unix()
+		if !p.Renew && p.Maxid > 0 {
+			st.GormDB.Model(&Note{}).
+				Select(`MAX(notes.event_created_at) event_created_at`).
+				Where("notes.id <= ?", p.Maxid).Scan(&maxTimeStamp)
+		}
+		since := maxTimeStamp - int64(p.Since*60*60*24)
+		fmt.Println("Timetamp :", maxTimeStamp, since)
 		tx.Where("notes.event_created_at > ?", fmt.Sprintf("%d", since))
 	}
 
@@ -460,8 +470,8 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, option
 		tx.Joins("LEFT JOIN bookmarks ON (bookmarks.event_id = notes.event_id)")
 	}
 
-	if p.MaxId > 0 && !p.Renew && !options.Follow && !options.BookMark {
-		tx.Where("notes.id <= ?", fmt.Sprintf("%d", p.MaxId))
+	if !p.Renew {
+		tx.Where("notes.id <= ?", fmt.Sprintf("%d", p.Maxid))
 	}
 
 	var count int64
@@ -497,6 +507,8 @@ func (st *Storage) GetEventPagination(ctx context.Context, p *Pagination, option
 func (st *Storage) procesEventRows(rows *sql.Rows, p *Pagination) (map[string]Event, []string, error) {
 	eventMap := make(map[string]Event)
 	var keys []string
+
+	canUpdateMaxId := (p.Renew || p.Maxid == 0)
 	for rows.Next() {
 		var note Event
 		var id int64
@@ -522,8 +534,8 @@ func (st *Storage) procesEventRows(rows *sql.Rows, p *Pagination) (map[string]Ev
 			panic(err)
 		}
 
-		if p.MaxId < id {
-			p.MaxId = id
+		if canUpdateMaxId && p.Maxid < id {
+			p.Maxid = id
 		}
 		if _, ok := eventMap[note.Event.ID]; ok {
 			continue

@@ -7,8 +7,6 @@
   let preview: { images: any[]; description: any; mediaType: string; url: any; title: any; };
 
   onMount(async () => {
-    console.debug("Getting preview data");
-
     const json = await fetch(endpoint, {
       method: "POST",
       body: JSON.stringify({ url: url }),
@@ -17,11 +15,9 @@
       },
     })
       .then((res) => {
-        console.debug("Reponse from preview app.");
         return res.json();
       })
       .then((data) => {
-        console.debug("Json is ", data);
         if (data != undefined && data != null) {
           return data.data;
         } else {

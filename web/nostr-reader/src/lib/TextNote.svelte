@@ -16,7 +16,6 @@
   import FaFolder from "svelte-icons-pack/fa/FaFolder";
   import FaFolderOpen from "svelte-icons-pack/fa/FaFolderOpen";
 
-  
   import FaSolidBan from "svelte-icons-pack/fa/FaSolidBan";
   import FaCommentDots from "svelte-icons-pack/fa/FaCommentDots";
   import FaSolidSync from "svelte-icons-pack/fa/FaSolidSync";
@@ -103,7 +102,6 @@
     imgUrls = findLink(note.event.content);
 
     if (imgUrls && imgUrls.length > 0) {
-      console.log("Img/youtube/rumble urls\n", imgUrls);
       hasImgUrls = true;
     }
 
@@ -185,7 +183,7 @@
                             >
                           {/if}
                         </div>
-                        
+
                         <div>
                           {#if note.bookmark}
                             <button
@@ -203,7 +201,7 @@
                             >
                           {/if}
                         </div>
-                        
+
                         <div>
                           <button
                             on:click={reply(note)}
@@ -256,11 +254,13 @@
                 <span class="text-black text-md font-medium break-words">
                   {@html content}
                   {#if import.meta.env.VITE_APP_TRANSLATE_URL && import.meta.env.VITE_APP_TRANSLATE_LANG}
-                  <button
-                    on:click={tranlate}
-                    class="p-1 m-2"
-                    title="Translate">Translate to ({import.meta.env.VITE_APP_TRANSLATE_LANG})</button
-                  >
+                    <button
+                      on:click={tranlate}
+                      class="p-1 m-2"
+                      title="Translate"
+                      >Translate to ({import.meta.env
+                        .VITE_APP_TRANSLATE_LANG})</button
+                    >
                     {#if translatedContent != ""}
                       <div
                         id="translateContent_{note.event.id}"
@@ -302,9 +302,9 @@
                   {#if note.children && Object.keys(note.children).length > 0}
                     <button type="button" on:click={toggleReplies} class="">
                       {#if repliesExpanded}
-                        <Icon src={FaFolderOpen} size="24" className="inline"/> 
+                        <Icon src={FaFolderOpen} size="24" className="inline" />
                       {:else}
-                        <Icon src={FaFolder} size="24" className="inline"/> 
+                        <Icon src={FaFolder} size="24" className="inline" />
                       {/if}
                       <small>({Object.keys(note.children).length})</small>
                     </button>
