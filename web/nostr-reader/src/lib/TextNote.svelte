@@ -11,8 +11,12 @@
   import FaSolidUserPlus from "svelte-icons-pack/fa/FaSolidUserPlus";
 
   import FaBookmark from "svelte-icons-pack/fa/FaBookmark";
-  import  FaSolidBookmark from "svelte-icons-pack/fa/FaSolidBookmark";
+  import FaSolidBookmark from "svelte-icons-pack/fa/FaSolidBookmark";
 
+  import FaFolder from "svelte-icons-pack/fa/FaFolder";
+  import FaFolderOpen from "svelte-icons-pack/fa/FaFolderOpen";
+
+  
   import FaSolidBan from "svelte-icons-pack/fa/FaSolidBan";
   import FaCommentDots from "svelte-icons-pack/fa/FaCommentDots";
   import FaSolidSync from "svelte-icons-pack/fa/FaSolidSync";
@@ -298,10 +302,11 @@
                   {#if note.children && Object.keys(note.children).length > 0}
                     <button type="button" on:click={toggleReplies} class="">
                       {#if repliesExpanded}
-                        Hide {Object.keys(note.children).length} repl{#if Object.keys(note.children).length == 1}y{:else}ies{/if}
+                        <Icon src={FaFolderOpen} size="24" className="inline"/> 
                       {:else}
-                        Show {Object.keys(note.children).length} repl{#if Object.keys(note.children).length == 1}y{:else}ies{/if}
+                        <Icon src={FaFolder} size="24" className="inline"/> 
                       {/if}
+                      <small>({Object.keys(note.children).length})</small>
                     </button>
                   {/if}
                 </span>
