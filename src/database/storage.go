@@ -210,7 +210,7 @@ func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event) (Note, error) 
 	if len(ev.PubKey) == 64 {
 		pubkeys = append(pubkeys, ev.PubKey)
 	} else {
-		fmt.Println("Incorrect pubkey to long max 64: ", ev.PubKey)
+		fmt.Println("Incorrect pubkey to long max 64: ", ev.PubKey, " Content:", ev.Content)
 	}
 	ptags = ptags[:0]
 	etags = etags[:0]

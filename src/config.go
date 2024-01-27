@@ -9,6 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+
+	"github.com/nbd-wtf/go-nostr"
+	"github.com/nbd-wtf/go-nostr/nip19"
 )
 
 type Server struct {
@@ -70,6 +73,22 @@ func LoadConfig() (*Config, error) {
 		log.Println("You need to add your private key. This key will never be transmitted and stays local")
 		os.Exit(0)
 	}
+
+	var pubKey string
+	if cfg.PrivateKey[:4] == "nsec" {
+		if _, s, err := nip19.Decode(cfg.PrivateKey); err == nil {
+			if pubKey, err = nostr.GetPublicKey(s.(string)); err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
+	} else {
+		pubKey, _ = nostr.GetPublicKey(cfg.PrivateKey)
+	}
+	cfg.PubKey = pubKey
+	cfg.Nsec, _ = nip19.EncodePrivateKey(cfg.PrivateKey)
+	cfg.Npub, _ = nip19.EncodePublicKey(pubKey)
 
 	return &cfg, nil
 }

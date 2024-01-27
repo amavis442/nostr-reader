@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/nbd-wtf/go-nostr/nip19"
 )
 
 type Relay struct {
@@ -49,34 +48,6 @@ type NostrWrapper struct {
 
 func (nostrWrapper *NostrWrapper) SetConfig(cfg *Config) {
 	nostrWrapper.Cfg = *cfg
-}
-
-func (nostrWrapper *NostrWrapper) GetKeysFromPrivateKey(privateKey string) (*Config, error) {
-	var pubKey string
-	if privateKey[:4] == "nsec" {
-		if _, s, err := nip19.Decode(privateKey); err == nil {
-			if pubKey, err = nostr.GetPublicKey(s.(string)); err != nil {
-				return nil, err
-			}
-		} else {
-			return nil, err
-		}
-	} else {
-		pubKey, _ = nostr.GetPublicKey(privateKey)
-	}
-
-	nsec, _ := nip19.EncodePrivateKey(privateKey)
-	npub, _ := nip19.EncodePublicKey(pubKey)
-
-	nostrWrapper.Cfg.PubKey = pubKey
-	nostrWrapper.Cfg.Nsec = nsec
-	nostrWrapper.Cfg.Npub = npub
-
-	return &Config{
-		PubKey:     pubKey,
-		Npub:       npub,
-		PrivateKey: privateKey,
-		Nsec:       nsec}, nil
 }
 
 /*

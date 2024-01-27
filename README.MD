@@ -15,7 +15,7 @@ My goal is first of all to learn *go* better and to make a kind of twitter/X clo
 
 You need [go](https://go.dev/) version 1.20 and [npm](https://www.npmjs.com/) version 9.1 to build the source. If you want the translate function, you will also need to install [libretranslate](https://github.com/LibreTranslate/LibreTranslate). This is a python app which means you will have to install python as well.
 
-The server uses ***postgresql*** version > 15 as backend. The postgresql installer does not work (LC_ALL) error. On widnows you can either use [wsl2](https://learn.microsoft.com/en-us/windows/wsl/install) or [msys2](https://www.msys2.org/). For linux it is straight forward.
+The server uses ***postgresql*** version > 15 as backend. The postgresql installer does not work (LC_ALL) error. On windows you can either use [wsl2](https://learn.microsoft.com/en-us/windows/wsl/install) or [msys2](https://www.msys2.org/). For linux it is straight forward.
 
 ## Installation and build
 

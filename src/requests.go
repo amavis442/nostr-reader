@@ -515,6 +515,8 @@ func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
 	log.Println("Msg to publish: ", msg.Msg)
 	var postEv nostr.Event
 	if msg.Event_id == "" {
+		postEv, _ = req.Nostr.Post(ctx, msg.Msg)
+
 		req.Db.SaveEvents(ctx, []*nostr.Event{&postEv})
 	}
 

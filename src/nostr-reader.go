@@ -31,7 +31,6 @@ func main() {
 	var st database.Storage
 	var nostrWrapper wrapper.NostrWrapper
 	nostrWrapper.SetConfig(&cfg.Config)
-	nostrWrapper.GetKeysFromPrivateKey(cfg.PrivateKey)
 
 	err = st.Connect(ctx, cfg.Database) // Does not make a connection immediatly but prepares so it does not yet know if the pg server is available.
 	if err != nil {
