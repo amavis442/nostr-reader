@@ -427,6 +427,38 @@ func (req *Requests) GetBookMarked(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (req *Requests) GetNewNotesCount(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var p Page
+	err := json.NewDecoder(r.Body).Decode(&p)
+	if err != nil {
+		panic(err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
+	w.WriteHeader(http.StatusOK)
+
+	count, err := req.Db.GetNewNotesCount(ctx, p.Maxid)
+	result := map[string]string{}
+	result["status"] = "ok"
+	result["msg"] = "new notes count"
+	result["data"] = fmt.Sprintf("%d", count)
+
+	if err != nil {
+		result["status"] = "error"
+		result["msg"] = err.Error()
+		result["data"] = "0"
+	}
+	err = json.NewEncoder(w).Encode(&result)
+	if err != nil {
+		panic(err)
+	}
+}
+
 func (req *Requests) SearchEvent(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)

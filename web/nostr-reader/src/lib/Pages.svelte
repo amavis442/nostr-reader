@@ -16,6 +16,7 @@
     setApiUrl,
     pageMetaData,
     syncNote,
+    getNewNotesCount,
   } from "./state/main";
   import { addBookmark, removeBookmark } from "./state/bookmark";
 
@@ -35,7 +36,8 @@
       renew: renewData,
       maxid: $pageMetaData.maxid,
     });
-    
+    getNewNotesCounter()
+    setInterval(getNewNotesCounter, 60*1000)
     document.getElementById("realNotesContainer").scrollTo(0, 0);
   });
 
@@ -57,6 +59,11 @@
   function topOfPage(ev) {
     document.getElementById("realNotesContainer").scrollTo(0, 0);
   }
+
+  let newNotesCount = 0;
+  async function getNewNotesCounter() {
+    newNotesCount = await getNewNotesCount()
+  }
 </script>
 
 <main id="whatever">
@@ -64,8 +71,8 @@
     <slot>
       <div class="flex flex-col bg-white p-2 rounded-lg m-2">
         <button
-          on:click={() => {
-            refreshView({
+          on:click={async () => {
+            await refreshView({
               page: $pageMetaData.current_page,
               limit: $pageMetaData.limit,
               since: $pageMetaData.since,
@@ -73,9 +80,10 @@
               renew: true,
               maxid: $pageMetaData.maxid,
             });
+            await getNewNotesCounter();
           }}
           class="btn btn-blue"
-          ><i class="fa-solid fa-arrows-rotate"></i> Sync</button
+          ><i class="fa-solid fa-arrows-rotate"></i> Sync ({newNotesCount} waiting notes)</button
         >
         <select
           id="limit"

@@ -53,6 +53,8 @@ func main() {
 	 */
 	mux.HandleFunc("/api/getnotes", req.GetNotes)
 	mux.HandleFunc("/api/getinbox", req.GetInbox)
+	mux.HandleFunc("/api/getnewnotescount", req.GetNewNotesCount)
+
 	/**
 	 * This will sync the local database with that of the relays (Only public events and not channels and such)
 	 */

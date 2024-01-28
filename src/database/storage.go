@@ -362,6 +362,23 @@ type Options struct {
 	BookMark bool
 }
 
+func (st *Storage) GetNewNotesCount(ctx context.Context, maxId int) (int, error) {
+	var count int
+	tx := st.GormDB.Model(&Note{}).
+		Select(`COUNT(notes.id)`).
+		Joins("LEFT JOIN blocks  on (blocks.pubkey = notes.pubkey)").
+		Where("notes.kind = 1").
+		Where("notes.etags='{}'").
+		Where("blocks.pubkey IS NULL").
+		Where("notes.garbage = false").
+		Where("notes.id > ?", maxId).Scan(&count)
+
+	if tx.Error != nil {
+		return 0, tx.Error
+	}
+	return count, nil
+}
+
 /**
  * Do not show all data in an endless scrol page, but paginate it for easy access
  * and ignore the garbage tagged posts

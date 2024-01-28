@@ -140,6 +140,7 @@ export function followUser(pubkey: string) {
 }
 
 export function unfollowUser(pubkey: string) {
+  
   fetch(`${import.meta.env.VITE_API_LINK}/api/unfollowuser`, {
     method: "POST",
     body: JSON.stringify({ pubkey: pubkey }),
@@ -164,6 +165,34 @@ export function unfollowUser(pubkey: string) {
     .catch((err) => {
       console.error("error", err);
     });
+}
+
+
+export async function getNewNotesCount(): integer {
+  const pageData = get(pageMetaData)
+  let data =  await fetch(`${import.meta.env.VITE_API_LINK}/api/getnewnotescount`, {
+    method: "POST",
+    body: JSON.stringify({  
+      page: pageData.current_page,
+      limit: pageData.limit,
+      since: pageData.since,
+      renew: false,
+      maxid: pageData.maxid }),
+    headers: {
+      "Content-Type": "application/json",
+    },
+  })
+    .then((res) => {
+      return res.json();
+    })
+    .then((data) => {
+      return data.data;
+    })
+    .catch((err) => {
+      console.error("error", err);
+    });
+
+  return typeof data === 'object' ? 0 : Number(data)
 }
 
 //Todo: needs same fix as sunc note so only a portion of the view is updated and not the complete view.
