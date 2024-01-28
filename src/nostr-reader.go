@@ -80,11 +80,6 @@ func main() {
 	mux.HandleFunc("/api/getbookmarked", req.GetBookMarked)
 
 	/**
-	 * Find an event based on event id. This can be a reply
-	 */
-	mux.HandleFunc("/api/searchevent", req.SearchEvent)
-
-	/**
 	 * Sometimes it is nice to see pictures in the post and not just a link
 	 */
 	mux.HandleFunc("/api/preview/link", req.PreviewLink)

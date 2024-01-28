@@ -118,6 +118,18 @@ func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
  			END $$;`)
 	st.GormDB.AutoMigrate(&Reaction{})
 
+	st.GormDB.Exec(`CREATE OR REPLACE FUNCTION delete_submission() RETURNS trigger AS $$
+	BEGIN  
+  		IF NEW.kind=5 THEN
+       		DELETE FROM notes WHERE ARRAY[event_id] && NEW.etags AND NEW.pubkey=pubkey;
+    		RETURN NULL;
+  		END IF;
+  		RETURN NEW;
+	END;
+	$$ LANGUAGE plpgsql;`)
+	st.GormDB.Exec(`DROP TRIGGER IF EXISTS delete_trigger ON notes;`)
+	st.GormDB.Exec(`CREATE TRIGGER delete_trigger BEFORE INSERT ON notes FOR EACH ROW EXECUTE FUNCTION delete_submission();`)
+
 	fmt.Println("Connected to database:", cfg.Dbname)
 	return err
 }
@@ -345,79 +357,6 @@ func (st *Storage) SaveReaction(ctx context.Context, ev *nostr.Event, targetEven
 	}
 }
 
-/**
- * Get a limitted amount of stored events
- */
-func (st *Storage) GetEvents(ctx context.Context, limit int) (*[]Event, error) {
-	rows, err := st.GormDB.WithContext(ctx).Raw(`SELECT e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.tags_full::json,e.sig, e.etags, e.ptags, u.name, u.about , u.picture,
-	u.website, u.nip05, u.lud16, u.display_name FROM notes e 
-	LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
-	LEFT JOIN blocks b on (b.pubkey = e.pubkey) 
-	LEFT JOIN seens s on (s.event_id = e.event_id)
-	WHERE e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false ORDER BY e.event_created_at DESC LIMIT $1`, limit).Rows()
-
-	if err != nil {
-		log.Println("Query:: ", err)
-		return nil, err
-	}
-	defer rows.Close()
-
-	events := make([]Event, 0)
-	for rows.Next() {
-		var event Event
-		var name sql.NullString
-		var about sql.NullString
-		var picture sql.NullString
-
-		var website sql.NullString
-		var nip05 sql.NullString
-		var lud16 sql.NullString
-		var displayname sql.NullString
-
-		event.Event = &nostr.Event{}
-		if err := rows.Scan(&event.Event.ID, &event.Event.PubKey, &event.Event.Kind, &event.Event.CreatedAt, &event.Event.Content, &event.Event.Tags, &event.Event.Sig,
-			&event.Etags, &event.Ptags,
-			&name, &about, &picture, &website, &nip05, &lud16, &displayname); err != nil {
-			log.Println("Query:: ", err.Error())
-			panic(err)
-		}
-
-		if name.Valid {
-			event.Profile.Name = name.String
-		} else {
-			event.Profile.Name = event.Event.PubKey
-		}
-		if about.Valid {
-			event.Profile.About = about.String
-		}
-		if picture.Valid {
-			event.Profile.Picture = picture.String
-		}
-
-		if website.Valid {
-			event.Profile.Website = website.String
-		}
-		if nip05.Valid {
-			event.Profile.Nip05 = nip05.String
-		}
-		if lud16.Valid {
-			event.Profile.Lud16 = lud16.String
-		}
-		if displayname.Valid {
-			event.Profile.DisplayName = displayname.String
-		}
-		event.Tree = 1
-		events = append(events, event)
-	}
-	// Check for errors from iterating over rows.
-	if err := rows.Err(); err != nil {
-		log.Println("Query:: ", err)
-		return nil, err
-	}
-
-	return &events, nil
-}
-
 type Options struct {
 	Follow   bool
 	BookMark bool
@@ -454,7 +393,6 @@ func (st *Storage) GetPagination(ctx context.Context, p *Pagination, options Opt
 				Where("notes.id <= ?", p.Maxid).Scan(&maxTimeStamp)
 		}
 		since := maxTimeStamp - int64(p.Since*60*60*24)
-		fmt.Println("Timetamp :", maxTimeStamp, since)
 		tx.Where("notes.event_created_at > ?", fmt.Sprintf("%d", since))
 	}
 
