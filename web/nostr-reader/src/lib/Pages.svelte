@@ -17,6 +17,7 @@
     pageMetaData,
     syncNote,
     getNewNotesCount,
+    getLastSeenId,
   } from "./state/main";
   import { addBookmark, removeBookmark } from "./state/bookmark";
 
@@ -28,7 +29,11 @@
     setApiUrl(apiUrl);
     
     pageData.set([]);
-   
+    
+    if ($pageMetaData.maxid < 1) {
+      $pageMetaData.maxid = await getLastSeenId()
+    }
+
     await refreshView({
       page: 1,
       limit: $pageMetaData.limit,
@@ -36,6 +41,7 @@
       renew: renewData,
       maxid: $pageMetaData.maxid,
     });
+
     getNewNotesCounter()
     setInterval(getNewNotesCounter, 60*1000)
     document.getElementById("realNotesContainer").scrollTo(0, 0);

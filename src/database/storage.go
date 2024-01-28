@@ -379,6 +379,17 @@ func (st *Storage) GetNewNotesCount(ctx context.Context, maxId int) (int, error)
 	return count, nil
 }
 
+func (st *Storage) GetLastSeenID(ctx context.Context) (int, error) {
+	var maxId int
+	tx := st.GormDB.Model(&Seen{}).
+		Select(`MAX(note_id)`).Scan(&maxId)
+
+	if tx.Error != nil {
+		return 0, tx.Error
+	}
+	return maxId, nil
+}
+
 /**
  * Do not show all data in an endless scrol page, but paginate it for easy access
  * and ignore the garbage tagged posts
@@ -394,11 +405,11 @@ func (st *Storage) GetPagination(ctx context.Context, p *Pagination, options Opt
 		follows.pubkey follow, bookmarks.event_id bookmarked`).
 		Joins("LEFT JOIN profiles ON (profiles.pubkey = notes.pubkey)").
 		Joins("LEFT JOIN blocks  on (blocks.pubkey = notes.pubkey)").
-		Joins("LEFT JOIN seens on (seens.event_id = notes.event_id)").
+		//Joins("LEFT JOIN seens on (seens.event_id = notes.event_id)").
 		Where("notes.kind = 1").
 		Where("notes.etags='{}'").
 		Where("blocks.pubkey IS NULL").
-		Where("seens.event_id IS NULL").
+		//Where("seens.event_id IS NULL").
 		Where("notes.garbage = false")
 
 	// Needs a time stamp that stays the same else total will change with every call
@@ -446,9 +457,19 @@ func (st *Storage) GetPagination(ctx context.Context, p *Pagination, options Opt
 
 	p.SetTotal(count)
 	p.SetTo()
-	eventMap, keys, _ := st.procesEventRows(rows, p)
+	eventMap, keys, seenMap, _ := st.procesEventRows(rows, p)
+	tx = st.GormDB.WithContext(ctx).Model(&Seen{})
+	seens := []*Seen{}
+	for noteid, eventid := range seenMap {
+		seens = append(seens, &Seen{NoteID: uint(noteid), EventId: eventid})
+	}
 
+	result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&seens)
+	if result.Error != nil {
+		return result.Error
+	}
 	st.getChildren(ctx, eventMap)
+
 	events := make([]Event, 0)
 	// Make sure the order stays the same
 	for _, k := range keys {
@@ -459,9 +480,10 @@ func (st *Storage) GetPagination(ctx context.Context, p *Pagination, options Opt
 	return nil
 }
 
-func (st *Storage) procesEventRows(rows *sql.Rows, p *Pagination) (map[string]Event, []string, error) {
+func (st *Storage) procesEventRows(rows *sql.Rows, p *Pagination) (map[string]Event, []string, map[int64]string, error) {
 	eventMap := make(map[string]Event)
 	var keys []string
+	seenMap := make(map[int64]string)
 
 	canUpdateMaxId := (p.Renew || p.Maxid == 0)
 	for rows.Next() {
@@ -535,7 +557,7 @@ func (st *Storage) procesEventRows(rows *sql.Rows, p *Pagination) (map[string]Ev
 
 		//nostr.Event = json.Unmarshal()
 		//sdk.ParseReferences(&nostr.Event{event})
-
+		seenMap[id] = note.Event.ID
 		note.Children = make(map[string]*Event, 0)
 		eventMap[note.Event.ID] = note
 		keys = append(keys, note.Event.ID) // Make sure the order stays the same @see https://go.dev/blog/maps
@@ -543,11 +565,11 @@ func (st *Storage) procesEventRows(rows *sql.Rows, p *Pagination) (map[string]Ev
 	// Check for errors from iterating over rows.
 	if err := rows.Err(); err != nil {
 		log.Println("Query:: ", err)
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	defer rows.Close()
 
-	return eventMap, keys, nil
+	return eventMap, keys, seenMap, nil
 }
 
 func (st *Storage) getChildren(ctx context.Context, eventMap map[string]Event) error {
@@ -566,12 +588,12 @@ func (st *Storage) getChildren(ctx context.Context, eventMap map[string]Event) e
 		Joins("JOIN trees ON (trees.event_id = notes.event_id)").
 		Joins("LEFT JOIN profiles ON (profiles.pubkey = notes.pubkey)").
 		Joins("LEFT JOIN blocks ON (blocks.pubkey = notes.pubkey)").
-		Joins("LEFT JOIN seens on (seens.event_id = notes.event_id)").
+		//Joins("LEFT JOIN seens on (seens.event_id = notes.event_id)").
 		Joins("LEFT JOIN follows ON (follows.pubkey = notes.pubkey)").
 		Joins("LEFT JOIN bookmarks ON (bookmarks.event_id = notes.event_id)").
 		Where("notes.kind = 1").
 		Where("blocks.pubkey IS NULL").
-		Where("seens.event_id IS NULL").
+		//Where("seens.event_id IS NULL").
 		Where("notes.garbage = false")
 
 	var eventIds string
@@ -735,7 +757,7 @@ func (st *Storage) GetInbox(ctx context.Context, p *Pagination, pubkey string) e
 	}
 	defer rows.Close()
 
-	eventMap, keys, _ := st.procesEventRows(rows, p)
+	eventMap, keys, _, _ := st.procesEventRows(rows, p)
 	p.SetTotal(int64(len(keys)))
 	p.SetTo()
 

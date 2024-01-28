@@ -195,6 +195,27 @@ export async function getNewNotesCount(): integer {
   return typeof data === 'object' ? 0 : Number(data)
 }
 
+export async function getLastSeenId(): integer {
+  const pageData = get(pageMetaData)
+  let data =  await fetch(`${import.meta.env.VITE_API_LINK}/api/getlastseenid`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  })
+    .then((res) => {
+      return res.json();
+    })
+    .then((data) => {
+      return data.data;
+    })
+    .catch((err) => {
+      console.error("error", err);
+    });
+
+  return typeof data === 'object' ? 0 : Number(data)
+}
+
 //Todo: needs same fix as sunc note so only a portion of the view is updated and not the complete view.
 export async function publish(msg: string, note) {
   await fetch(`${import.meta.env.VITE_API_LINK}/api/publish`, {
