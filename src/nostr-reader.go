@@ -115,7 +115,7 @@ func main() {
 	}
 	*/
 
-	ticker := time.NewTicker(300 * time.Second)
+	ticker := time.NewTicker(60 * time.Second)
 	// Creating channel using make
 	tickerChan := make(chan bool)
 
