@@ -131,8 +131,8 @@ func intervalTask(req *Requests) {
 	t := time.Unix(createdAt, 0)
 	log.Println("TimeStamps: ", createdAt, t.UTC())
 
-	filter := req.Nostr.GetEventData(ctx, createdAt, false)
+	filter := req.Nostr.GetEventData(createdAt, false)
 
-	evs := req.Nostr.GetEvents(ctx, filter)
+	evs := req.Nostr.GetEvents(filter)
 	req.Db.SaveEvents(ctx, evs)
 }

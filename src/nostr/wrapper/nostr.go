@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -60,7 +61,7 @@ func (nostrWrapper *NostrWrapper) SetConfig(cfg *Config) {
  */
 func (nostrWrapper *NostrWrapper) Do(r Relay, f func(context.Context, *nostr.Relay) bool) {
 	var wg sync.WaitGroup
-
+	ctx := context.Background()
 	for relayUrl, v := range nostrWrapper.Cfg.Relays {
 		if r.Write && !v.Write {
 			continue
@@ -75,7 +76,7 @@ func (nostrWrapper *NostrWrapper) Do(r Relay, f func(context.Context, *nostr.Rel
 
 		go func(wg *sync.WaitGroup, relayUrl string, v Relay) {
 			defer wg.Done()
-			ctx := context.WithValue(context.Background(), KeyUrl, relayUrl)
+
 			relay, err := nostr.RelayConnect(ctx, relayUrl)
 			if err != nil {
 				log.Println(err)
@@ -92,33 +93,35 @@ func (nostrWrapper *NostrWrapper) Do(r Relay, f func(context.Context, *nostr.Rel
 	wg.Wait()
 }
 
-func (nostrWrapper *NostrWrapper) Post(ctx context.Context, content string) (nostr.Event, error) {
+func (nostrWrapper *NostrWrapper) DoPost(content string) (nostr.Event, error) {
+	var err error
 	ev := nostr.Event{}
 	ev.Tags = nostr.Tags{}
-
-	ev.PubKey = nostrWrapper.Cfg.PubKey
+	ev.PubKey, err = nostr.GetPublicKey(nostrWrapper.Cfg.PrivateKey)
+	if err != nil {
+		return nostr.Event{}, err
+	}
 	ev.CreatedAt = nostr.Now()
 	ev.Kind = nostr.KindTextNote
 	ev.Content = content
 
-	var success int
-	nostrWrapper.Do(Relay{Write: true}, func(ctx context.Context, relay *nostr.Relay) bool {
-		// calling Sign sets the event ID field and the event Sig field
-		if err := ev.Sign(nostrWrapper.Cfg.PrivateKey); err != nil {
-			return false
-		}
+	if err := ev.Sign(nostrWrapper.Cfg.PrivateKey); err != nil {
+		return nostr.Event{}, err
+	}
 
+	var success atomic.Int64
+	nostrWrapper.Do(Relay{Write: true}, func(ctx context.Context, relay *nostr.Relay) bool {
 		err := relay.Publish(ctx, ev)
 		if err != nil {
-			log.Println("Post:: ", err)
-			return false
+			log.Println("Post:: ", relay.URL, err)
+		} else {
+			success.Add(1)
 		}
 		log.Println("Post:: Publish to: [", relay.URL, "], Event data: ", ev)
-		success += 1
 		return true
 	})
 
-	if success == 0 {
+	if success.Load() == 0 {
 		log.Println("Post:: cannot post")
 		return nostr.Event{}, errors.New("cannot post")
 	}
@@ -127,17 +130,20 @@ func (nostrWrapper *NostrWrapper) Post(ctx context.Context, content string) (nos
 	return ev, nil
 }
 
-func (nostrWrapper *NostrWrapper) Reply(ctx context.Context, content string, replyEv nostr.Event) (nostr.Event, error) {
+func (nostrWrapper *NostrWrapper) DoReply(content string, replyEv nostr.Event) (nostr.Event, error) {
 	if replyEv.ID == "" {
 		log.Println("Reply::Wrong function call. needs event_id since it is a reply")
 		return nostr.Event{}, errors.New("no reply event in call")
 	}
-
+	var err error
 	ev := nostr.Event{}
 	ev.Tags = nostr.Tags{}
 	replyETags := replyEv.Tags.GetAll([]string{"e"})
 
-	ev.PubKey = nostrWrapper.Cfg.PubKey
+	ev.PubKey, err = nostr.GetPublicKey(nostrWrapper.Cfg.PrivateKey)
+	if err != nil {
+		return nostr.Event{}, err
+	}
 	ev.CreatedAt = nostr.Now()
 	ev.Kind = nostr.KindTextNote
 	ev.Content = content
@@ -174,24 +180,23 @@ func (nostrWrapper *NostrWrapper) Reply(ctx context.Context, content string, rep
 		ev.Tags = ev.Tags.AppendUnique(nostr.Tag{"p", replyEv.PubKey})
 	}
 
-	var success int
-	nostrWrapper.Do(Relay{Write: true}, func(ctx context.Context, relay *nostr.Relay) bool {
-		// calling Sign sets the event ID field and the event Sig field
-		if err := ev.Sign(nostrWrapper.Cfg.PrivateKey); err != nil {
-			return false
-		}
+	if err := ev.Sign(nostrWrapper.Cfg.PrivateKey); err != nil {
+		return nostr.Event{}, err
+	}
 
+	var success atomic.Int64
+	nostrWrapper.Do(Relay{Write: true}, func(ctx context.Context, relay *nostr.Relay) bool {
 		err := relay.Publish(ctx, ev)
 		if err != nil {
-			log.Println("Reply:: ", err)
-			return false
+			log.Println("Reply:: ", relay.URL, err)
+		} else {
+			success.Add(1)
 		}
 		log.Println("Reply:: publish to: [", relay.URL, "], Event data: ", ev)
-		success += 1
 		return true
 	})
 
-	if success == 0 {
+	if success.Load() == 0 {
 		log.Println("Reply:: cannot reply")
 		return nostr.Event{}, errors.New("cannot reply")
 	}
@@ -203,7 +208,7 @@ func (nostrWrapper *NostrWrapper) Reply(ctx context.Context, content string, rep
  * Send a request over a websocket to get new events (notes) and after processing the events
  * try to get all the usernames metadata from who posted the note.
  */
-func (nostrWrapper *NostrWrapper) GetEvents(ctx context.Context, filter nostr.Filter) []*nostr.Event {
+func (nostrWrapper *NostrWrapper) GetEvents(filter nostr.Filter) []*nostr.Event {
 	var m sync.Map
 	var mu sync.Mutex
 	found := false
@@ -252,7 +257,7 @@ func (nostrWrapper *NostrWrapper) GetEvents(ctx context.Context, filter nostr.Fi
  * Before we try to get events, first get the last timestamp so we do not query all the events all the time but only the lastests.
  * We do not want to spam the relays when we just synced, so wait 60 seconds before we accept a new sync
  */
-func (nostrWrapper *NostrWrapper) GetEventData(ctx context.Context, createdAt int64, withOffset bool) nostr.Filter {
+func (nostrWrapper *NostrWrapper) GetEventData(createdAt int64, withOffset bool) nostr.Filter {
 	var createdAtOffset int64 = time.Now().Unix() - 60
 	if createdAt < 1 {
 		createdAt = createdAtOffset
@@ -275,7 +280,7 @@ func (nostrWrapper *NostrWrapper) GetEventData(ctx context.Context, createdAt in
 /**
  * Get the metadata of a bunch of Pubkeys and store them.
  */
-func (nostrWrapper *NostrWrapper) UpdateProfiles(ctx context.Context, pubkeys []string) []*nostr.Event {
+func (nostrWrapper *NostrWrapper) UpdateProfiles(pubkeys []string) []*nostr.Event {
 	if (len(pubkeys)) < 1 {
 		return nil
 	}
@@ -308,7 +313,7 @@ func (nostrWrapper *NostrWrapper) UpdateProfiles(ctx context.Context, pubkeys []
 	return evs
 }
 
-func (nostrWrapper *NostrWrapper) GetMetaData(ctx context.Context) (nostr.Event, error) {
+func (nostrWrapper *NostrWrapper) GetMetaData() (nostr.Event, error) {
 	pubkey := nostrWrapper.Cfg.PubKey
 
 	filter := nostr.Filter{
@@ -339,11 +344,16 @@ func (nostrWrapper *NostrWrapper) GetMetaData(ctx context.Context) (nostr.Event,
 	return nostr.Event{}, nil
 }
 
-func (nostrWrapper *NostrWrapper) SetMetaData(ctx context.Context, user *Profile) error {
+func (nostrWrapper *NostrWrapper) DoPublishMetaData(user *Profile) error {
+	var err error
 	ev := nostr.Event{}
 	ev.Tags = nostr.Tags{}
 
-	ev.PubKey = nostrWrapper.Cfg.PubKey
+	ev.PubKey, err = nostr.GetPublicKey(nostrWrapper.Cfg.PrivateKey)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
 	ev.CreatedAt = nostr.Now()
 	ev.Kind = nostr.KindProfileMetadata
 	c, err := json.Marshal(*user)
@@ -352,26 +362,23 @@ func (nostrWrapper *NostrWrapper) SetMetaData(ctx context.Context, user *Profile
 		return err
 	}
 	ev.Content = string(c)
+	if err := ev.Sign(nostrWrapper.Cfg.PrivateKey); err != nil {
+		return err
+	}
 
 	fmt.Println(ev)
-	var success int
+	var success atomic.Int64
 	nostrWrapper.Do(Relay{Write: true}, func(ctx context.Context, relay *nostr.Relay) bool {
-		// calling Sign sets the event ID field and the event Sig field
-		if err := ev.Sign(nostrWrapper.Cfg.PrivateKey); err != nil {
-			return false
-		}
-
 		err := relay.Publish(ctx, ev)
 		if err != nil {
-			fmt.Println(err)
-			log.Println(err)
-			return false
+			log.Println(relay.URL, err)
+		} else {
+			success.Add(1)
 		}
-		success += 1
 		return true
 	})
 
-	if success == 0 {
+	if success.Load() == 0 {
 		return errors.New("cannot send profile metadata")
 	}
 

@@ -127,8 +127,8 @@ func (req *Requests) StartSync(w http.ResponseWriter, r *http.Request) {
 	//EventsQueue = EventsQueue[:0]
 	createdAt := req.Db.GetLastTimeStamp(ctx)
 
-	filter := req.Nostr.GetEventData(ctx, createdAt, true)
-	evs := req.Nostr.GetEvents(ctx, filter)
+	filter := req.Nostr.GetEventData(createdAt, true)
+	evs := req.Nostr.GetEvents(filter)
 	var pubkeys = make([]string, 0)
 	var err error
 	pubkeys, err = req.Db.SaveEvents(ctx, evs)
@@ -142,7 +142,7 @@ func (req *Requests) StartSync(w http.ResponseWriter, r *http.Request) {
 
 	pubkeys, _ = req.Db.CheckProfiles(ctx, pubkeys, tresholdTime)
 	// Last but not least, try to get the user metadata
-	req.Nostr.UpdateProfiles(ctx, pubkeys)
+	req.Nostr.UpdateProfiles(pubkeys)
 	req.Db.SaveProfiles(ctx, evs)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -175,7 +175,7 @@ func (req *Requests) SyncNote(w http.ResponseWriter, r *http.Request) {
 		Limit: 1,
 	}
 
-	evs := req.Nostr.GetEvents(ctx, filter)
+	evs := req.Nostr.GetEvents(filter)
 
 	req.Db.SaveEvents(ctx, evs)
 
@@ -505,7 +505,7 @@ func (req *Requests) SearchEvent(w http.ResponseWriter, r *http.Request) {
 			Limit: 1,
 		}
 
-		evs := req.Nostr.GetEvents(ctx, filter)
+		evs := req.Nostr.GetEvents(filter)
 
 		req.Db.SaveEvents(ctx, evs)
 
@@ -561,8 +561,7 @@ func (req *Requests) PreviewLink(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
+	ctx := context.Background()
 
 	type Msg struct {
 		Msg      string
@@ -582,7 +581,7 @@ func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
 	log.Println("Msg to publish: ", msg.Msg)
 	var postEv nostr.Event
 	if msg.Event_id == "" {
-		postEv, _ = req.Nostr.Post(ctx, msg.Msg)
+		postEv, _ = req.Nostr.DoPost(msg.Msg)
 
 		req.Db.SaveEvents(ctx, []*nostr.Event{&postEv})
 	}
@@ -590,7 +589,7 @@ func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
 	result := map[string]string{}
 	if msg.Event_id != "" {
 		replyEv, _ := req.Db.FindRawEvent(ctx, msg.Event_id)
-		postEv, _ = req.Nostr.Reply(ctx, msg.Msg, replyEv)
+		postEv, _ = req.Nostr.DoReply(msg.Msg, replyEv)
 
 		req.Db.SaveEvents(ctx, []*nostr.Event{&postEv})
 	}
@@ -615,10 +614,10 @@ func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) GetMetaData(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	event, _ := req.Nostr.GetMetaData(ctx)
+	event, _ := req.Nostr.GetMetaData()
 
 	req.Db.SaveProfiles(ctx, []*nostr.Event{&event})
 
@@ -633,8 +632,6 @@ func (req *Requests) GetMetaData(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) SetMetaData(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
 
 	var user nostrWrapper.Profile
 	err := json.NewDecoder(r.Body).Decode(&user)
@@ -643,7 +640,7 @@ func (req *Requests) SetMetaData(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 	user.Pubkey = req.Cfg.PubKey
-	_ = req.Nostr.SetMetaData(ctx, &user)
+	_ = req.Nostr.DoPublishMetaData(&user)
 
 	//fmt.Println("Follow user: ", user.Pubkey)
 	w.Header().Set("Content-Type", "application/json")
@@ -657,8 +654,7 @@ func (req *Requests) SetMetaData(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) GetProfile(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
+	ctx := context.Background()
 
 	profile, _ := req.Db.FindProfile(ctx, req.Cfg.PubKey)
 
