@@ -258,17 +258,17 @@ func (nostrWrapper *NostrWrapper) GetEventData(ctx context.Context, createdAt in
 		createdAt = createdAtOffset
 	}
 	if createdAt > createdAtOffset && withOffset {
-		fmt.Printf("Time lapse is to short for getting new data %d %d", createdAt, createdAtOffset)
+		log.Printf("Time lapse is to short for getting new data %d %d", createdAt, createdAtOffset)
 		return nostr.Filter{}
 	}
-
 	var timeStamp nostr.Timestamp = nostr.Timestamp(createdAt + 1)
-	fmt.Println("Nostr Timestamp: ", timeStamp)
+	log.Println("Nostr Timestamp: ", timeStamp.Time().UTC())
 	filter := nostr.Filter{
 		Kinds: []int{nostr.KindTextNote, nostr.KindReaction, nostr.KindArticle, nostr.KindDeletion, nostr.KindProfileMetadata},
 		Since: &timeStamp,
 	}
 
+	log.Println(filter)
 	return filter
 }
 

@@ -1014,10 +1014,10 @@ func (st *Storage) RemoveBookMark(ctx context.Context, eventID string) error {
 }
 
 func (st *Storage) GetLastTimeStamp(ctx context.Context) int64 {
-	var createdAt time.Time
-	st.GormDB.WithContext(ctx).Raw("SELECT MAX(created_at) as MaxCreated FROM notes").Scan(&createdAt)
+	var createdAt int64
+	st.GormDB.WithContext(ctx).Raw("SELECT MAX(event_created_at) as MaxCreated FROM notes").Scan(&createdAt)
 
-	return createdAt.Unix()
+	return createdAt
 }
 
 func (st *Storage) FindProfile(ctx context.Context, pubkey string) (Profile, error) {

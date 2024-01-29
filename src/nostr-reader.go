@@ -55,11 +55,6 @@ func main() {
 	mux.HandleFunc("/api/getinbox", req.GetInbox)
 	mux.HandleFunc("/api/getnewnotescount", req.GetNewNotesCount)
 	mux.HandleFunc("/api/getlastseenid", req.GetLastSeenID)
-	/**
-	 * This will sync the local database with that of the relays (Only public events and not channels and such)
-	 */
-	//mux.HandleFunc("/api/sync", req.StartSync)
-	//mux.HandleFunc("/api/syncnote", req.SyncNote)
 
 	/**
 	 * Put a user on the naughty list
@@ -105,16 +100,6 @@ func main() {
 		port = fmt.Sprint(cfg.Server.Port)
 	}
 
-	/* Check if this solves io timeout for websocket
-	srv := &http.Server{
-		Addr:           ":" + port,
-		Handler:        mux,
-		ReadTimeout:    45 * time.Second,
-		WriteTimeout:   60 * time.Second,
-		MaxHeaderBytes: 1 << 20,
-	}
-	*/
-
 	ticker := time.NewTicker(60 * time.Second)
 	// Creating channel using make
 	tickerChan := make(chan bool)
@@ -136,30 +121,17 @@ func main() {
 
 	fmt.Println("Server running: http://localhost:" + port)
 	log.Fatal(http.ListenAndServe(":"+port, mux))
-	//log.Fatal(srv.ListenAndServe())
-
-	// Turn off ticker after 10 seconds
-	// Calling Sleep() method
-	//time.Sleep(10 * time.Second)
-
-	// Calling Stop() method
-	//ticker.Stop()
-
-	// Setting the value of channel
-	//tickerChan <- true
-
-	// Printed when the ticker is turned off
-	//fmt.Println("Ticker is turned off!")
-
 }
 
 func intervalTask(req *Requests) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	//EventsQueue = EventsQueue[:0]
 	createdAt := req.Db.GetLastTimeStamp(ctx)
-	filter := req.Nostr.GetEventData(ctx, createdAt, true)
+	t := time.Unix(createdAt, 0)
+	log.Println("TimeStamps: ", createdAt, t.UTC())
+
+	filter := req.Nostr.GetEventData(ctx, createdAt, false)
 
 	evs := req.Nostr.GetEvents(ctx, filter)
 	req.Db.SaveEvents(ctx, evs)
