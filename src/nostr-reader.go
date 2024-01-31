@@ -100,10 +100,15 @@ func main() {
 		port = fmt.Sprint(cfg.Server.Port)
 	}
 
-	ticker := time.NewTicker(60 * time.Second)
+	if !(cfg.Server.Interval > 0) {
+		log.Println("Please set the interval in minutes in config.json")
+		os.Exit(0)
+	}
+	intervalTimer := time.Duration(cfg.Server.Interval * 60)
+	ticker := time.NewTicker(intervalTimer * time.Second)
+
 	// Creating channel using make
 	tickerChan := make(chan bool)
-
 	go func() {
 		for {
 			select {
@@ -111,28 +116,25 @@ func main() {
 				return
 			// interval task
 			case tm := <-ticker.C:
-				fmt.Println("The Current time is: ", tm)
+				log.Println("The Current time is: ", tm)
 				go intervalTask(&req)
 			}
 		}
 	}()
 
-	go intervalTask(&req)
-
+	intervalTask(&req)
 	fmt.Println("Server running: http://localhost:" + port)
 	log.Fatal(http.ListenAndServe(":"+port, mux))
 }
 
 func intervalTask(req *Requests) {
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	createdAt := req.Db.GetLastTimeStamp(ctx)
 	t := time.Unix(createdAt, 0)
 	log.Println("TimeStamps: ", createdAt, t.UTC())
-
 	filter := req.Nostr.GetEventData(createdAt, false)
-
 	evs := req.Nostr.GetEvents(filter)
 	req.Db.SaveEvents(ctx, evs)
 }

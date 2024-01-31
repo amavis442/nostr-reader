@@ -17,6 +17,7 @@ import (
 type Server struct {
 	Port     int64
 	Frontend string
+	Interval int64
 }
 
 /**

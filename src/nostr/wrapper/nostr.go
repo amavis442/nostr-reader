@@ -54,10 +54,9 @@ func (nostrWrapper *NostrWrapper) SetConfig(cfg *Config) {
 /*
  * Please see https://github.com/mattn/algia/blob/main/main.go for the code i shamelessly copied
  *
- * Fire off calls to relays for getting new posts, user metadata etc. Each relay is operated in it's own thread
- * The f function is used to process the data we get from the relays.
+ * Fire off calls to relays for getting new posts, user metadata etc. Each relay is operated in it's own thread.
+ * The f function is used to process to get data from the relays and return it for further processing.
  *
- * It just makes sure all available relays are called
  */
 func (nostrWrapper *NostrWrapper) Do(r Relay, f func(context.Context, *nostr.Relay) bool) {
 	var wg sync.WaitGroup
@@ -79,11 +78,11 @@ func (nostrWrapper *NostrWrapper) Do(r Relay, f func(context.Context, *nostr.Rel
 
 			relay, err := nostr.RelayConnect(ctx, relayUrl)
 			if err != nil {
-				log.Println(err)
+				log.Println("Can't connect to relay: ", relay.URL)
 				return
 			}
 
-			if !f(ctx, relay) { // Custom function call that takes nostr.Relay as an argument. The function f will probally be an anonymous function
+			if !f(ctx, relay) {
 				ctx.Done()
 			}
 
@@ -205,40 +204,25 @@ func (nostrWrapper *NostrWrapper) DoReply(content string, replyEv nostr.Event) (
 }
 
 /**
- * Send a request over a websocket to get new events (notes) and after processing the events
- * try to get all the usernames metadata from who posted the note.
+ * Send a request over a websocket to get new events (notes) and make sure we only have 1 copy of that,
+ * even when it is stored on many relays.
  */
 func (nostrWrapper *NostrWrapper) GetEvents(filter nostr.Filter) []*nostr.Event {
 	var m sync.Map
-	var mu sync.Mutex
-	found := false
 
 	nostrWrapper.Do(Relay{Read: true}, func(ctx context.Context, relay *nostr.Relay) bool {
-		mu.Lock()
-		if found {
-			mu.Unlock()
-			return false
-		}
-		mu.Unlock()
-
 		evs, err := relay.QuerySync(ctx, filter)
+		log.Println("Connecting to:", relay.URL)
 		if err != nil {
 			return true
 		}
-		/**
-		 * Deduplicate
-		 * Make sure we only have 1 copy of the event even when we have multiple relays that have this event stored.
-		 */
 		for _, ev := range evs {
 			if _, ok := m.Load(ev.ID); !ok {
+				log.Println(relay.URL, " :: ", ev.CreatedAt.Time().UTC())
+				log.Println("Event ID: ", ev.ID)
+				log.Println("Kind: ", ev.Kind)
+
 				m.LoadOrStore(ev.ID, ev)
-				if len(filter.IDs) == 1 {
-					mu.Lock()
-					found = true
-					ctx.Done()
-					mu.Unlock()
-					break
-				}
 			}
 		}
 		return true

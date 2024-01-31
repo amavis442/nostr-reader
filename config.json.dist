@@ -7,7 +7,9 @@
         "host": "localhost"
     },
     "server": {
-        "port": 8080
+        "port": 8080,
+		"frontend": "./dist",
+		"interval": 5
     },
     "relays": {
         "wss://nostr.anchel.nl": {
@@ -31,9 +33,7 @@
             "search": true
         }
     },
-    "pubkey": "",
-    "npub": "",
-    "pk": "",
-    "nsec": "",
+	"privatekey": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "nip05": "https://nostrcheck.me/",
     "filter": [] 
 }
