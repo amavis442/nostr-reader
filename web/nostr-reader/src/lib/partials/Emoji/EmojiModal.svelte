@@ -82,7 +82,8 @@
     }
   
     function onVariantClick(event) {
-      dispatch('emoji', event.detail.emoji);
+      onAddEmoji(event.detail.emoji);
+      //dispatch('emoji', event.detail.emoji);
       saveRecent(event.detail);
       hideVariants();
   
