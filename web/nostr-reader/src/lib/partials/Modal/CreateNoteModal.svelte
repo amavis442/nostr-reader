@@ -2,56 +2,77 @@
   import { closeModal } from "svelte-modals";
   import Button from "../Button.svelte";
   import TextArea from "../TextArea.svelte";
+  import { openModal } from "svelte-modals";
+  import EmojiModal from "../Emoji/EmojiModal.svelte";
 
-  // provided by <Modals />
   export let isOpen: boolean;
   export let note;
   export let onSendTextNote: Function;
+  
 
-  function onSubmit(e: Event) {
-    const target = e.target as HTMLFormElement;
-    const formData = new FormData(target);
+  let textContent:string = '';
 
-    const data: { replyText?: string } = {};
-    //@ts-ignore
-    for (let field of formData) {
-      const [key, value] = field;
-      data[key] = value;
-    }
-    let v = Object.values(data);
-    console.debug(v);
-
+  function openEmoji() {
+    openModal(EmojiModal,{
+      
+      onAddEmoji: (emoji) => {
+        textContent += emoji
+      }
+    });
+  }
+  
+  function send() {
     closeModal();
-    onSendTextNote(v[0]);
+    onSendTextNote(textContent, note);
   }
 </script>
 
 {#if isOpen}
   <div role="dialog" class="modal">
     <div class="contents">
-      <form on:submit|preventDefault={onSubmit}>
+      <form on:submit|preventDefault>
         {#if note}
           <h5 class="text-gray-900 text-xl font-medium mb-2">
-            Re: {note.event.content.slice(0, 30)}<br/>
-            <small>{note.event.id.slice(0, 5)}...{note.event.id.slice(-5)}</small>
+            Re: {note.event.content.slice(0, 30)}<br />
+            <small
+              >{note.event.id.slice(0, 5)}...{note.event.id.slice(-5)}</small
+            >
           </h5>
-          <TextArea id="reply{note.event.id}" placeholder="Add reply" cols="30" rows="5"/>
+          <TextArea
+            id="reply{note.event.id}"
+            placeholder="Add reply"
+            cols="30"
+            rows="5"
+            bind:textContent={textContent}
+          />
         {:else}
           <h5 class="text-gray-900 text-xl font-medium mb-2">
             Create a new note
           </h5>
-          <TextArea id="create-note" placeholder="Create a note" cols="30" rows="5"/>
+          <TextArea
+            id="create-note"
+            placeholder="Create a note"
+            cols="30"
+            rows="5"
+          />
         {/if}
 
         <div class="flex space-x-1 p-2">
-          <div class="justify-items-start w-6/12">
-            <Button type="submit" class="space-x-1"
+          <div class="justify-items-start w-4/12">
+            <Button click={send} class="space-x-1"
               ><i class="fa-solid fa-paper-plane" />
               <span>Send</span>
             </Button>
           </div>
-          <div class="w-6/12 flex justify-end">
-            <Button click={closeModal} class="bg-red-500 hover:bg-red-700">Cancel</Button>
+          <div class="w-4/12 flex justify-center">
+            <Button click={openEmoji} class="bg-yellow-500 hover:bg-yellow-700"
+              >😀 Emoji</Button
+            >
+          </div>
+          <div class="w-4/12 flex justify-end">
+            <Button click={closeModal} class="bg-red-500 hover:bg-red-700"
+              >Cancel</Button
+            >
           </div>
         </div>
       </form>
@@ -69,7 +90,6 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 100;
 
     /* allow click-through to backdrop */
     pointer-events: none;

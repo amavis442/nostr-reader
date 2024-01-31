@@ -5,7 +5,7 @@
   import TextNote from "./TextNote.svelte";
   import CreateNoteModal from "./partials/Modal/CreateNoteModal.svelte";
   import InfoModal from "./partials/Modal/InfoModal.svelte";
-  import { openModal } from "svelte-modals";
+  import { closeModal, openModal } from "svelte-modals";
   import {
     refreshView,
     blockUser,
