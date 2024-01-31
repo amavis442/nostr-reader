@@ -21,7 +21,15 @@ export function setApiUrl(url: string) {
   apiUrl = url
 }
 
-export async function refreshView(params) {
+interface IRefreshView {
+  page: number,
+  limit: number,
+  since: number,
+  renew: boolean,
+  maxid: number
+}
+
+export async function refreshView(params: IRefreshView) {
   return await fetch(apiUrl, {
     method: "POST",
     body: JSON.stringify(params),
@@ -34,10 +42,10 @@ export async function refreshView(params) {
     })
     .then((data) => {
       console.log("Json is ", data);
-      
+
       let maxId = 0;
       let total = 0;
-      
+
       maxId = params.maxid;
       //total = params.total
 
@@ -62,7 +70,12 @@ export async function refreshView(params) {
       pageData.update(() => { return data.data });
       return data.data;
     })
-    .then(() => (document.getElementById("content").scrollTo(0, 0)))
+    .then(() => {
+      let elm: null|HTMLElement = document.getElementById("content")
+      if (elm) {
+        elm.scrollTo(0, 0);
+      } 
+    })
     .catch((err) => {
       console.error("error", err);
     });
@@ -76,10 +89,21 @@ export async function refresh() {
     .then((data) => {
       console.log("Json is ", data);
       const pageData = get(pageMetaData)
-      refreshView({ page: pageData.current_page, limit: pageData.limit, since: pageData.since });
+      refreshView({
+        page: pageData.current_page,
+        limit: pageData.limit,
+        since: pageData.since,
+        renew: true,
+        maxid: 0
+      });
       return data;
     })
-    .then(() => (document.getElementById("content").scrollTo(0, 0)))
+    .then(() => {
+      let elm: null|HTMLElement = document.getElementById("content")
+      if (elm) {
+        elm.scrollTo(0, 0);
+      }    
+    })
     .catch((err) => {
       console.error("error", err);
     });
@@ -140,7 +164,7 @@ export function followUser(pubkey: string) {
 }
 
 export function unfollowUser(pubkey: string) {
-  
+
   fetch(`${import.meta.env.VITE_API_LINK}/api/unfollowuser`, {
     method: "POST",
     body: JSON.stringify({ pubkey: pubkey }),
@@ -168,16 +192,17 @@ export function unfollowUser(pubkey: string) {
 }
 
 
-export async function getNewNotesCount(): integer {
+export async function getNewNotesCount(): Promise<number> {
   const pageData = get(pageMetaData)
-  let data =  await fetch(`${import.meta.env.VITE_API_LINK}/api/getnewnotescount`, {
+  let data = await fetch(`${import.meta.env.VITE_API_LINK}/api/getnewnotescount`, {
     method: "POST",
-    body: JSON.stringify({  
+    body: JSON.stringify({
       page: pageData.current_page,
       limit: pageData.limit,
       since: pageData.since,
       renew: false,
-      maxid: pageData.maxid }),
+      maxid: pageData.maxid
+    }),
     headers: {
       "Content-Type": "application/json",
     },
@@ -195,9 +220,9 @@ export async function getNewNotesCount(): integer {
   return typeof data === 'object' ? 0 : Number(data)
 }
 
-export async function getLastSeenId(): integer {
+export async function getLastSeenId(): Promise<number> {
   const pageData = get(pageMetaData)
-  let data =  await fetch(`${import.meta.env.VITE_API_LINK}/api/getlastseenid`, {
+  let data = await fetch(`${import.meta.env.VITE_API_LINK}/api/getlastseenid`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -217,7 +242,7 @@ export async function getLastSeenId(): integer {
 }
 
 //Todo: needs same fix as sunc note so only a portion of the view is updated and not the complete view.
-export async function publish(msg: string, note) {
+export async function publish(msg: string, note: any) {
   await fetch(`${import.meta.env.VITE_API_LINK}/api/publish`, {
     method: "POST",
     body: JSON.stringify({ msg: msg, event_id: note ? note.event.id : "" }),
@@ -258,7 +283,7 @@ export async function publish(msg: string, note) {
     });
 }
 
-export async function syncNote(note) {
+export async function syncNote() {
   const pageData = get(pageMetaData)
   await refreshView({
     page: pageData.current_page,
@@ -269,7 +294,7 @@ export async function syncNote(note) {
   });
 }
 
-export async function tranlateContent(text) {
+export async function tranlateContent(text: string) {
   let translateUrl = import.meta.env.VITE_APP_TRANSLATE_URL;
   if (translateUrl == "") {
     return "Translate url not set";

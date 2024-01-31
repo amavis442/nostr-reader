@@ -5,7 +5,7 @@
   import TextNote from "./TextNote.svelte";
   import CreateNoteModal from "./partials/Modal/CreateNoteModal.svelte";
   import InfoModal from "./partials/Modal/InfoModal.svelte";
-  import { closeModal, openModal } from "svelte-modals";
+  import { openModal } from "svelte-modals";
   import {
     refreshView,
     blockUser,
@@ -24,14 +24,13 @@
   export let apiUrl: string = "";
   export let renewData: boolean = false;
 
-
   onMount(async () => {
     setApiUrl(apiUrl);
-    
+
     pageData.set([]);
-    
+
     if ($pageMetaData.maxid < 1) {
-      $pageMetaData.maxid = await getLastSeenId()
+      $pageMetaData.maxid = await getLastSeenId();
     }
 
     await refreshView({
@@ -42,12 +41,15 @@
       maxid: $pageMetaData.maxid,
     });
 
-    getNewNotesCounter()
-    setInterval(getNewNotesCounter, 60*1000)
-    document.getElementById("realNotesContainer").scrollTo(0, 0);
+    getNewNotesCounter();
+    setInterval(getNewNotesCounter, 60 * 1000);
+    let elm: null | HTMLElement = document.getElementById("realNotesContainer");
+    if (elm) {
+      elm.scrollTo(0, 0);
+    }
   });
 
-  function createReplyTextNote(replyToNote) {
+  function createReplyTextNote(replyToNote: any) {
     openModal(CreateNoteModal, {
       note: replyToNote,
       onSendTextNote: (noteText: string) => {
@@ -56,19 +58,22 @@
     });
   }
 
-  function createInfoModal(note) {
+  function createInfoModal(note: any) {
     openModal(InfoModal, {
       note: note,
     });
   }
 
-  function topOfPage(ev) {
-    document.getElementById("realNotesContainer").scrollTo(0, 0);
+  function topOfPage(ev: any) {
+    let elm: null | HTMLElement = document.getElementById("realNotesContainer");
+    if (elm) {
+      elm.scrollTo(0, 0);
+    }
   }
 
   let newNotesCount = 0;
   async function getNewNotesCounter() {
-    newNotesCount = await getNewNotesCount()
+    newNotesCount = await getNewNotesCount();
   }
 </script>
 
@@ -82,14 +87,14 @@
               page: $pageMetaData.current_page,
               limit: $pageMetaData.limit,
               since: $pageMetaData.since,
-              total: $pageMetaData.total,
               renew: true,
               maxid: $pageMetaData.maxid,
             });
             await getNewNotesCounter();
           }}
           class="btn btn-blue"
-          ><i class="fa-solid fa-arrows-rotate"></i> Sync ({newNotesCount} waiting notes)</button
+          ><i class="fa-solid fa-arrows-rotate"></i> Sync ({newNotesCount} waiting
+          notes)</button
         >
         <select
           id="limit"
@@ -99,7 +104,6 @@
               page: $pageMetaData.current_page,
               limit: $pageMetaData.limit,
               since: $pageMetaData.since,
-              total: $pageMetaData.total,
               renew: false,
               maxid: $pageMetaData.maxid,
             });
@@ -121,7 +125,6 @@
               page: $pageMetaData.current_page,
               limit: $pageMetaData.limit,
               since: $pageMetaData.since,
-              total: $pageMetaData.total,
               renew: false,
               maxid: $pageMetaData.maxid,
             })}
@@ -141,7 +144,6 @@
                 limit: $pageMetaData.limit,
                 since: $pageMetaData.since,
                 renew: false,
-                total: $pageMetaData.total,
                 maxid: $pageMetaData.maxid,
               });
             }}
@@ -158,7 +160,7 @@
             on:addBookmark={(ev) => addBookmark(ev.detail)}
             on:removeBookmark={(ev) => removeBookmark(ev.detail)}
             on:blockUser={(ev) => blockUser(ev.detail)}
-            on:syncNote={(ev) => syncNote(ev.detail)}
+            on:syncNote={(ev) => syncNote()}
             on:reply={(ev) => {
               createReplyTextNote(ev.detail);
             }}
