@@ -1,11 +1,8 @@
 <script lang="ts">
-   import { createEventDispatcher, onMount, tick } from 'svelte';
+   import { createEventDispatcher} from 'svelte';
   import { closeModal } from "svelte-modals";
   import Button from "../Button.svelte";
   import emojiData from './data/emoji.js';
-  import { faBuilding, faFlag, faLightbulb, faSmile } from '@fortawesome/free-regular-svg-icons';
-  import { faCat, faCoffee, faFutbol, faHistory, faMusic } from '@fortawesome/free-solid-svg-icons';
-  import Icon from 'fa-svelte';
   import { Tabs, Tab, TabList, TabPanel } from '../Tabs/index.js';
   
   import EmojiDetail from './EmojiDetail.svelte';
@@ -24,9 +21,10 @@
   let searchText:string = '';
   let variantsVisible = false;
     
-  let variants;
-  let currentEmoji;
-  let recentEmojis = JSON.parse(localStorage.getItem('svelte-emoji-picker-recent')) || [];
+  let variants: any;
+  let currentEmoji: any;
+  let recent = localStorage.getItem('svelte-emoji-picker-recent')
+  let recentEmojis = recent != null ? JSON.parse(recent) : [];
 
   const dispatch = createEventDispatcher();
 
@@ -52,14 +50,14 @@
     ];
   
     const categoryIcons = {
-      'Smileys & People': faSmile,
-      'Animals & Nature': faCat,
-      'Food & Drink': faCoffee,
-      'Activities': faFutbol,
-      'Travel & Places': faBuilding,
-      'Objects': faLightbulb,
-      'Symbols': faMusic,
-      'Flags': faFlag
+      'Smileys & People': '😀',
+      'Animals & Nature': '😸',
+      'Food & Drink': '☕',
+      'Activities': '⚽',
+      'Travel & Places': '🏡',
+      'Objects': '💡',
+      'Symbols': '🎵',
+      'Flags': '🚩'
     };
 
     function showEmojiDetails(event) {
@@ -125,9 +123,9 @@
           <div class="svelte-emoji-picker__emoji-tabs">
             <Tabs selectedTabIndex={1}> 
               <TabList>
-                <Tab on:keyup={doNothing}><Icon icon={faHistory} /></Tab>
+                <Tab on:keyup={doNothing}>🕐</Tab>
                 {#each categoryOrder as category}
-                  <Tab><Icon icon={categoryIcons[category]} /></Tab>
+                  <Tab>{categoryIcons[category]}</Tab>
                 {/each}
               </TabList>
   

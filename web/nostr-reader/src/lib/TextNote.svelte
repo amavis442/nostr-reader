@@ -130,7 +130,7 @@
           id={note.id}
           class="flex flex-row w-full min-h-full {align()} items-top gap-2 mb-2 overflow-y-auto bg-white rounded-lg p-1 {childBlock()}"
         >
-          <div on:keyup={() => console.log("keyup")} class="w-16 mr-2">
+          <div on:keyup={() => console.log("keyup")} class="w-16 mr-2" tabindex="0" role="button">
             <img
               class="w-14 h-14 rounded-full {note.profile.followed
                 ? 'border-2 border-green-800'
@@ -280,6 +280,8 @@
                         class="mt-4 flex flex-cols-2 gap-4 bg-bg_color"
                         on:click={(e) => e.stopPropagation()}
                         on:keyup={doNothing}
+                        role="button"
+                        tabindex="0"
                       >
                         {#each imgUrls as imgUrl, i}
                           {#if i >= outerIndex && i < outerIndex + 3}

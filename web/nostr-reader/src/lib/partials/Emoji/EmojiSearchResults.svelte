@@ -1,9 +1,6 @@
 <script>
 	import { createEventDispatcher } from 'svelte';
 
-  import { faFrown } from '@fortawesome/free-regular-svg-icons';
-  import Icon from 'fa-svelte';
-
   import EmojiList from './EmojiList.svelte';
 
   import emojiData from './data/emoji.js';
@@ -56,8 +53,8 @@
   {#if searchResults.length}
     <EmojiList emojis={searchResults} withTabs={false} on:emojihover on:emojiclick />
   {:else}
-    <div class="svelte-emoji-picker__no-results" on:mouseover={onMouseOver} on:focus={doNothing}>
-      <div class="icon"><Icon icon={faFrown} /></div>
+    <div class="svelte-emoji-picker__no-results" on:mouseover={onMouseOver} on:focus={doNothing} role="none">
+      <div class="icon">😦</div>
       <h3>No emojis found.</h3>
     </div>
   {/if}

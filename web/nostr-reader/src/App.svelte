@@ -67,6 +67,7 @@
     class="backdrop"
     on:click={closeModal}
     on:keyup={closeModal}
+    role="none"
   />
 </Modals>
 

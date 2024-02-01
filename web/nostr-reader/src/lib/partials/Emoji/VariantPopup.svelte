@@ -1,12 +1,11 @@
 <script>
 	import { createEventDispatcher } from 'svelte';
-
-  import { faTimes } from '@fortawesome/free-solid-svg-icons';
-  import Icon from 'fa-svelte';
-
   import Emoji from './Emoji.svelte';
 
-  export let variants;
+  /**
+	 * @type {{ [x: string]: any; }}
+	 */
+   export let variants;
 
   const dispatch = createEventDispatcher();
 
@@ -14,6 +13,9 @@
     dispatch('close');
   }
   
+  /**
+	 * @param {any} event
+	 */
   function onClickContainer(event) {
     dispatch('close');
   }
@@ -50,13 +52,13 @@
   }
 </style>
 
-<div class="svelte-emoji-picker__variants-container" on:click={onClickContainer} on:keyup={doNothing}>
+<div class="svelte-emoji-picker__variants-container" on:click={onClickContainer} on:keyup={doNothing} role="button" tabindex="0">
   <div class="svelte-emoji-picker__variants">
     {#each Object.keys(variants) as variant}
       <Emoji emoji={variants[variant]} on:emojiclick />
     {/each}
-    <div class="close-button" role="button" tabindex="0" on:click={onClickClose} on:keyup={doNothing}>
-      <Icon icon={faTimes} />
+    <div class="close-button" on:click={onClickClose} on:keyup={doNothing}  role="button" tabindex="0">
+      <i class="fa fa-times" aria-hidden="true"></i>
     </div>
   </div>
 </div>

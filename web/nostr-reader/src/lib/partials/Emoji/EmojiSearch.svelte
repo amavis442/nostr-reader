@@ -1,11 +1,11 @@
 <script>
     import { onMount } from 'svelte';
   
-    import { faSearch, faTimes } from '@fortawesome/free-solid-svg-icons';
-    import Icon from 'fa-svelte';
-  
     export let searchText = '';
   
+    /**
+	 * @type {HTMLInputElement}
+	 */
     let searchField;
   
     onMount(() => {
@@ -17,6 +17,9 @@
       searchField.focus();
     }
   
+    /**
+	 * @param {{ key: string; stopPropagation: () => void; }} event
+	 */
     function handleKeyDown(event) {
       if (event.key === 'Escape' && searchText) {
         clearSearchText();
@@ -60,8 +63,8 @@
     <input type="text" placeholder="Search emojis..." bind:value={searchText} bind:this={searchField} on:keydown={handleKeyDown}>
     
     {#if searchText}
-      <span class="icon clear-button" role="button" on:click|stopPropagation={clearSearchText} tabindex="0" on:keyup={doNothing}><Icon icon={faTimes} /></span>
+      <span class="icon clear-button" role="button" on:click|stopPropagation={clearSearchText} tabindex="0" on:keyup={doNothing}>🕐</span>
     {:else}
-      <span class="icon"><Icon icon={faSearch} /></span>
+      <span class="icon">🔍</span>
     {/if}
   </div>

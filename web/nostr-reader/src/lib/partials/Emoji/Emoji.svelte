@@ -1,7 +1,10 @@
 <script>
 	import { createEventDispatcher } from 'svelte';
 
-  export let emoji;
+  /**
+	 * @type {{ emoji: any; }}
+	 */
+   export let emoji;
   
   const dispatch = createEventDispatcher();
 
