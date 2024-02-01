@@ -23,7 +23,7 @@
   
   function send() {
     closeModal();
-    onSendTextNote(textContent, note);
+    onSendTextNote(textContent);
   }
 </script>
 
@@ -54,6 +54,7 @@
             placeholder="Create a note"
             cols="30"
             rows="5"
+            bind:textContent={textContent}
           />
         {/if}
 
