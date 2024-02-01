@@ -7,8 +7,8 @@ var urlRegex = /https?:\/\/([\w.-]+)[^ ]*[-A-Z0-9+&@#\/%=~_|]/ig;
 var imgUrlRegex = /https?:\/\/.*\.(png|jpe?g|png|gif|webp)/igm;
 
 export function findLink(text: string): array {
-  let links = [];
-  text = text.replace(/\n/gm, " ")
+  let links: array = [];
+  //text = text.replace(/\n/gm, " ")
   
   let m = ytVidId(text);
   if (m) links = [...links,...m];
@@ -17,15 +17,15 @@ export function findLink(text: string): array {
   if (p) {
     //console.debug("Found img url matches in:\n [", text, "]\nResult: ", p)
     //Check if there a spaces in the output then seperate them
-    var imgArray = [];
+    /* var imgArray = [];
     for (var i = 0; i < p.length;i++) {
       if (p[i].match(" ")) {
         imgArray = [...imgArray, ...p[i].split(" ")]
       } else {
         imgArray = [...imgArray, ...p]
       }
-    }
-    links = [...links,...imgArray];
+    }*/
+    links = [...links,...p];
   }
   return links;
 }

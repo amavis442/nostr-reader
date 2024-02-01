@@ -112,6 +112,8 @@
   async function tranlate() {
     translatedContent = await tranlateContent(note.event.content);
   }
+
+  function doNothing(){}
 </script>
 
 {#if note && note.event.kind == 1}
@@ -272,12 +274,12 @@
                   {/if}
                 </span>
                 {#if hasImgUrls}
-                  <!-- svelte-ignore a11y-click-events-have-key-events -->
                   {#each imgUrls as s, outerIndex}
                     {#if outerIndex % 3 === 0}
                       <div
                         class="mt-4 flex flex-cols-2 gap-4 bg-bg_color"
                         on:click={(e) => e.stopPropagation()}
+                        on:keyup={doNothing}
                       >
                         {#each imgUrls as imgUrl, i}
                           {#if i >= outerIndex && i < outerIndex + 3}
