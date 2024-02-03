@@ -15,6 +15,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/nbd-wtf/go-nostr"
+	sdk "github.com/nbd-wtf/nostr-sdk"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -556,7 +557,8 @@ func (st *Storage) procesEventRows(rows *sql.Rows, p *Pagination) (map[string]Ev
 		}
 
 		//nostr.Event = json.Unmarshal()
-		//sdk.ParseReferences(&nostr.Event{event})
+		note.Event.Content = st.parseReferences(note.Event)
+
 		seenMap[id] = note.Event.ID
 		note.Children = make(map[string]*Event, 0)
 		eventMap[note.Event.ID] = note
@@ -570,6 +572,37 @@ func (st *Storage) procesEventRows(rows *sql.Rows, p *Pagination) (map[string]Ev
 	defer rows.Close()
 
 	return eventMap, keys, seenMap, nil
+}
+
+func (st *Storage) parseReferences(event *nostr.Event) string {
+	refs := sdk.ParseReferences(event)
+	var content string = event.Content
+	for _, ref := range refs {
+		if ref.Profile != nil {
+			pubkey := ref.Profile.PublicKey
+			if len(pubkey) == 64 {
+				if profile, err := st.FindProfile(context.TODO(), pubkey); err == nil && profile.Name != "" {
+					content = event.Content[:ref.Start] + "[~" + profile.Name + "~]" + event.Content[ref.End:]
+				}
+			}
+		}
+		if ref.Event != nil {
+			if len(ref.Event.ID) == 64 {
+				ev, err := st.FindRawEvent(context.Background(), ref.Event.ID)
+				if err == nil && ev != nil {
+					end := 120
+					if len(ev.Content) < end {
+						end = len(ev.Content)
+					}
+					content = event.Content[:ref.Start] + "[~" + ev.Content[0:end] + "~]" + event.Content[ref.End:]
+				}
+				if (err == nil && ev == nil) || err == sql.ErrNoRows {
+					content = event.Content[:ref.Start] + "[~" + ref.Text[0:40] + "....~]" + event.Content[ref.End:]
+				}
+			}
+		}
+	}
+	return content
 }
 
 func (st *Storage) getChildren(ctx context.Context, eventMap map[string]Event) error {
@@ -676,6 +709,8 @@ func (st *Storage) getChildren(ctx context.Context, eventMap map[string]Event) e
 		if bookmarked.Valid {
 			childEvent.Bookmark = true
 		}
+
+		childEvent.Event.Content = st.parseReferences(childEvent.Event)
 
 		if item, ok := eventMap[root_event_id]; ok {
 
@@ -889,26 +924,19 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 	return event, err
 }
 
-func (st *Storage) FindRawEvent(ctx context.Context, id string) (nostr.Event, error) {
+func (st *Storage) FindRawEvent(ctx context.Context, id string) (*nostr.Event, error) {
 	var qry = `SELECT e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.sig, e.tags_full::json
 	FROM notes e 
 	WHERE e.event_id = $1`
 
-	var event Event
-	event.Event = &nostr.Event{}
+	var event nostr.Event
 
 	row := st.GormDB.WithContext(ctx).Raw(qry, id).Row()
 
-	err := row.Scan(&event.Event.ID, &event.Event.PubKey, &event.Event.Kind, &event.Event.CreatedAt,
-		&event.Event.Content, &event.Event.Sig, &event.Event.Tags)
-	switch {
-	case err == sql.ErrNoRows:
-		log.Printf("Query:: 404 no event with id %s\n", id)
-	case err != nil:
-		log.Printf("Query:: 502 query error: %v\n", err)
-	}
+	err := row.Scan(&event.ID, &event.PubKey, &event.Kind, &event.CreatedAt,
+		&event.Content, &event.Sig, &event.Tags)
 
-	return *event.Event, err
+	return &event, err
 }
 
 func (st *Storage) CheckProfiles(ctx context.Context, pubkeys []string, epochtime int64) ([]string, error) {

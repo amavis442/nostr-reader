@@ -589,7 +589,7 @@ func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
 	result := map[string]string{}
 	if msg.Event_id != "" {
 		replyEv, _ := req.Db.FindRawEvent(ctx, msg.Event_id)
-		postEv, _ = req.Nostr.DoReply(msg.Msg, replyEv)
+		postEv, _ = req.Nostr.DoReply(msg.Msg, *replyEv)
 
 		req.Db.SaveEvents(ctx, []*nostr.Event{&postEv})
 	}
