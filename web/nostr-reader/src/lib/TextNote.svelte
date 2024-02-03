@@ -344,7 +344,7 @@
   </li>
 {/if}
 
-<style>
+<style lang="postcss">
   .border-indigo-100 {
     border-color: rgb(224 231 255);
   }
@@ -375,5 +375,8 @@
 
   button {
     @apply p-1 bg-slate-400 rounded ml-1 mr-1 text-white;
+  }
+  .mention {
+    @apply rounded border-gray-700; 
   }
 </style>
