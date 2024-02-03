@@ -75,39 +75,42 @@ export function escapeHtml(html: string): string {
 }
 
 export function toHtml(content: string): string {
-  const match = content.match(/(lnbc|lnbt)\w+/gmi)
+  const match = content.match(/(lnbc|lnbt)\w+/gmi);
   if (match && match[0]) { // Lightning invoice
-    const invoice = lightBolt11Decoder.decode(match[0])
-    let amount = 0
-    let rawAmount = 0
-    let rawUnit = ''
-    let unitNumber = 0
+    const invoice = lightBolt11Decoder.decode(match[0]);
+    let amount = 0;
+    let rawAmount = 0;
+    let rawUnit = '';
+    let unitNumber = 0;
     for (let i = 0; i < invoice.sections.length; i++) {
       if (invoice.sections[i]?.name == 'amount') {
-        rawAmount = invoice.sections[i].value
-        rawUnit = invoice.sections[i].letters
-        amount = invoice.sections[i].value
-        const unit = invoice.sections[i].letters.replace(/[0-9]+/, '')
-        unitNumber = invoice.sections[i].letters.replace(/[a-zA-Z]+/, '')
+        rawAmount = invoice.sections[i].value;
+        rawUnit = invoice.sections[i].letters;
+        amount = invoice.sections[i].value;
+        const unit = invoice.sections[i].letters.replace(/[0-9]+/, '');
+        unitNumber = invoice.sections[i].letters.replace(/[a-zA-Z]+/, '');
         switch (unit) {
-          case 'm': amount = amount * 0.001 * unitNumber
+          case 'm': amount = amount * 0.001 * unitNumber;
             break;
-          case 'u': amount = amount * 0.000001 * unitNumber
+          case 'u': amount = amount * 0.000001 * unitNumber;
             break;
-          case 'n': amount = amount * 0.000000001 * unitNumber
+          case 'n': amount = amount * 0.000000001 * unitNumber;
             break;
-          case 'p': amount = amount * 0.000000000001 * unitNumber
+          case 'p': amount = amount * 0.000000000001 * unitNumber;
             break;
         }
       }
     }
     //console.debug('INVOICE:', match, match[0], invoice)
-    content = content.replace(match[0], 'lightning invoice: ' + amount + ' sats (Amount: ' + rawAmount + ', Unit: ' + rawUnit + ', Unit number: ' + unitNumber + ')')
+    content = content.replace(match[0], 'lightning invoice: ' + amount + ' sats (Amount: ' + rawAmount + ', Unit: ' + rawUnit + ', Unit number: ' + unitNumber + ')');
   }
-  content = content.replace("&#39;", "'")
-  content = content.replace(/"/gm, "&#34;")
-  content = content.replace(/\n/gm, "<br/>")
-
+  content = content.replace("&#39;", "'");
+  content = content.replace(/"/gm, "&#34;");
+  content = content.replace(/\n/gm, "<br/>");
+  content = content.replace('[~','<div class="mention">');
+  content = content.replace('~]','</div>');
+  
+  
   const options = {
     defaultProtocol: 'https',
     attributes: {
