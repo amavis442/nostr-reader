@@ -135,18 +135,23 @@ export function toHtml(content: string): string {
 	content = content.replace(/ > /gm, ' &gt; ')
 	content = content.replace(/ < /gm, ' &lt; ')
 
+	/*
 	content = content.replaceAll(
 		'[~~[',
 		'<div class="rounded-2xl border border-solid border-medium bg-indigo-300 overflow-hidden p-1 m-2"> <i class="fa-regular fa-note-sticky"></i> '
 	)
 	content = content.replaceAll(']~~]', ' </div>')
 
+	const i = content.indexOf("[~[")
+	const pubkey = content.substring(i,i+64)
+	
 	content = content.replaceAll(
 		'[~[',
 		'<span class="rounded-2xl border border-solid border-medium bg-indigo-300 overflow-hidden p-1"><i class="fa-solid fa-user"></i> '
 	)
 	content = content.replaceAll(']~]', ' </span>')
-
+	*/
+	
 	const options = {
 		defaultProtocol: 'https',
 		attributes: {

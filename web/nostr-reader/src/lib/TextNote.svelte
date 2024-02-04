@@ -1,9 +1,9 @@
 <script lang="ts">
   // @ts-nocheck
 
-  import { createEventDispatcher, beforeUpdate } from "svelte";
-  import { toHtml, findLink } from "./util/html";
-  import Preview from "./partials/Preview/Preview.svelte";
+  import { createEventDispatcher } from "svelte";
+  import NoteContent from "./partials/NoteContent.svelte";
+  
   import placeholder from "../assets/profile-picture.jpg";
   import Icon from "svelte-icons-pack/Icon.svelte";
   import FaSolidInfoCircle from "svelte-icons-pack/fa/FaSolidInfoCircle";
@@ -20,7 +20,6 @@
   import FaCommentDots from "svelte-icons-pack/fa/FaCommentDots";
   import FaSolidSync from "svelte-icons-pack/fa/FaSolidSync";
   import FaSolidLongArrowAltUp from "svelte-icons-pack/fa/FaSolidLongArrowAltUp";
-  import { tranlateContent } from "./state/main";
 
   const dispatch = createEventDispatcher();
   export let note;
@@ -93,27 +92,6 @@
 
     return "";
   }
-
-  let imgUrls = [];
-  let hasImgUrls = false;
-  let content = "";
-
-  beforeUpdate(() => {
-    imgUrls = findLink(note.event.content);
-
-    if (imgUrls && imgUrls.length > 0) {
-      hasImgUrls = true;
-    }
-
-    content = toHtml(note.content);
-  });
-
-  let translatedContent = "";
-  async function tranlate() {
-    translatedContent = await tranlateContent(note.event.content);
-  }
-
-  function doNothing(){}
 </script>
 
 {#if note && note.event.kind == 1}
@@ -253,50 +231,7 @@
 
             <div class="p-2 w-11/12">
               <div class="text-left w-full max-w-max break-words items-top">
-                <span class="text-black text-md font-medium break-words">
-                  {@html content}
-                  {#if import.meta.env.VITE_APP_TRANSLATE_URL && import.meta.env.VITE_APP_TRANSLATE_LANG}
-                    <button
-                      on:click={tranlate}
-                      class="p-1 m-2"
-                      title="Translate"
-                      >Translate to ({import.meta.env
-                        .VITE_APP_TRANSLATE_LANG})</button
-                    >
-                    {#if translatedContent != ""}
-                      <div
-                        id="translateContent_{note.event.id}"
-                        class="rounded-2xl border border-solid border-medium bg-white p-4 mt-2 mb-2"
-                      >
-                        {translatedContent}
-                      </div>
-                    {/if}
-                  {/if}
-                </span>
-                {#if hasImgUrls}
-                  {#each imgUrls as s, outerIndex}
-                    {#if outerIndex % 3 === 0}
-                      <div
-                        class="mt-4 flex flex-cols-2 gap-4 bg-bg_color"
-                        on:click={(e) => e.stopPropagation()}
-                        on:keyup={doNothing}
-                        role="button"
-                        tabindex="0"
-                      >
-                        {#each imgUrls as imgUrl, i}
-                          {#if i >= outerIndex && i < outerIndex + 3}
-                            <Preview
-                              endpoint={`${
-                                import.meta.env.VITE_API_LINK
-                              }/api/preview/link`}
-                              url={imgUrl}
-                            />
-                          {/if}
-                        {/each}
-                      </div>
-                    {/if}
-                  {/each}
-                {/if}
+                 <NoteContent {note} on:profileInfo on:noteInfo></NoteContent>
               </div>
             </div>
 
@@ -333,6 +268,8 @@
                     on:reply
                     on:info
                     on:topPage
+                    on:profileInfo
+                    on:noteInfo
                   />
                 </li>
               {/each}

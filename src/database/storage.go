@@ -52,6 +52,11 @@ type UserProfile struct {
 	Followed    bool   `json:"followed"`
 }
 
+type Refs struct {
+	Event   map[string]*nostr.Event `json:"event"`
+	Profile map[string]*UserProfile `json:"profile"`
+}
+
 type Event struct {
 	Event    *nostr.Event      `json:"event"`
 	Profile  UserProfile       `json:"profile"`
@@ -63,6 +68,7 @@ type Event struct {
 	RootId   string            `json:"root_id"`
 	Bookmark bool              `json:"bookmark"`
 	Content  string            `json:"content"`
+	Refs     Refs              `json:"refs"`
 }
 
 /**
@@ -558,7 +564,7 @@ func (st *Storage) procesEventRows(rows *sql.Rows, p *Pagination) (map[string]Ev
 		}
 
 		//nostr.Event = json.Unmarshal()
-		note.Content = st.parseReferences(note.Event)
+		note.Content = st.parseReferences(&note)
 
 		seenMap[id] = note.Event.ID
 		note.Children = make(map[string]*Event, 0)
@@ -575,16 +581,30 @@ func (st *Storage) procesEventRows(rows *sql.Rows, p *Pagination) (map[string]Ev
 	return eventMap, keys, seenMap, nil
 }
 
-func (st *Storage) parseReferences(event *nostr.Event) string {
-	refs := sdk.ParseReferences(event)
-	var content string = event.Content
+func (st *Storage) parseReferences(note *Event) string {
+	refs := sdk.ParseReferences(note.Event)
+	note.Refs = Refs{}
+	note.Refs.Profile = make(map[string]*UserProfile, 0)
+	note.Refs.Event = make(map[string]*nostr.Event, 0)
+
+	var content string = note.Event.Content
 	for _, ref := range refs {
 		if ref.Profile != nil {
 			pubkey := ref.Profile.PublicKey
 			if len(pubkey) == 64 {
 				if profile, err := st.FindProfile(context.TODO(), pubkey); err == nil && profile.Name != "" {
 					//content = event.Content[:ref.Start] + "[~" + profile.Name + "~]" + event.Content[ref.End:]
-					content = strings.Replace(content, ref.Text, "[~["+profile.Name+"]~]", -1)
+					content = strings.Replace(content, ref.Text, "[~["+profile.Pubkey+"]~]", -1)
+					note.Refs.Profile[profile.Pubkey] = &UserProfile{
+						Name:        profile.Name,
+						About:       profile.About,
+						Picture:     profile.Picture,
+						Website:     profile.Website,
+						Nip05:       profile.Nip05,
+						Lud16:       profile.Lud16,
+						DisplayName: profile.DisplayName,
+						Pubkey:      profile.Pubkey,
+						Followed:    false}
 				}
 			}
 		}
@@ -592,11 +612,9 @@ func (st *Storage) parseReferences(event *nostr.Event) string {
 			if len(ref.Event.ID) == 64 {
 				refEv, err := st.FindRawEvent(context.Background(), ref.Event.ID)
 				if err == nil && refEv != nil {
-					end := 120
-					if len(refEv.Content) < end {
-						end = len(refEv.Content)
-					}
-					content = strings.Replace(content, ref.Text, "[~~["+refEv.Content[0:end]+"]~~]", -1)
+					content = strings.Replace(content, ref.Text, "[~~["+refEv.ID+"]~~]", -1)
+					note.Refs.Event[refEv.ID] = refEv
+
 					//content = event.Content[:ref.Start] + "[~" + refEv.Content[0:end] + "~]" + event.Content[ref.End:]
 				}
 				if refEv == nil || err == sql.ErrNoRows {
@@ -714,7 +732,7 @@ func (st *Storage) getChildren(ctx context.Context, eventMap map[string]Event) e
 			childEvent.Bookmark = true
 		}
 
-		childEvent.Content = st.parseReferences(childEvent.Event)
+		childEvent.Content = st.parseReferences(&childEvent)
 
 		if item, ok := eventMap[root_event_id]; ok {
 
@@ -1076,6 +1094,7 @@ func (st *Storage) FindProfile(ctx context.Context, pubkey string) (Profile, err
 		log.Fatalf("Query:: 502 query error: %v\n", err)
 	}
 
+	profile.Pubkey = pubkey
 	if name.Valid {
 		profile.Name = name.String
 	} else {

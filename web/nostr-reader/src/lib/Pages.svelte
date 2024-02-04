@@ -5,6 +5,8 @@
   import TextNote from "./TextNote.svelte";
   import CreateNoteModal from "./partials/Modal/CreateNoteModal.svelte";
   import InfoModal from "./partials/Modal/InfoModal.svelte";
+  import ProfileInfoModal from "./partials/Modal/ProfileInfoModal.svelte";
+  import NoteInfoModal from "./partials/Modal/NoteInfoModal.svelte";
   import { openModal } from "svelte-modals";
   import {
     refreshView,
@@ -64,6 +66,17 @@
     });
   }
 
+  function createProfileInfoModal(profile: any) {
+    openModal(ProfileInfoModal, {
+      profile: profile,
+    });
+  }
+  function createNoteInfoModal(note: any) {
+    openModal(NoteInfoModal, {
+      note: note,
+    });
+  }
+  
   function topOfPage(ev: any) {
     let elm: null | HTMLElement = document.getElementById("realNotesContainer");
     if (elm) {
@@ -168,6 +181,8 @@
               createInfoModal(ev.detail);
             }}
             on:topPage={(ev) => topOfPage(ev)}
+            on:profileInfo={(ev) => createProfileInfoModal(ev.detail.profile)}
+            on:noteInfo={(ev) => createNoteInfoModal(ev.detail.note)}
           ></TextNote>
         {/each}
       </ul>
