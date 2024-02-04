@@ -70,7 +70,7 @@
   </div>
 {/if}
 
-<style>
+<style lang="postcss">
   .modal {
     position: fixed;
     top: 0;

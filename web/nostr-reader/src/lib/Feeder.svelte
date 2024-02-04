@@ -40,7 +40,7 @@
   </button>
 </div>
 
-<style>
+<style lang="postcss">
   div.createnote {
     position: absolute;
     bottom: 10px;

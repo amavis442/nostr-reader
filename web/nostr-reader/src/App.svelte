@@ -71,7 +71,7 @@
   />
 </Modals>
 
-<style>
+<style lang="postcss">
   .backdrop {
     position: fixed;
     top: 0;
@@ -84,5 +84,4 @@
   .selected {
     text-decoration-line: underline;
   }
-
 </style>

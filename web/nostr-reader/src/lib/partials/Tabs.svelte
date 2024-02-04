@@ -28,7 +28,7 @@
     {/if}
   </ul>
   
-  <style>
+  <style lang="postcss">
     ul {
       display: flex;
       flex-wrap: wrap;

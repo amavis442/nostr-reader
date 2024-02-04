@@ -65,7 +65,7 @@
   </ul>
 </nav>
 
-<style>
+<style lang="postcss">
   .pagination {
     display: flex;
     justify-content: center;

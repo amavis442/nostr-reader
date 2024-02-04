@@ -24,7 +24,7 @@
   </div>
 </dialog>
 
-<style>
+<style lang="postcss">
   button {
     @apply p-1 bg-slate-400 rounded ml-1 mr-1 text-white;
   }
