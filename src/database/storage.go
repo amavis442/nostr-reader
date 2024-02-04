@@ -62,6 +62,7 @@ type Event struct {
 	Tree     int64             `json:"tree"`
 	RootId   string            `json:"root_id"`
 	Bookmark bool              `json:"bookmark"`
+	Content  string            `json:"content"`
 }
 
 /**
@@ -557,7 +558,7 @@ func (st *Storage) procesEventRows(rows *sql.Rows, p *Pagination) (map[string]Ev
 		}
 
 		//nostr.Event = json.Unmarshal()
-		note.Event.Content = st.parseReferences(note.Event)
+		note.Content = st.parseReferences(note.Event)
 
 		seenMap[id] = note.Event.ID
 		note.Children = make(map[string]*Event, 0)
@@ -582,22 +583,25 @@ func (st *Storage) parseReferences(event *nostr.Event) string {
 			pubkey := ref.Profile.PublicKey
 			if len(pubkey) == 64 {
 				if profile, err := st.FindProfile(context.TODO(), pubkey); err == nil && profile.Name != "" {
-					content = event.Content[:ref.Start] + "[~" + profile.Name + "~]" + event.Content[ref.End:]
+					//content = event.Content[:ref.Start] + "[~" + profile.Name + "~]" + event.Content[ref.End:]
+					content = strings.Replace(content, ref.Text, "[~["+profile.Name+"]~]", -1)
 				}
 			}
 		}
 		if ref.Event != nil {
 			if len(ref.Event.ID) == 64 {
-				ev, err := st.FindRawEvent(context.Background(), ref.Event.ID)
-				if err == nil && ev != nil {
+				refEv, err := st.FindRawEvent(context.Background(), ref.Event.ID)
+				if err == nil && refEv != nil {
 					end := 120
-					if len(ev.Content) < end {
-						end = len(ev.Content)
+					if len(refEv.Content) < end {
+						end = len(refEv.Content)
 					}
-					content = event.Content[:ref.Start] + "[~" + ev.Content[0:end] + "~]" + event.Content[ref.End:]
+					content = strings.Replace(content, ref.Text, "[~~["+refEv.Content[0:end]+"]~~]", -1)
+					//content = event.Content[:ref.Start] + "[~" + refEv.Content[0:end] + "~]" + event.Content[ref.End:]
 				}
-				if (err == nil && ev == nil) || err == sql.ErrNoRows {
-					content = event.Content[:ref.Start] + "[~" + ref.Text[0:40] + "....~]" + event.Content[ref.End:]
+				if refEv == nil || err == sql.ErrNoRows {
+					content = strings.Replace(content, ref.Text, "[~~["+ref.Text[0:40]+"....]~~]", -1)
+					//content = event.Content[:ref.Start] + "[~" + ref.Text[0:40] + "....~]" + event.Content[ref.End:]
 				}
 			}
 		}
@@ -710,7 +714,7 @@ func (st *Storage) getChildren(ctx context.Context, eventMap map[string]Event) e
 			childEvent.Bookmark = true
 		}
 
-		childEvent.Event.Content = st.parseReferences(childEvent.Event)
+		childEvent.Content = st.parseReferences(childEvent.Event)
 
 		if item, ok := eventMap[root_event_id]; ok {
 
