@@ -34,6 +34,7 @@
     "light-bolt11-decoder": "^3.0.0",
     "path": "^0.12.7",
     "postcss": "^8.4.33",
+    "postcss-load-config": "^5.0.2",
     "prettier": "^3.1.1",
     "prettier-plugin-svelte": "^3.1.2",
     "svelte": "^4.2.7",

@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte'
-	import Text from '../partials/Text.svelte'
 	import { addToast } from '../partials/Toast/toast'
 	import { writable } from 'svelte/store'
 
@@ -68,8 +67,6 @@
 			.catch((err) => {
 				console.error('error', err)
 			})
-
-		return false
 	}
 
 	function removeRelay(url: string) {
@@ -109,7 +106,8 @@
 			.catch((err) => {
 				console.error('error', err)
 			})
-		return false
+
+		return null
 	}
 
 	onMount(async () => {
@@ -135,25 +133,34 @@
 </script>
 
 <div class="xl:w-8/12 lg:w-10/12 md:w-10/12 sm:w-full">
-	<div class="block p-6 rounded-lg shadow-lg bg-white w-full ml-6 mt-6 bg-blue-200">
+	<div class="block p-6 rounded-lg shadow-lg w-full ml-6 mt-6 bg-blue-200">
 		<form on:submit|preventDefault>
 			<div class="row">
 				<div class="flex justify-end w-full gap-2">
-					
-          <div class="justify-items-start w-7/12">
-					
-            <label for="myname" class="text-gray-700 w-1/12">Url </label>
+					<div class="justify-items-start w-7/12">
+						<label for="myname" class="text-gray-700 w-1/12">Url </label>
 						<input
-        type="text" class="text" bind:value={url}
-        id="relay-url"  aria-describedby="relayUrl"
-        placeholder="wss://<name of relay>" />
-            
-
-				</div>
+							type="text"
+							class="text"
+							bind:value={url}
+							id="relay-url"
+							aria-describedby="relayUrl"
+							placeholder="wss://<name of relay>"
+						/>
+					</div>
 					<div class="w-5/12 flex justify-end">
-						<span><input type="checkbox" bind:checked={write} id="relay-write" /> <label for="relay-write" class="p-1">Write</label></span>
-						<span><input type="checkbox" bind:checked={read} id="relay-read" /> <label for="relay-read" class="p-1">Read</label></span>
-						<span><input type="checkbox" bind:checked={search} id="relay-search" /> <label for="relay-search" class="p-1">Search</label></span>
+						<span
+							><input type="checkbox" bind:checked={write} id="relay-write" />
+							<label for="relay-write" class="p-1">Write</label></span
+						>
+						<span
+							><input type="checkbox" bind:checked={read} id="relay-read" />
+							<label for="relay-read" class="p-1">Read</label></span
+						>
+						<span
+							><input type="checkbox" bind:checked={search} id="relay-search" />
+							<label for="relay-search" class="p-1">Search</label></span
+						>
 					</div>
 				</div>
 
@@ -165,14 +172,19 @@
 					</div>
 				</div>
 
-				<hr class="m-2"/>
+				<hr class="m-2" />
 
 				{#each $relays as relay (relay.url)}
 					<div class="flex space-x-1 p-2">
-						<div class="justify-items-start w-8/12">
+						<div class="justify-items-start w-6/12">
 							<strong>{relay.url}</strong>
 						</div>
-						<div class="w-4/12 flex justify-end">
+						<div class="justify-items-center w-3/12 p-1">
+							{#if relay.write}<i class="fa-solid fa-pen"></i>{/if}
+							{#if relay.read}<i class="fa-solid fa-book-open"></i>{/if}
+							{#if relay.search}<i class="fa-solid fa-magnifying-glass"></i>{/if}
+						</div>
+						<div class="w-3/12 flex justify-end">
 							<button type="button" on:click={removeRelay(relay.url)} class="btn-remove">
 								<i class="fa-regular fa-circle-xmark"></i> Delete
 							</button>
@@ -185,12 +197,12 @@
 </div>
 
 <style lang="postcss">
-  .text {
-    @apply w-11/12 px-3 py-1.5 text-base font-normal
+	.text {
+		@apply w-11/12 px-3 py-1.5 text-base font-normal
         text-gray-700 bg-white bg-clip-padding border border-solid
-        border-gray-300 rounded transition ease-in-out m-0 focus:text-gray-700
-        focus:bg-white focus:border-blue-600 focus:outline-none
-  }
+        border-gray-300 rounded transition ease-in-out m-0 
+		focus:text-gray-700 focus:bg-white focus:border-blue-600 focus:outline-none;
+	}
 	.btn {
 		@apply px-6 py-2.5 bg-blue-600 text-white font-medium text-xs
           leading-tight uppercase rounded shadow-md hover:bg-blue-700
