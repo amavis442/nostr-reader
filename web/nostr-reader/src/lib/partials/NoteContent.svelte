@@ -30,17 +30,27 @@
 	function doNothing() {}
 
 	function processRefs(note: any): string {
-		if (Object.keys(note.refs.event).length == 0 && Object.keys(note.refs.profile).length == 0) {
-			return note.content
-		}
 		const eventPrefix =
 			"<div class='rounded-2xl border border-solid border-medium bg-indigo-300 overflow-hidden p-1 m-2' id='noteid'> <i class='fa-regular fa-note-sticky'></i> "
 		const eventAffix = '</div>'
 		const profilePrefix =
 			"<span class='rounded-2xl border border-solid border-medium bg-indigo-300 overflow-hidden p-1' id='profileid'><i class='fa-solid fa-user'></i> "
 		const profileAffix = '</span>'
-
 		let content: string = note.content
+
+		if (Object.keys(note.refs.event).length == 0 && Object.keys(note.refs.profile).length == 0) {
+			// The leftovers without present data to replace them
+			content = note.content
+			content = content.replaceAll('[~[', profilePrefix.replace("id='profileid'", ''))
+			content = content.replaceAll(']~]', profileAffix)
+			content = content.replaceAll('[~~[', eventPrefix.replace("id='profileid'", ''))
+			content = content.replaceAll(']~~]', eventAffix)
+
+			return content
+		}
+
+
+
 		if (Object.keys(note.refs.event).length > 0) {
 			const eventKeys = Object.keys(note.refs.event)
 			for (let i = 0; i < eventKeys.length; i++) {
@@ -65,6 +75,13 @@
 				)
 			}
 		}
+
+		// The leftovers without present data to replace them
+		content = content.replaceAll('[~[', profilePrefix.replace("id='profileid'", ''))
+		content = content.replaceAll(']~]', profileAffix)
+		content = content.replaceAll('[~~[', eventPrefix.replace("id='profileid'", ''))
+		content = content.replaceAll(']~~]', eventAffix)
+
 
 		return content
 	}
