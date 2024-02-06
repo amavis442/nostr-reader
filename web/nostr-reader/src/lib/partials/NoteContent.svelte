@@ -38,7 +38,7 @@
 		const eventAffix = '</div>'
 		const profilePrefix =
 			"<span class='rounded-2xl border border-solid border-medium bg-indigo-300 overflow-hidden p-1' id='profileid'><i class='fa-solid fa-user'></i> "
-		const profileAffix = '</div>'
+		const profileAffix = '</span>'
 
 		let content: string = note.content
 		if (Object.keys(note.refs.event).length > 0) {
