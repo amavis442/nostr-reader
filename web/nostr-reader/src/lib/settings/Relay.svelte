@@ -151,9 +151,9 @@
 
 				</div>
 					<div class="w-5/12 flex justify-end">
-						<span><input type="checkbox" bind:value={write} id="relay-write" /> <label for="relay-write" class="p-1">Write</label></span>
-						<span><input type="checkbox" bind:value={read} id="relay-read" /> <label for="relay-read" class="p-1">Read</label></span>
-						<span><input type="checkbox" bind:value={search} id="relay-search" /> <label for="relay-search" class="p-1">Search</label></span>
+						<span><input type="checkbox" bind:checked={write} id="relay-write" /> <label for="relay-write" class="p-1">Write</label></span>
+						<span><input type="checkbox" bind:checked={read} id="relay-read" /> <label for="relay-read" class="p-1">Read</label></span>
+						<span><input type="checkbox" bind:checked={search} id="relay-search" /> <label for="relay-search" class="p-1">Search</label></span>
 					</div>
 				</div>
 
