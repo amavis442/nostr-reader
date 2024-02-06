@@ -395,6 +395,121 @@ func (req *Requests) RemoveBookMark(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type RetVal struct {
+	Result map[string]string `json:"result"`
+	Relays []database.Relay  `json:"relays"`
+}
+
+func (req *Requests) AddRelay(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var j database.Relay
+	err := json.NewDecoder(r.Body).Decode(&j)
+	if err != nil {
+		log.Println(err)
+		panic(err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
+	w.WriteHeader(http.StatusOK)
+
+	relay, err := req.Db.CreateRelay(ctx, j.Url, j.Write, j.Read, j.Search)
+
+	result := map[string]string{}
+	result["status"] = "ok"
+	result["msg"] = "Relay added"
+	if err != nil {
+		result["status"] = "error"
+		result["msg"] = err.Error()
+	}
+	resultJson, _ := json.Marshal(relay)
+	result["data"] = string(resultJson)
+
+	relays := req.Db.GetRelays(ctx)
+	retval := &RetVal{}
+	if len(relays) > 0 {
+		retval.Relays = relays
+	}
+	retval.Result = result
+
+	err = json.NewEncoder(w).Encode(&retval)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (req *Requests) RemoveRelay(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var j database.Relay
+	err := json.NewDecoder(r.Body).Decode(&j)
+	if err != nil {
+		log.Println(err)
+		panic(err)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
+	w.WriteHeader(http.StatusOK)
+
+	err = req.Db.RemoveRelay(ctx, j.Url)
+
+	fmt.Println("Remove relay: ", j.Url)
+	result := map[string]string{}
+	result["status"] = "ok"
+	result["msg"] = "Remove relay"
+	if err != nil {
+		result["status"] = "error"
+		result["msg"] = err.Error()
+	}
+
+	relays := req.Db.GetRelays(ctx)
+
+	retval := &RetVal{}
+	if len(relays) > 0 {
+		retval.Relays = relays
+	}
+	result["data"] = j.Url
+	retval.Result = result
+
+	err = json.NewEncoder(w).Encode(&retval)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (req *Requests) GetRelays(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	relays := req.Db.GetRelays(ctx)
+
+	retval := &RetVal{}
+	if len(relays) > 0 {
+		retval.Relays = relays
+	}
+
+	result := map[string]string{}
+	result["status"] = "ok"
+	result["msg"] = "Relays"
+
+	retval.Result = result
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
+	w.WriteHeader(http.StatusOK)
+
+	err := json.NewEncoder(w).Encode(&retval)
+	if err != nil {
+		panic(err)
+	}
+}
+
 func (req *Requests) GetBookMarked(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

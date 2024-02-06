@@ -9,6 +9,21 @@ import (
 	"gorm.io/gorm"
 )
 
+type Relay struct {
+	ID        uint
+	Url       string    `gorm:"not null; unique; index,type:btree;type:varchar(255)" json:"url"`
+	Read      bool      `gorm:"default: true;" json:"read"`
+	Write     bool      `gorm:"default: true;" json:"write"`
+	Search    bool      `gorm:"cd default: true;" json:"search"`
+	CreatedAt time.Time `gorm:"default:current_timestamp"`
+	UpdatedAt time.Time `gorm:"default:null"`
+}
+
+func (entity *Relay) BeforeUpdate(tx *gorm.DB) error {
+	entity.UpdatedAt = time.Now()
+	return nil
+}
+
 type Note struct {
 	ID             uint
 	EventId        string `gorm:"not null; unique; index;type:varchar(100)"`

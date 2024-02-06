@@ -4,7 +4,8 @@
   import Followed from "./routes/Followed.svelte";
   import Inbox from "./routes/Inbox.svelte";
   import Bookmark from "./routes/Bookmark.svelte";
-  import Account from "./routes/Account.svelte";
+  import Account from "./routes/settings/Account.svelte";
+  import Relay from "./routes/settings/Relay.svelte";
   import "@fortawesome/fontawesome-free/css/fontawesome.css";
   import "@fortawesome/fontawesome-free/css/solid.css";
   import Toasts from "./lib/partials/Toast/Toasts.svelte";
@@ -47,6 +48,9 @@
         <p class="nav-p {url === '/account' ? 'selected' : ''}">
           <Link to="account" title="Your account data">Account</Link>
         </p>
+        <p class="nav-p {url === '/relay' ? 'selected' : ''}">
+          <Link to="relay" title="Your relays">Relays</Link>
+        </p>
       </nav>
     </header>
 
@@ -57,6 +61,7 @@
       <Route path="inbox" component="{Inbox}" />
       <Route path="bookmark" component="{Bookmark}" />
       <Route path="account" component="{Account}" />
+      <Route path="relay" component="{Relay}" />
     </main>
   </div>
 </Router>

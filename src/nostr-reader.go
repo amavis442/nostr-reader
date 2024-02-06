@@ -77,6 +77,13 @@ func main() {
 	mux.HandleFunc("/api/getbookmarked", req.GetBookMarked)
 
 	/**
+	* Relay settings
+	 */
+	mux.HandleFunc("/api/addrelay", req.AddRelay)
+	mux.HandleFunc("/api/removerelay", req.RemoveRelay)
+	mux.HandleFunc("/api/getrelays", req.GetRelays)
+
+	/**
 	 * Sometimes it is nice to see pictures in the post and not just a link
 	 */
 	mux.HandleFunc("/api/preview/link", req.PreviewLink)

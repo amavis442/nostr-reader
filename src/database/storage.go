@@ -117,7 +117,7 @@ func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
 		PrepareStmt: true,
 	})
 
-	st.GormDB.AutoMigrate(&Note{}, &Profile{}, &Block{}, &Follow{}, &Seen{}, &Tree{}, &Bookmark{})
+	st.GormDB.AutoMigrate(&Note{}, &Profile{}, &Block{}, &Follow{}, &Seen{}, &Tree{}, &Bookmark{}, &Relay{})
 
 	st.GormDB.Exec(`DO $$ BEGIN
     		CREATE TYPE vote AS ENUM('like','dislike');
@@ -1061,6 +1061,41 @@ func (st *Storage) RemoveBookMark(ctx context.Context, eventID string) error {
 	}
 
 	return nil
+}
+
+func (st *Storage) CreateRelay(ctx context.Context, url string, write bool, read bool, search bool) (*Relay, error) {
+	relay := &Relay{
+		Url:    url,
+		Write:  write,
+		Read:   read,
+		Search: search,
+	}
+
+	tx := st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&relay)
+
+	err := tx.Error
+	if err != nil {
+		log.Println("Query:: ", err)
+		return nil, err
+	}
+	return relay, nil
+}
+
+func (st *Storage) RemoveRelay(ctx context.Context, url string) error {
+	err := st.GormDB.WithContext(ctx).Where("url = ?", url).Delete(&Relay{}).Error
+	if err != nil {
+		log.Println("Query:: ", err)
+		return err
+	}
+
+	return nil
+}
+
+func (st *Storage) GetRelays(ctx context.Context) []Relay {
+	var relays []Relay
+	st.GormDB.WithContext(ctx).Model(&Relay{}).Scan(&relays)
+
+	return relays
 }
 
 func (st *Storage) GetLastTimeStamp(ctx context.Context) int64 {
