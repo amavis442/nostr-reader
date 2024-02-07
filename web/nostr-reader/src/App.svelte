@@ -22,42 +22,45 @@
       class="mt-6 items-center pl-4 border-gray-600 border-b space-y-3 pb-5 xl:w-2/12 md:w-3/12 sm:w-full"
     >
       <nav>
-        <p class="nav-p {url === '/' ? 'selected' : ''}">
-          <Link to="/" title="Global feed" class="flex"
-            >
-            <div class="justify-end w-full">
-            Global
-          </div>
+        <p class="nav-p">
+          <Link to="/" title="Shows all notes from everybody you follow" let:active>
+            <span class="{active ? 'selected' : ''}">Home feed</span>
           </Link>
         </p>
-        <p class="nav-p {url === '/followed' ? 'selected' : ''}">
-          <Link to="/followed" title="Contacts that you follow">
-            Following
-            </Link>
+        <p class="nav-p {url === '/global' ? 'selected' : ''}" >
+          <Link to="/global" title="Global feed" class="flex" let:active
+            >
+            <span class="{active ? 'selected' : ''}">
+            Global Feed
+            </span>
+          </Link>
         </p>
         <p class="nav-p {url === '/inbox' ? 'selected' : ''}">
-          <Link to="/inbox" title="Your replies and inbox">
-            Own Replies
+          <Link to="/inbox" title="Your replies and inbox" let:active>
+            <span class="{active ? 'selected' : ''}">Own Replies</span>
             </Link>
         </p>
         <p class="nav-p {url === '/bookmark' ? 'selected' : ''}">
-          <Link to="/bookmark" title="Bookmarked">
-            Bookmarked
+          <Link to="/bookmark" title="Bookmarked" let:active>
+            <span class="{active ? 'selected' : ''}">Bookmarked</span>
             </Link>
         </p>
         <p class="nav-p {url === '/account' ? 'selected' : ''}">
-          <Link to="account" title="Your account data">Account</Link>
+          <Link to="account" title="Your account data" let:active>
+            <span class="{active ? 'selected' : ''}">Account</span>
+          </Link>
         </p>
         <p class="nav-p {url === '/relay' ? 'selected' : ''}">
-          <Link to="relay" title="Your relays">Relays</Link>
+          <Link to="relay" title="Your relays" let:active>
+            <span class="{active ? 'selected' : ''}">Relays</span>
+          </Link>
         </p>
       </nav>
     </header>
 
     <main class="xl:w-6/12 md:w-9/12 sm:w-full overflow-y-auto">
-      <Route path="/" component="{Feed}" />
+      <Route path="/" component="{Followed}" />
       <Route path="global" component="{Feed}" />
-      <Route path="followed" component="{Followed}" />
       <Route path="inbox" component="{Inbox}" />
       <Route path="bookmark" component="{Bookmark}" />
       <Route path="account" component="{Account}" />
