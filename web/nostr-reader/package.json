@@ -5,13 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
     "preview": "vite preview",
-    "lint": "prettier --ignore-path .gitignore --check . && eslint . --ignore-path .gitignore",
     "fmt": "prettier \"**/*.{svelte,ts,tsx,js,cjs,yml,md,html,css}\" --ignore-path .gitignore --write",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "format": "prettier --write ."
+    "format": "prettier --plugin prettier-plugin-svelte --write .",
+    "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",
+    "svelte-check": "svelte-check --tsconfig ./tsconfig.json",
+    "typecheck": "npm run svelte-check",
+    "start": "vite preview",
+    "build": "npm run typecheck && vite build"
   },
   "devDependencies": {
     "@fontsource/fira-mono": "^4.5.10",
@@ -21,6 +24,7 @@
     "@sveltejs/vite-plugin-svelte": "^3.0.0",
     "@tsconfig/svelte": "^4.0.1",
     "@types/eslint": "8.56.0",
+    "@types/node": "^20.11.16",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "autoprefixer": "^10.4.17",

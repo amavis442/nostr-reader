@@ -16,13 +16,15 @@
     });
   
     const handleClick = tabValue => () => {activeTabValue = tabValue; dispatch('changeTab', tabValue);};
+
+    function doNothing() {}
   </script>
   
   <ul>
     {#if Array.isArray(items)}
       {#each items as item}
         <li class={activeTabValue === item.value ? 'active' : ''}>
-          <span on:click={handleClick(item.value)}>{item.label}</span>
+          <span on:click={handleClick(item.value)} on:keyup={doNothing} role="none">{item.label}</span>
         </li>
       {/each}
     {/if}
