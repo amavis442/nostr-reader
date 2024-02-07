@@ -2,6 +2,7 @@ package main
 
 import (
 	"amavis442/nostr-reader/database"
+	"amavis442/nostr-reader/nostr/wrapper"
 	nostrWrapper "amavis442/nostr-reader/nostr/wrapper"
 	"encoding/json"
 	"fmt"
@@ -92,4 +93,12 @@ func LoadConfig() (*Config, error) {
 	cfg.Npub, _ = nip19.EncodePublicKey(pubKey)
 
 	return &cfg, nil
+}
+
+func UpdateRelays(cfg *nostrWrapper.Config, relays []database.Relay) {
+	cfg.Relays = make(map[string]nostrWrapper.Relay, 0)
+
+	for _, relay := range relays {
+		cfg.Relays[relay.Url] = wrapper.Relay{Read: relay.Read, Write: relay.Write, Search: relay.Search}
+	}
 }

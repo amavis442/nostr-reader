@@ -1,5 +1,5 @@
 <script>
-  import { pageMetaData } from '../state/main';
+  import { pageMetaData } from '../../lib/state/main';
   import { createEventDispatcher } from "svelte";
 
   const dispatch = createEventDispatcher();

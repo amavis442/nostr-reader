@@ -433,6 +433,8 @@ func (req *Requests) AddRelay(w http.ResponseWriter, r *http.Request) {
 	if len(relays) > 0 {
 		retval.Relays = relays
 	}
+	UpdateRelays(&req.Nostr.Cfg, relays)
+
 	retval.Result = result
 
 	err = json.NewEncoder(w).Encode(&retval)
@@ -473,6 +475,8 @@ func (req *Requests) RemoveRelay(w http.ResponseWriter, r *http.Request) {
 	if len(relays) > 0 {
 		retval.Relays = relays
 	}
+	UpdateRelays(&req.Nostr.Cfg, relays)
+
 	result["data"] = j.Url
 	retval.Result = result
 

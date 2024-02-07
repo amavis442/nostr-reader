@@ -8,7 +8,7 @@
   import Relay from "./routes/settings/Relay.svelte";
   import "@fortawesome/fontawesome-free/css/fontawesome.css";
   import "@fortawesome/fontawesome-free/css/solid.css";
-  import Toasts from "./lib/partials/Toast/Toasts.svelte";
+  import Toasts from "./components/partials/Toast/Toasts.svelte";
   import { Modals, closeModal } from "svelte-modals";
   export let url = "";
 

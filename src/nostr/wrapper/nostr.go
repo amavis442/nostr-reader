@@ -61,6 +61,7 @@ func (nostrWrapper *NostrWrapper) SetConfig(cfg *Config) {
 func (nostrWrapper *NostrWrapper) Do(r Relay, f func(context.Context, *nostr.Relay) bool) {
 	var wg sync.WaitGroup
 	ctx := context.Background()
+	log.Println("Relays are ", nostrWrapper.Cfg.Relays)
 	for relayUrl, v := range nostrWrapper.Cfg.Relays {
 		if r.Write && !v.Write {
 			continue

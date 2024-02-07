@@ -1,5 +1,5 @@
 <script lang="ts">
-    import Inbox from '../lib/Inbox.svelte'
+    import Inbox from '../components/Inbox.svelte'
    </script>
   
   <Inbox />

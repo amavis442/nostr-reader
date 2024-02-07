@@ -38,6 +38,9 @@ func main() {
 		os.Exit(0)
 	}
 
+	relays := st.GetRelays(ctx)
+	UpdateRelays(&nostrWrapper.Cfg, relays)
+
 	var req Requests
 	req.Cfg = cfg
 	req.Db = &st

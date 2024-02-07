@@ -1,7 +1,7 @@
 <script lang="ts">
     import CreateNoteModal from "./partials/Modal/CreateNoteModal.svelte";
     import { openModal } from "svelte-modals";
-    import { publish } from "./state/main";
+    import { publish } from "../lib/state/main";
     
     function createTextNote() {
     openModal(CreateNoteModal, {

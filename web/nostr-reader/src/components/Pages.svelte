@@ -20,8 +20,8 @@
     syncNote,
     getNewNotesCount,
     getLastSeenId,
-  } from "./state/main";
-  import { addBookmark, removeBookmark } from "./state/bookmark";
+  } from "../lib/state/main";
+  import { addBookmark, removeBookmark } from "../lib/state/bookmark";
 
   export let apiUrl: string = "";
   export let renewData: boolean = false;

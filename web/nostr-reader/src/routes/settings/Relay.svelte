@@ -1,5 +1,5 @@
 <script lang="ts">
-    import Relay from './../../lib/settings/Relay.svelte'
+    import Relay from './../../components/settings/Relay.svelte'
    </script>
   
   <Relay />
