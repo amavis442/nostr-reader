@@ -7,7 +7,7 @@
     openModal(CreateNoteModal, {
       note: null,
       onSendTextNote: (noteText: string) => {
-        publish(noteText,"");
+        publish(noteText, null);
       },
     });
   }

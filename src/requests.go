@@ -41,11 +41,12 @@ type BookMark struct {
 var syncHash string = ""
 
 type Page struct {
-	Page  int
-	Limit int
-	Since int
-	Maxid int
-	Renew bool
+	Page    int
+	Limit   int
+	Since   int
+	Maxid   int
+	Renew   bool
+	Context string
 }
 
 /**
@@ -561,7 +562,19 @@ func (req *Requests) GetNewNotesCount(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
 	w.WriteHeader(http.StatusOK)
 
-	count, err := req.Db.GetNewNotesCount(ctx, p.Maxid)
+	options := database.Options{
+		Follow:   false,
+		BookMark: false,
+	}
+
+	if p.Context == "follow" {
+		options.Follow = true
+	}
+	if p.Context == "bookmark" {
+		options.BookMark = true
+	}
+
+	count, err := req.Db.GetNewNotesCount(ctx, p.Maxid, options)
 	result := map[string]string{}
 	result["status"] = "ok"
 	result["msg"] = "new notes count"

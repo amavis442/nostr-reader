@@ -370,7 +370,7 @@ type Options struct {
 	BookMark bool
 }
 
-func (st *Storage) GetNewNotesCount(ctx context.Context, maxId int) (int, error) {
+func (st *Storage) GetNewNotesCount(ctx context.Context, maxId int, options Options) (int, error) {
 	var count int
 	tx := st.GormDB.Model(&Note{}).
 		Select(`COUNT(notes.id)`).
@@ -379,7 +379,17 @@ func (st *Storage) GetNewNotesCount(ctx context.Context, maxId int) (int, error)
 		Where("notes.etags='{}'").
 		Where("blocks.pubkey IS NULL").
 		Where("notes.garbage = false").
-		Where("notes.id > ?", maxId).Scan(&count)
+		Where("notes.id > ?", maxId)
+
+	if options.Follow {
+		tx.Joins("JOIN follows ON (follows.pubkey = notes.pubkey)")
+	}
+
+	if options.BookMark {
+		tx.Joins("JOIN bookmarks ON (bookmarks.event_id = notes.event_id)")
+	}
+
+	tx.Scan(&count)
 
 	if tx.Error != nil {
 		return 0, tx.Error

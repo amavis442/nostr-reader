@@ -13,7 +13,8 @@ export const pageMetaData = writable({
 	limit: 60,
 	since: 1, // 1 day
 	renew: true,
-	maxid: 0
+	maxid: 0,
+	context: null
 })
 
 export function setApiUrl(url: string) {
@@ -26,6 +27,7 @@ interface IRefreshView {
 	since: number
 	renew: boolean
 	maxid: number
+	context: null | string
 }
 
 const elm: null | HTMLElement = document.getElementById('content')
@@ -61,7 +63,8 @@ export async function refreshView(params: IRefreshView) {
 				limit: data.limit,
 				since: data.since,
 				renew: data.renew,
-				maxid: maxId
+				maxid: maxId,
+				context: null
 			})
 
 			pageData.update(() => {
@@ -93,7 +96,8 @@ export async function refresh() {
 				limit: pageData.limit,
 				since: pageData.since,
 				renew: true,
-				maxid: 0
+				maxid: 0,
+				context: null
 			})
 			return data
 		})
@@ -126,7 +130,8 @@ export function blockUser(pubkey: string) {
 				limit: pageData.limit,
 				since: pageData.since,
 				renew: false,
-				maxid: pageData.maxid
+				maxid: pageData.maxid,
+				context: null
 			})
 			return data
 		})
@@ -153,7 +158,8 @@ export function followUser(pubkey: string) {
 				limit: pageData.limit,
 				since: pageData.since,
 				renew: false,
-				maxid: pageData.maxid
+				maxid: pageData.maxid,
+				context: null
 			})
 			return data
 		})
@@ -180,7 +186,8 @@ export function unfollowUser(pubkey: string) {
 				limit: pageData.limit,
 				since: pageData.since,
 				renew: false,
-				maxid: pageData.maxid
+				maxid: pageData.maxid,
+				context: null
 			})
 			return data
 		})
@@ -189,16 +196,17 @@ export function unfollowUser(pubkey: string) {
 		})
 }
 
-export async function getNewNotesCount(): Promise<number> {
+export async function getNewNotesCount(context: string | null): Promise<number> {
 	const pageData = get(pageMetaData)
-	let data = await fetch(`${import.meta.env.VITE_API_LINK}/api/getnewnotescount`, {
+	const data = await fetch(`${import.meta.env.VITE_API_LINK}/api/getnewnotescount`, {
 		method: 'POST',
 		body: JSON.stringify({
 			page: pageData.current_page,
 			limit: pageData.limit,
 			since: pageData.since,
 			renew: false,
-			maxid: pageData.maxid
+			maxid: pageData.maxid,
+			context: context
 		}),
 		headers: {
 			'Content-Type': 'application/json'
@@ -218,8 +226,7 @@ export async function getNewNotesCount(): Promise<number> {
 }
 
 export async function getLastSeenId(): Promise<number> {
-	const pageData = get(pageMetaData)
-	let data = await fetch(`${import.meta.env.VITE_API_LINK}/api/getlastseenid`, {
+	const data = await fetch(`${import.meta.env.VITE_API_LINK}/api/getlastseenid`, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json'
@@ -239,7 +246,7 @@ export async function getLastSeenId(): Promise<number> {
 }
 
 //Todo: needs same fix as sunc note so only a portion of the view is updated and not the complete view.
-export async function publish(msg: string, note: any) {
+export async function publish(msg: string, note: any|null) {
 	await fetch(`${import.meta.env.VITE_API_LINK}/api/publish`, {
 		method: 'POST',
 		body: JSON.stringify({ msg: msg, event_id: note ? note.event.id : '' }),
@@ -259,7 +266,8 @@ export async function publish(msg: string, note: any) {
 					limit: pageData.limit,
 					since: pageData.since,
 					renew: true,
-					maxid: pageData.maxid
+					maxid: pageData.maxid,
+					context: null
 				})
 			}
 
@@ -270,7 +278,8 @@ export async function publish(msg: string, note: any) {
 					limit: pageData.limit,
 					since: pageData.since,
 					renew: false,
-					maxid: pageData.maxid
+					maxid: pageData.maxid,
+					context: null
 				})
 			}
 			return data
@@ -287,7 +296,8 @@ export async function syncNote() {
 		limit: pageData.limit,
 		since: pageData.since,
 		renew: false,
-		maxid: pageData.maxid
+		maxid: pageData.maxid,
+		context: null
 	})
 }
 

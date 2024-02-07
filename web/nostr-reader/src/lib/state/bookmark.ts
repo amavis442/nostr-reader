@@ -1,5 +1,5 @@
-import {refreshView, pageData, pageMetaData} from './main.ts';
-import { writable, get } from 'svelte/store';
+import {refreshView, pageMetaData} from './main.ts';
+import { get } from 'svelte/store';
 
 
 export function addBookmark(eventID: string) {
@@ -21,7 +21,8 @@ export function addBookmark(eventID: string) {
           limit: pageData.limit,
           since: pageData.since,
           renew: false,
-          maxid: pageData.maxid
+          maxid: pageData.maxid,
+          context: 'bookmark'
         });
         return data;
       })
@@ -49,7 +50,8 @@ export function addBookmark(eventID: string) {
           limit: pageData.limit,
           since: pageData.since,
           renew: false,
-          maxid: pageData.maxid
+          maxid: pageData.maxid,
+          context: 'bookmark'
         });
         return data;
       })
