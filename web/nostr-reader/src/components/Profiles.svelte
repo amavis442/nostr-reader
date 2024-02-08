@@ -1,28 +1,22 @@
 <script lang="ts">
 	import { onMount } from 'svelte'
-	import { addToast } from '../partials/Toast/toast'
+	import { addToast } from './partials/Toast/toast'
 	import { writable } from 'svelte/store'
-	import type {Relay} from '../../types'
+	import type {Profile} from '../types'
 	
-	let url: string
-	let write: boolean = true
-	let read: boolean = true
-	let search: boolean = true
+	let pubkey: string
 
-	const relays = writable<Array<Relay>>([])
+	const profiles = writable<Array<Profile>>([])
 
 	/**
 	 * @see https://www.thisdot.co/blog/handling-forms-in-svelte
 	 * @param e
 	 */
-	function addRelay() {
-		fetch(`${import.meta.env.VITE_API_LINK}/api/addrelay`, {
+	function addProfile() {
+		fetch(`${import.meta.env.VITE_API_LINK}/api/followuser`, {
 			method: 'POST',
 			body: JSON.stringify({
-				url: url,
-				write: new Boolean(write),
-				read: new Boolean(read),
-				search: new Boolean(search)
+				pubkey: pubkey
 			}),
 			headers: {
 				'Content-Type': 'application/json'
@@ -36,17 +30,15 @@
 
 				if (response.status == 'ok') {
 					addToast({
-						message: 'Relay added!',
+						message: 'Profile added!',
 						type: 'success',
 						dismissible: true,
 						timeout: 3000
 					})
-
-					relays.set(response.data ? response.data : [])
 				}
 				if (response.status == 'error') {
 					addToast({
-						message: 'Relay could not be added: ' + response.message,
+						message: 'Profile could not be added: ' + response.message,
 						type: 'error',
 						dismissible: true,
 						timeout: 3000
@@ -55,16 +47,17 @@
 
 				return response
 			})
+			.then(() => getProfiles())
 			.catch((err) => {
 				console.error('error', err)
 			})
 	}
 
-	function removeRelay(url: string) {
-		fetch(`${import.meta.env.VITE_API_LINK}/api/removerelay`, {
+	function removeProfile(pubkey: string) {
+		fetch(`${import.meta.env.VITE_API_LINK}/api/unfollowuser`, {
 			method: 'POST',
 			body: JSON.stringify({
-				url: url
+				pubkey: pubkey
 			}),
 			headers: {
 				'Content-Type': 'application/json'
@@ -76,16 +69,16 @@
 			.then((response) => {
 				if (response.status == 'ok') {
 					addToast({
-						message: 'Relay removed!',
+						message: 'Profile removed!',
 						type: 'success',
 						dismissible: true,
 						timeout: 3000
 					})
-					relays.set(response.data ? response.data : [])
+					
 				}
 				if (response.status == 'error') {
 					addToast({
-						message: 'Relay could not be removed: ' + response.message,
+						message: 'Profile could not be removed: ' + response.message,
 						type: 'error',
 						dismissible: true,
 						timeout: 3000
@@ -94,6 +87,8 @@
 
 				return response
 			})
+			.then(() => getProfiles())
+
 			.catch((err) => {
 				console.error('error', err)
 			})
@@ -101,8 +96,9 @@
 		return null
 	}
 
-	onMount(async () => {
-		fetch(`${import.meta.env.VITE_API_LINK}/api/getrelays`, {
+
+	function getProfiles() {
+		fetch(`${import.meta.env.VITE_API_LINK}/api/getfollowed`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json'
@@ -113,13 +109,17 @@
 			})
 			.then((response) => {
 				console.log('Json is ', response)
-				console.debug('Relay data ', response.data)
-				relays.set(response.data ? response.data : [])
+				console.debug('Profile data ', response.data)
+				profiles.set(response.data ? response.data : [])
 				return response
 			})
 			.catch((err) => {
 				console.error('error', err)
 			})
+	}
+
+	onMount(async () => {
+		getProfiles()
 	})
 </script>
 
@@ -129,59 +129,43 @@
 			<div class="row">
 				<div class="flex justify-end w-full gap-2">
 					<div class="justify-items-start w-7/12">
-						<label for="myname" class="text-gray-700 w-1/12">Url </label>
+						<label for="myname" class="text-gray-700 w-1/12">Pubkey </label>
 						<input
 							type="text"
 							class="text"
-							bind:value={url}
+							bind:value={pubkey}
 							id="relay-url"
 							aria-describedby="relayUrl"
-							placeholder="wss://<name of relay>"
+							placeholder="pubkey to follow"
 						/>
 					</div>
 					<div class="w-5/12 flex justify-end">
-						<span
-							><input type="checkbox" bind:checked={write} id="relay-write" />
-							<label for="relay-write" class="p-1">Write</label></span
-						>
-						<span
-							><input type="checkbox" bind:checked={read} id="relay-read" />
-							<label for="relay-read" class="p-1">Read</label></span
-						>
-						<span
-							><input type="checkbox" bind:checked={search} id="relay-search" />
-							<label for="relay-search" class="p-1">Search</label></span
-						>
 					</div>
 				</div>
 
 				<div class="flex justify-end w-full gap-2">
 					<div class="col-2">
-						<button type="button" on:click={addRelay} class="btn">
+						<button type="button" on:click={addProfile} class="btn">
 							<i class="fa-solid fa-circle-plus"></i> Add
 						</button>
 					</div>
 				</div>
 
 				<hr class="m-2" />
-
-				{#each $relays as relay (relay.url)}
-					<div class="flex space-x-1 p-2">
-						<div class="justify-items-start w-6/12">
-							<strong>{relay.url}</strong>
-						</div>
-						<div class="justify-items-center w-3/12 p-1">
-							{#if relay.write}<i class="fa-solid fa-pen"></i>{/if}
-							{#if relay.read}<i class="fa-solid fa-book-open"></i>{/if}
-							{#if relay.search}<i class="fa-solid fa-magnifying-glass"></i>{/if}
-						</div>
-						<div class="w-3/12 flex justify-end">
-							<button type="button" on:click={removeRelay(relay.url)} class="btn-remove">
-								<i class="fa-regular fa-circle-xmark"></i> Delete
-							</button>
-						</div>
+				{#each $profiles as profile (profile.pubkey)}
+				<div class="flex space-x-1 p-2">
+					<div class="justify-items-start w-9/12">
+						<strong>{profile.name} ({profile.pubkey.slice(0,5)}...{profile.pubkey.slice(64-5, 64)})</strong>
+						<small>{profile.display_name}</small>
 					</div>
-				{/each}
+					<div class="w-3/12 flex justify-end">
+						<button type="button" on:click={removeProfile(profile.pubkey)} class="btn-remove">
+							<i class="fa-regular fa-circle-xmark"></i> Delete
+						</button>
+					</div>
+				</div>
+			{/each}
+				
 			</div>
 		</form>
 	</div>

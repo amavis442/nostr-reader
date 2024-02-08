@@ -16,7 +16,7 @@
 		publish,
 		pageData,
 		setApiUrl,
-		pageMetaData,
+		paginator,
 		syncNote,
 		getNewNotesCount,
 		getLastSeenId
@@ -32,16 +32,16 @@
 
 		pageData.set([])
 
-		if ($pageMetaData.maxid < 1) {
-			$pageMetaData.maxid = await getLastSeenId()
+		if ($paginator.maxid < 1) {
+			$paginator.maxid = await getLastSeenId()
 		}
 
 		await refreshView({
 			page: 1,
-			limit: $pageMetaData.limit,
-			since: $pageMetaData.since,
+			limit: $paginator.limit,
+			since: $paginator.since,
 			renew: renewData,
-			maxid: $pageMetaData.maxid,
+			maxid: $paginator.maxid,
       context: context
 		})
 
@@ -99,11 +99,11 @@
 				<button
 					on:click={async () => {
 						await refreshView({
-							page: $pageMetaData.current_page,
-							limit: $pageMetaData.limit,
-							since: $pageMetaData.since,
+							page: $paginator.current_page,
+							limit: $paginator.limit,
+							since: $paginator.since,
 							renew: true,
-							maxid: $pageMetaData.maxid,
+							maxid: $paginator.maxid,
 							context: null
 						})
 						await getNewNotesCounter()
@@ -113,14 +113,14 @@
 				>
 				<select
 					id="limit"
-					bind:value={$pageMetaData.limit}
+					bind:value={$paginator.limit}
 					on:change={() => {
 						refreshView({
-							page: $pageMetaData.current_page,
-							limit: $pageMetaData.limit,
-							since: $pageMetaData.since,
+							page: $paginator.current_page,
+							limit: $paginator.limit,
+							since: $paginator.since,
 							renew: false,
-							maxid: $pageMetaData.maxid,
+							maxid: $paginator.maxid,
 							context: null
 						})
 					}}
@@ -135,14 +135,14 @@
 
 				<select
 					id="since"
-					bind:value={$pageMetaData.since}
+					bind:value={$paginator.since}
 					on:change={() =>
 						refreshView({
-							page: $pageMetaData.current_page,
-							limit: $pageMetaData.limit,
-							since: $pageMetaData.since,
+							page: $paginator.current_page,
+							limit: $paginator.limit,
+							since: $paginator.since,
 							renew: false,
-							maxid: $pageMetaData.maxid,
+							maxid: $paginator.maxid,
 							context: null
 						})}
 					class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
@@ -153,15 +153,15 @@
 						</option>
 					{/each}
 				</select> <label for="since"> Days (since)</label>
-				{#if $pageMetaData.total > $pageMetaData.per_page}
+				{#if $paginator.total > $paginator.per_page}
 					<Pagination
 						on:change={async (ev) => {
 							await refreshView({
 								page: ev.detail,
-								limit: $pageMetaData.limit,
-								since: $pageMetaData.since,
+								limit: $paginator.limit,
+								since: $paginator.since,
 								renew: false,
-								maxid: $pageMetaData.maxid,
+								maxid: $paginator.maxid,
 								context: null
 							})
 						}}

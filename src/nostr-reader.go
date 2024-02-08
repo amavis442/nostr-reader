@@ -56,7 +56,9 @@ func main() {
 	 */
 	mux.HandleFunc("/api/getnotes", req.GetNotes)
 	mux.HandleFunc("/api/getinbox", req.GetInbox)
+
 	mux.HandleFunc("/api/getnewnotescount", req.GetNewNotesCount)
+
 	mux.HandleFunc("/api/getlastseenid", req.GetLastSeenID)
 
 	/**
@@ -70,7 +72,8 @@ func main() {
 	 */
 	mux.HandleFunc("/api/followuser", req.Follow)
 	mux.HandleFunc("/api/unfollowuser", req.Unfollow)
-	mux.HandleFunc("/api/getfollownotes", req.GetFollowed)
+	mux.HandleFunc("/api/getfollownotes", req.GetFollowedNotes)
+	mux.HandleFunc("/api/getfollowed", req.GetFollowedProfiles)
 
 	/**
 	 * Bookmark events you want to keep track of

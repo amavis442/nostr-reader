@@ -6,6 +6,7 @@
   import Bookmark from "./routes/Bookmark.svelte";
   import Account from "./routes/settings/Account.svelte";
   import Relay from "./routes/settings/Relay.svelte";
+  import Profiles from "./routes/Profiles.svelte";
   import "@fortawesome/fontawesome-free/css/fontawesome.css";
   import "@fortawesome/fontawesome-free/css/solid.css";
   import Toasts from "./components/partials/Toast/Toasts.svelte";
@@ -55,6 +56,11 @@
             <span class="{active ? 'selected' : ''}">Relays</span>
           </Link>
         </p>
+        <p class="nav-p {url === '/profiles' ? 'selected' : ''}">
+          <Link to="profiles" title="Your followed profiles" let:active>
+            <span class="{active ? 'selected' : ''}">Profiles</span>
+          </Link>
+        </p>
       </nav>
     </header>
 
@@ -65,6 +71,7 @@
       <Route path="bookmark" component="{Bookmark}" />
       <Route path="account" component="{Account}" />
       <Route path="relay" component="{Relay}" />
+      <Route path="profiles" component="{Profiles}" />
     </main>
   </div>
 </Router>

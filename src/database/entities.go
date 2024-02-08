@@ -10,13 +10,13 @@ import (
 )
 
 type Relay struct {
-	ID        uint
+	ID        uint      `json:"-"`
 	Url       string    `gorm:"not null; unique; index,type:btree;type:varchar(255)" json:"url"`
 	Read      bool      `gorm:"default: true;" json:"read"`
 	Write     bool      `gorm:"default: true;" json:"write"`
 	Search    bool      `gorm:"cd default: true;" json:"search"`
-	CreatedAt time.Time `gorm:"default:current_timestamp"`
-	UpdatedAt time.Time `gorm:"default:null"`
+	CreatedAt time.Time `gorm:"default:current_timestamp" json:"-"`
+	UpdatedAt time.Time `gorm:"default:null" json:"-"`
 }
 
 func (entity *Relay) BeforeUpdate(tx *gorm.DB) error {
@@ -25,24 +25,21 @@ func (entity *Relay) BeforeUpdate(tx *gorm.DB) error {
 }
 
 type Note struct {
-	ID             uint
-	EventId        string `gorm:"not null; unique; index;type:varchar(100)"`
-	Pubkey         string `gorm:"index,type:btree;not null;type:varchar(100)"`
-	Kind           int    `gorm:"not null"`
-	EventCreatedAt int64  `gorm:"not null"`
-	Content        string
-	TagsFull       string
-	Ptags          pq.StringArray `gorm:"type:text[];index:idx_notes_ptags,type:gin"`
-	Etags          pq.StringArray `gorm:"type:text[];index:idx_notes_etags,type:gin"`
-	Sig            string         `gorm:"not null;type:varchar(200)"`
-	Garbage        bool           `gorm:"default:false"`
-	Raw            datatypes.JSON
-	Reaction       []Reaction `gorm:"default:null"`
-	ProfileID      uint       `gorm:"default:null"`
-	FollowID       uint       `gorm:"default:null"`
-	BlockID        uint       `gorm:"default:null"`
-	CreatedAt      time.Time  `gorm:"default:current_timestamp"`
-	UpdatedAt      time.Time  `gorm:"default:null"`
+	ID             uint           `json:"-"`
+	EventId        string         `gorm:"not null; unique; index;type:varchar(100)" json:"event_id"`
+	Pubkey         string         `gorm:"index,type:btree;not null;type:varchar(100)" json:"pubkey"`
+	Kind           int            `gorm:"not null" json:"kind"`
+	EventCreatedAt int64          `gorm:"not null" json:"event_created_at"`
+	Content        string         `json:"content"`
+	TagsFull       string         `json:"tags"`
+	Ptags          pq.StringArray `gorm:"type:text[];index:idx_notes_ptags,type:gin" json:"-"`
+	Etags          pq.StringArray `gorm:"type:text[];index:idx_notes_etags,type:gin" json:"-"`
+	Sig            string         `gorm:"not null;type:varchar(200)" json:"sig"`
+	Garbage        bool           `gorm:"default:false" json:"-"`
+	Raw            datatypes.JSON `json:"-"`
+	Reaction       []Reaction     `gorm:"default:null" json:"reactions"`
+	CreatedAt      time.Time      `gorm:"default:current_timestamp" json:"-"`
+	UpdatedAt      time.Time      `gorm:"default:null" json:"-"`
 }
 
 func (entity *Note) BeforeUpdate(tx *gorm.DB) error {
@@ -51,19 +48,18 @@ func (entity *Note) BeforeUpdate(tx *gorm.DB) error {
 }
 
 type Profile struct {
-	ID          uint
-	Pubkey      string `gorm:"index,type:btree;not null;unique;type:varchar(100)"`
-	Name        string
-	About       string
-	Picture     string
-	Website     string
-	Nip05       string
-	Lud16       string
-	DisplayName string
-	Raw         string
-	EventTable  []Note    `gorm:"default:null"` //`gorm:"foreignKey:Pubkey;references:Pubkey;default:null"`
-	CreatedAt   time.Time `gorm:"default:current_timestamp"`
-	UpdatedAt   time.Time `gorm:"default:null"`
+	ID          uint      `json:"-"`
+	Pubkey      string    `gorm:"index,type:btree;not null;unique;type:varchar(100)" json:"pubkey"`
+	Name        string    `json:"name"`
+	About       string    `json:"about"`
+	Picture     string    `json:"picture"`
+	Website     string    `json:"website"`
+	Nip05       string    `json:"nip05"`
+	Lud16       string    `json:"lud16"`
+	DisplayName string    `json:"display_name"`
+	Raw         string    `json:"-"`
+	CreatedAt   time.Time `gorm:"default:current_timestamp" json:"-"`
+	UpdatedAt   time.Time `gorm:"default:null" json:"-"`
 }
 
 func (entity *Profile) BeforeUpdate(tx *gorm.DB) error {
@@ -72,11 +68,10 @@ func (entity *Profile) BeforeUpdate(tx *gorm.DB) error {
 }
 
 type Block struct {
-	ID        uint
-	Pubkey    string    `gorm:"index,type:btree;not null;unique;type:varchar(100)"`
-	Note      []Note    `gorm:"default:null"`
-	CreatedAt time.Time `gorm:"default:current_timestamp"`
-	UpdatedAt time.Time `gorm:"default:null"`
+	ID        uint      `json:"-"`
+	Pubkey    string    `gorm:"index,type:btree;not null;unique;type:varchar(100)" json:"pubkey"`
+	CreatedAt time.Time `gorm:"default:current_timestamp" json:"-"`
+	UpdatedAt time.Time `gorm:"default:null" json:"-"`
 }
 
 func (entity *Block) BeforeUpdate(tx *gorm.DB) error {
@@ -85,11 +80,10 @@ func (entity *Block) BeforeUpdate(tx *gorm.DB) error {
 }
 
 type Follow struct {
-	ID         uint
-	Pubkey     string    `gorm:"index,type:btree;unique;type:varchar(100)"`
-	EventTable []Note    `gorm:"default:null"`
-	CreatedAt  time.Time `gorm:"default:current_timestamp"`
-	UpdatedAt  time.Time `gorm:"default:null"`
+	ID        uint      `json:"-"`
+	Pubkey    string    `gorm:"index,type:btree;unique;type:varchar(100)"  json:"pubkey"`
+	CreatedAt time.Time `gorm:"default:current_timestamp" json:"-"`
+	UpdatedAt time.Time `gorm:"default:null" json:"-"`
 }
 
 func (entity *Follow) BeforeUpdate(tx *gorm.DB) error {
@@ -98,11 +92,11 @@ func (entity *Follow) BeforeUpdate(tx *gorm.DB) error {
 }
 
 type Seen struct {
-	ID        uint
-	EventId   string `gorm:"index,type:btree;not null;unique;type:varchar(100)"`
+	ID        uint   `json:"-"`
+	EventId   string `gorm:"index,type:btree;not null;unique;type:varchar(100)" json:"event_id"`
 	NoteID    uint
-	CreatedAt time.Time `gorm:"default:current_timestamp"`
-	UpdatedAt time.Time `gorm:"default:null"`
+	CreatedAt time.Time `gorm:"default:current_timestamp" json:"-"`
+	UpdatedAt time.Time `gorm:"default:null" json:"-"`
 }
 
 func (entity *Seen) BeforeUpdate(tx *gorm.DB) error {
@@ -111,12 +105,12 @@ func (entity *Seen) BeforeUpdate(tx *gorm.DB) error {
 }
 
 type Tree struct {
-	ID           uint
-	EventId      string    `gorm:"index,type:btree;not null;unique;type:varchar(100)"`
-	RootEventId  string    `gorm:"index,type:btree;not null;type:varchar(100)"`
-	ReplyEventId string    `gorm:"index,type:btree;not null;type:varchar(100)"`
-	CreatedAt    time.Time `gorm:"default:current_timestamp"`
-	UpdatedAt    time.Time `gorm:"default:null"`
+	ID           uint      `json:"-"`
+	EventId      string    `gorm:"index,type:btree;not null;unique;type:varchar(100)" json:"event_id"`
+	RootEventId  string    `gorm:"index,type:btree;not null;type:varchar(100)" json:"root_event_id"`
+	ReplyEventId string    `gorm:"index,type:btree;not null;type:varchar(100)" json:"reply_event_id"`
+	CreatedAt    time.Time `gorm:"default:current_timestamp" json:"-"`
+	UpdatedAt    time.Time `gorm:"default:null" json:"-"`
 }
 
 func (entity *Tree) BeforeUpdate(tx *gorm.DB) error {
@@ -125,11 +119,11 @@ func (entity *Tree) BeforeUpdate(tx *gorm.DB) error {
 }
 
 type Bookmark struct {
-	ID        uint
-	EventId   string `gorm:"index;not null;unique;type:varchar(100)"`
+	ID        uint   `json:"-"`
+	EventId   string `gorm:"index;not null;unique;type:varchar(100)" json:"event_id"`
 	NoteID    uint
-	CreatedAt time.Time `gorm:"default:current_timestamp"`
-	UpdatedAt time.Time `gorm:"default:null"`
+	CreatedAt time.Time `gorm:"default:current_timestamp" json:"-"`
+	UpdatedAt time.Time `gorm:"default:null" json:"-"`
 }
 
 func (entity *Bookmark) BeforeUpdate(tx *gorm.DB) error {
@@ -154,15 +148,15 @@ func (p Vote) Value() (driver.Value, error) {
 }
 
 type Reaction struct {
-	ID            uint
-	Pubkey        string    `gorm:"index:idx_vote_tables_pubkey_target;unique;not null"`
-	Content       string    `gorm:"not null"`
-	CurrentVote   Vote      `gorm:"type:vote;not null"`
-	TargetEventId string    `gorm:"index:idx_vote_tables_pubkey_target;unique;not null"`
-	FromEventId   string    `gorm:"index;not null"`
-	NoteID        uint      `gorm:"default:null"`
-	CreatedAt     time.Time `gorm:"default:current_timestamp"`
-	UpdatedAt     time.Time `gorm:"default:null"`
+	ID            uint      `json:"-"`
+	Pubkey        string    `gorm:"index:idx_vote_tables_pubkey_target;unique;not null" json:"pubkey"`
+	Content       string    `gorm:"not null"  json:"content"`
+	CurrentVote   Vote      `gorm:"type:vote;not null"  json:"vote"`
+	TargetEventId string    `gorm:"index:idx_vote_tables_pubkey_target;unique;not null" json:"target_event_id"`
+	FromEventId   string    `gorm:"index;not null"  json:"from_event_id"`
+	NoteID        uint      `gorm:"default:null" json:"-"`
+	CreatedAt     time.Time `gorm:"default:current_timestamp" json:"-"`
+	UpdatedAt     time.Time `gorm:"default:null" json:"-"`
 }
 
 func (entity *Reaction) BeforeUpdate(tx *gorm.DB) error {
