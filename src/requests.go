@@ -69,7 +69,7 @@ type ResponseRelay struct {
  */
 func (req *Requests) GetNotes(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
 	var p Page
@@ -103,7 +103,7 @@ func (req *Requests) GetNotes(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) GetInbox(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
 	var p Page
@@ -132,7 +132,7 @@ func (req *Requests) GetInbox(w http.ResponseWriter, r *http.Request) {
 }
 
 func (req *Requests) StartSync(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
 	defer cancel()
 
 	w.Header().Set("Content-Type", "application/json")
@@ -148,7 +148,7 @@ func (req *Requests) StartSync(w http.ResponseWriter, r *http.Request) {
 	createdAt := req.Db.GetLastTimeStamp(ctx)
 
 	filter := req.Nostr.GetEventData(createdAt, true)
-	evs := req.Nostr.GetEvents(filter)
+	evs := req.Nostr.GetEvents(ctx, filter)
 	var pubkeys = make([]string, 0)
 	var err error
 	pubkeys, err = req.Db.SaveEvents(ctx, evs)
@@ -162,7 +162,7 @@ func (req *Requests) StartSync(w http.ResponseWriter, r *http.Request) {
 
 	pubkeys, _ = req.Db.CheckProfiles(ctx, pubkeys, tresholdTime)
 	// Last but not least, try to get the user metadata
-	req.Nostr.UpdateProfiles(pubkeys)
+	req.Nostr.UpdateProfiles(ctx, pubkeys)
 	req.Db.SaveProfiles(ctx, evs)
 
 	err = json.NewEncoder(w).Encode(response)
@@ -172,7 +172,7 @@ func (req *Requests) StartSync(w http.ResponseWriter, r *http.Request) {
 }
 
 func (req *Requests) SyncNote(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
 	type Request struct {
@@ -196,7 +196,7 @@ func (req *Requests) SyncNote(w http.ResponseWriter, r *http.Request) {
 		Limit: 1,
 	}
 
-	evs := req.Nostr.GetEvents(filter)
+	evs := req.Nostr.GetEvents(ctx, filter)
 
 	req.Db.SaveEvents(ctx, evs)
 
@@ -218,7 +218,7 @@ func (req *Requests) SyncNote(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) BlockUser(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
 	var user Pubkey
@@ -246,7 +246,7 @@ func (req *Requests) BlockUser(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) Follow(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
 	var user Pubkey
@@ -288,7 +288,7 @@ func (req *Requests) Follow(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) Unfollow(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
 	var user Pubkey
@@ -320,7 +320,7 @@ func (req *Requests) Unfollow(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) GetFollowedNotes(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
 	var p Page
@@ -351,7 +351,7 @@ func (req *Requests) GetFollowedNotes(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) GetFollowedProfiles(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
 	w.Header().Set("Content-Type", "application/json")
@@ -373,7 +373,7 @@ func (req *Requests) GetFollowedProfiles(w http.ResponseWriter, r *http.Request)
 
 func (req *Requests) AddBookMark(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
 	var j BookMark
@@ -406,7 +406,7 @@ func (req *Requests) AddBookMark(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) RemoveBookMark(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
 	var j BookMark
@@ -443,7 +443,7 @@ func (req *Requests) RemoveBookMark(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) AddRelay(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
 	var j database.Relay
@@ -480,7 +480,7 @@ func (req *Requests) AddRelay(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) RemoveRelay(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
 	var j database.Relay
@@ -515,7 +515,7 @@ func (req *Requests) RemoveRelay(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) GetRelays(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
 	w.Header().Set("Content-Type", "application/json")
@@ -536,7 +536,7 @@ func (req *Requests) GetRelays(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) GetBookMarked(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
 	var p Page
@@ -567,7 +567,7 @@ func (req *Requests) GetBookMarked(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) GetNewNotesCount(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
 	var p Page
@@ -611,7 +611,7 @@ func (req *Requests) GetNewNotesCount(w http.ResponseWriter, r *http.Request) {
 }
 
 func (req *Requests) GetLastSeenID(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
 	w.Header().Set("Content-Type", "application/json")
@@ -638,7 +638,7 @@ func (req *Requests) GetLastSeenID(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) SearchEvent(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
 	type Request struct {
@@ -661,7 +661,7 @@ func (req *Requests) SearchEvent(w http.ResponseWriter, r *http.Request) {
 			Limit: 1,
 		}
 
-		evs := req.Nostr.GetEvents(filter)
+		evs := req.Nostr.GetEvents(ctx, filter)
 
 		req.Db.SaveEvents(ctx, evs)
 
@@ -687,7 +687,7 @@ func (req *Requests) PreviewLink(w http.ResponseWriter, r *http.Request) {
 	var mu sync.Mutex
 
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
 	type Url struct {
@@ -720,7 +720,8 @@ func (req *Requests) PreviewLink(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
 
 	type Msg struct {
 		Msg      string
@@ -741,14 +742,14 @@ func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
 	log.Println("Msg to publish: ", msg.Msg)
 	var postEv nostr.Event
 	if msg.Event_id == "" {
-		postEv, _ = req.Nostr.DoPost(msg.Msg)
+		postEv, _ = req.Nostr.DoPost(ctx, msg.Msg)
 
 		req.Db.SaveEvents(ctx, []*nostr.Event{&postEv})
 	}
 
 	if msg.Event_id != "" {
 		replyEv, _ := req.Db.FindRawEvent(ctx, msg.Event_id)
-		postEv, _ = req.Nostr.DoReply(msg.Msg, *replyEv)
+		postEv, _ = req.Nostr.DoReply(ctx, msg.Msg, *replyEv)
 
 		req.Db.SaveEvents(ctx, []*nostr.Event{&postEv})
 	}
@@ -774,7 +775,7 @@ func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) GetMetaData(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
 	w.Header().Set("Content-Type", "application/json")
@@ -785,7 +786,7 @@ func (req *Requests) GetMetaData(w http.ResponseWriter, r *http.Request) {
 	response.Status = "ok"
 	response.Message = "Metadata"
 
-	event, err := req.Nostr.GetMetaData()
+	event, err := req.Nostr.GetMetaData(ctx)
 	response.Data = event
 	if err != nil {
 		response.Status = "error"
@@ -802,6 +803,8 @@ func (req *Requests) GetMetaData(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) SetMetaData(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
 
 	var user nostrWrapper.Profile
 	err := json.NewDecoder(r.Body).Decode(&user)
@@ -814,7 +817,7 @@ func (req *Requests) SetMetaData(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	user.Pubkey = req.Cfg.PubKey
-	err = req.Nostr.DoPublishMetaData(&user)
+	err = req.Nostr.DoPublishMetaData(ctx, &user)
 
 	response := &Response{}
 	response.Status = "ok"

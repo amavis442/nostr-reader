@@ -130,24 +130,24 @@ func main() {
 			// interval task
 			case tm := <-ticker.C:
 				log.Println("The Current time is: ", tm)
-				go intervalTask(&req)
+				go intervalTask(ctx, &req)
 			}
 		}
 	}()
 
-	intervalTask(&req)
+	intervalTask(ctx, &req)
 	fmt.Println("Server running: http://localhost:" + port)
 	log.Fatal(http.ListenAndServe(":"+port, mux))
 }
 
-func intervalTask(req *Requests) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func intervalTask(ctx context.Context, req *Requests) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	createdAt := req.Db.GetLastTimeStamp(ctx)
 	t := time.Unix(createdAt, 0)
 	log.Println("TimeStamps: ", createdAt, t.UTC())
 	filter := req.Nostr.GetEventData(createdAt, false)
-	evs := req.Nostr.GetEvents(filter)
+	evs := req.Nostr.GetEvents(ctx, filter)
 	req.Db.SaveEvents(ctx, evs)
 }
