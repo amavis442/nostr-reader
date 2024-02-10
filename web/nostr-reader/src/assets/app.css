@@ -12,6 +12,9 @@
 @tailwind components;
 @tailwind utilities;
 
+#root {
+  @apply  w-screen h-screen bg-gray-800;
+}
 
 .dropdown-menu {
   @apply absolute right-0 

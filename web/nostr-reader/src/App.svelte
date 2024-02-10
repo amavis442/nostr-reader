@@ -18,7 +18,7 @@
 <Toasts />
 
 <Router url="{url}">
-  <div class="flex h-screen w-screen m-auto justify-center">
+  <div class="flex justify-center">
     <header
       class="mt-6 items-center pl-4 border-gray-600 border-b space-y-3 pb-5 xl:w-2/12 md:w-3/12 sm:w-full"
     >
