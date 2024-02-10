@@ -1,4 +1,4 @@
-import {refreshView, pageMetaData} from './main.ts';
+import {refreshView, paginator} from './main.ts';
 import { get } from 'svelte/store';
 
 
@@ -15,13 +15,13 @@ export function addBookmark(eventID: string) {
       })
       .then((data) => {
         console.log("Json is ", data);
-        const pageData = get(pageMetaData)
+        const paginatorData = get(paginator)
         refreshView({
-          page: pageData.current_page,
-          limit: pageData.limit,
-          since: pageData.since,
+          page: paginatorData.current_page,
+          limit: paginatorData.limit,
+          since: paginatorData.since,
           renew: false,
-          maxid: pageData.maxid,
+          maxid: paginatorData.maxid,
           context: 'bookmark'
         });
         return data;
@@ -44,13 +44,13 @@ export function addBookmark(eventID: string) {
       })
       .then((data) => {
         console.log("Json is ", data);
-        const pageData = get(pageMetaData)
+        const paginatorData = get(paginator)
         refreshView({
-          page: pageData.current_page,
-          limit: pageData.limit,
-          since: pageData.since,
+          page: paginatorData.current_page,
+          limit: paginatorData.limit,
+          since: paginatorData.since,
           renew: false,
-          maxid: pageData.maxid,
+          maxid: paginatorData.maxid,
           context: 'bookmark'
         });
         return data;

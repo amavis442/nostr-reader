@@ -60,12 +60,12 @@ type Refs struct {
 type Event struct {
 	Event    *nostr.Event      `json:"event"`
 	Profile  UserProfile       `json:"profile"`
-	Etags    []string          `json:"etags"`
-	Ptags    []string          `json:"ptags"`
+	Etags    []string          `json:"-"`
+	Ptags    []string          `json:"-"`
 	Garbage  bool              `json:"gargabe"`
 	Children map[string]*Event `json:"children"`
 	Tree     int64             `json:"tree"`
-	RootId   string            `json:"root_id"`
+	RootId   string            `json:"-"`
 	Bookmark bool              `json:"bookmark"`
 	Content  string            `json:"content"`
 	Refs     Refs              `json:"refs"`
@@ -400,7 +400,7 @@ func (st *Storage) GetNewNotesCount(ctx context.Context, maxId int, options Opti
 func (st *Storage) GetLastSeenID(ctx context.Context) (int, error) {
 	var maxId int
 	tx := st.GormDB.Model(&Seen{}).
-		Select(`MAX(note_id)`).Scan(&maxId)
+		Select(`MAX(coalesce(note_id,0))`).Scan(&maxId)
 
 	if tx.Error != nil {
 		return 0, tx.Error
@@ -1026,27 +1026,30 @@ func (st *Storage) CreateBlock(ctx context.Context, pubkey string) error {
  */
 func (st *Storage) CreateFollow(ctx context.Context, pubkey string) error {
 	followPubkey := Follow{Pubkey: pubkey}
-	if err := st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&followPubkey).Error; err != nil {
-		fmt.Println(err)
-	}
-
-	if err := st.GormDB.WithContext(ctx).Model(&Note{}).Where("pubkey = ?", pubkey).Update("follow_id", followPubkey.ID).Error; err != nil {
-		fmt.Println(err)
+	if tx := st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&followPubkey); tx.Error != nil {
+		log.Println("Create follow: ", tx.Error.Error())
 	}
 
 	return nil
 }
 
 func (st *Storage) RemoveFollow(ctx context.Context, pubkey string) error {
-	if err := st.GormDB.WithContext(ctx).Where("pubkey = ?", pubkey).Delete(&Follow{}); err != nil {
-		fmt.Println(err)
-	}
-
-	if err := st.GormDB.WithContext(ctx).Model(&Note{}).Where("pubkey = ?", pubkey).Update("follow_id", gorm.Expr("NULL")); err != nil {
-		fmt.Println(err)
+	if tx := st.GormDB.WithContext(ctx).Where("pubkey = ?", pubkey).Delete(&Follow{}); tx.Error != nil {
+		log.Println("Remove follow: ", tx.Error.Error())
 	}
 
 	return nil
+}
+
+func (st *Storage) GetFollowedProfiles(ctx context.Context) []Profile {
+	var profiles []Profile
+	st.GormDB.
+		WithContext(ctx).
+		Model(&Profile{}).
+		Joins("JOIN follows ON (follows.pubkey = profiles.pubkey)").
+		Scan(&profiles)
+
+	return profiles
 }
 
 func (st *Storage) CreateBookMark(ctx context.Context, eventID string) error {
