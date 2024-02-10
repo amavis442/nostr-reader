@@ -12,9 +12,9 @@ import (
 type Relay struct {
 	ID        uint      `json:"-"`
 	Url       string    `gorm:"not null; unique; index,type:btree;type:varchar(255)" json:"url"`
-	Read      bool      `gorm:"default: true;" json:"read"`
-	Write     bool      `gorm:"default: true;" json:"write"`
-	Search    bool      `gorm:"cd default: true;" json:"search"`
+	Read      bool      `gorm:"default: false;" json:"read"`
+	Write     bool      `gorm:"default: false;" json:"write"`
+	Search    bool      `gorm:"default: false;" json:"search"`
 	CreatedAt time.Time `gorm:"default:current_timestamp" json:"-"`
 	UpdatedAt time.Time `gorm:"default:null" json:"-"`
 }

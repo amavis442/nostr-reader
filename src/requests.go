@@ -452,6 +452,7 @@ func (req *Requests) AddRelay(w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 		panic(err)
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
 	w.WriteHeader(http.StatusOK)
@@ -460,8 +461,7 @@ func (req *Requests) AddRelay(w http.ResponseWriter, r *http.Request) {
 	response.Status = "ok"
 	response.Message = "Relay added"
 
-	_, err = req.Db.CreateRelay(ctx, j.Url, j.Write, j.Read, j.Search)
-
+	err = req.Db.CreateRelay(ctx, &j)
 	if err != nil {
 		response.Status = "error"
 		response.Message = err.Error()

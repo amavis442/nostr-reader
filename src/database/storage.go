@@ -1076,22 +1076,16 @@ func (st *Storage) RemoveBookMark(ctx context.Context, eventID string) error {
 	return nil
 }
 
-func (st *Storage) CreateRelay(ctx context.Context, url string, write bool, read bool, search bool) (*Relay, error) {
-	relay := &Relay{
-		Url:    url,
-		Write:  write,
-		Read:   read,
-		Search: search,
-	}
-
+func (st *Storage) CreateRelay(ctx context.Context, relay *Relay) error {
 	tx := st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&relay)
 
+	log.Println(relay)
 	err := tx.Error
 	if err != nil {
 		log.Println("Query:: ", err)
-		return nil, err
+		return err
 	}
-	return relay, nil
+	return nil
 }
 
 func (st *Storage) RemoveRelay(ctx context.Context, url string) error {

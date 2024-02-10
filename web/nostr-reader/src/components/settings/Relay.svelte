@@ -2,8 +2,8 @@
 	import { onMount } from 'svelte'
 	import { addToast } from '../partials/Toast/toast'
 	import { writable } from 'svelte/store'
-	import type {Relay} from '../../types'
-	
+	import type { Relay } from '../../types'
+
 	let url: string
 	let write: boolean = true
 	let read: boolean = true
@@ -20,8 +20,8 @@
 			method: 'POST',
 			body: JSON.stringify({
 				url: url,
-				write: new Boolean(write),
 				read: new Boolean(read),
+				write: new Boolean(write),
 				search: new Boolean(search)
 			}),
 			headers: {
@@ -36,17 +36,17 @@
 
 				if (response.status == 'ok') {
 					addToast({
-						message: 'Relay added!',
+						message: 'Relay [' + url + '] added!',
 						type: 'success',
 						dismissible: true,
 						timeout: 3000
 					})
-
+					url = ''
 					relays.set(response.data ? response.data : [])
 				}
 				if (response.status == 'error') {
 					addToast({
-						message: 'Relay could not be added: ' + response.message,
+						message: 'Relay [' + url + '] could not be added: ' + response.message,
 						type: 'error',
 						dismissible: true,
 						timeout: 3000
@@ -76,16 +76,17 @@
 			.then((response) => {
 				if (response.status == 'ok') {
 					addToast({
-						message: 'Relay removed!',
+						message: 'Relay [' + url + '] removed!',
 						type: 'success',
 						dismissible: true,
 						timeout: 3000
 					})
+					url = ''
 					relays.set(response.data ? response.data : [])
 				}
 				if (response.status == 'error') {
 					addToast({
-						message: 'Relay could not be removed: ' + response.message,
+						message: 'Relay [' + url + '] could not be removed: ' + response.message,
 						type: 'error',
 						dismissible: true,
 						timeout: 3000
