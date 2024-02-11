@@ -217,13 +217,12 @@ func (nostrWrapper *NostrWrapper) GetEvents(ctx context.Context, filter nostr.Fi
 		}
 		for _, ev := range evs {
 			if _, ok := m.Load(ev.ID); !ok {
-				log.Println(relay.URL, " :: ", ev.CreatedAt.Time().UTC())
-				log.Println("Event ID: ", ev.ID)
-				log.Println("Kind: ", ev.Kind)
-
+				log.Println(relay.URL, "::", ev.CreatedAt.Time().UTC())
+				log.Println("Kind:", ev.Kind, "Event ID:", ev.ID)
 				m.LoadOrStore(ev.ID, ev)
 			}
 		}
+
 		return true
 	})
 

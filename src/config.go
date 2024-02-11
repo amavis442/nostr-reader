@@ -29,6 +29,7 @@ type Config struct {
 	Database *database.DbConfig
 	nostrWrapper.Config
 	Server *Server
+	Env    string
 }
 
 func configDir() (string, error) {
@@ -61,14 +62,12 @@ func LoadConfig() (*Config, error) {
 	content, err := os.ReadFile(fp)
 	if err != nil {
 		fmt.Println("Done", err)
-		log.Println("Error when opening file: ", err)
-		return nil, err
+		log.Fatal("Error when opening file: ", err)
 	}
 
 	err = json.Unmarshal(content, &cfg)
 	if err != nil {
-		log.Println("Error during Unmarshal(): ", err)
-		return nil, err
+		log.Fatal("Error during Unmarshal(): ", err)
 	}
 
 	if cfg.PrivateKey == "" {

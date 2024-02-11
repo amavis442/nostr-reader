@@ -31,6 +31,7 @@ func main() {
 	var st database.Storage
 	var nostrWrapper wrapper.NostrWrapper
 	nostrWrapper.SetConfig(&cfg.Config)
+	st.SetEnvironment(cfg.Env)
 
 	err = st.Connect(ctx, cfg.Database) // Does not make a connection immediatly but prepares so it does not yet know if the pg server is available.
 	if err != nil {
@@ -141,7 +142,7 @@ func main() {
 }
 
 func intervalTask(ctx context.Context, req *Requests) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
 	createdAt := req.Db.GetLastTimeStamp(ctx)
@@ -149,5 +150,9 @@ func intervalTask(ctx context.Context, req *Requests) {
 	log.Println("TimeStamps: ", createdAt, t.UTC())
 	filter := req.Nostr.GetEventData(createdAt, false)
 	evs := req.Nostr.GetEvents(ctx, filter)
-	req.Db.SaveEvents(ctx, evs)
+
+	_, err := req.Db.SaveEvents(ctx, evs)
+	if err != nil {
+		log.Fatal(err)
+	}
 }

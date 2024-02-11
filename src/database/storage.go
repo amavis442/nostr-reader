@@ -30,6 +30,7 @@ type Storage struct {
 	Filter []string
 	Count  int64
 	GormDB *gorm.DB
+	Env    string
 }
 
 type DbConfig struct {
@@ -69,6 +70,10 @@ type Event struct {
 	Bookmark bool              `json:"bookmark"`
 	Content  string            `json:"content"`
 	Refs     Refs              `json:"refs"`
+}
+
+func (st *Storage) SetEnvironment(env string) {
+	st.Env = env
 }
 
 /**
@@ -332,7 +337,11 @@ func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event) (Note, error) 
 	note.Garbage = Garbage
 	note.Raw = jsonbuf.Bytes()
 
-	err = st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&note).Error
+	tx := st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true})
+	if st.Env == "devel" {
+		tx = tx.Debug()
+	}
+	err = tx.Create(&note).Error
 
 	if err != nil {
 		return Note{}, err
