@@ -26,7 +26,7 @@ func (entity *Relay) BeforeUpdate(tx *gorm.DB) error {
 
 type Note struct {
 	ID             uint           `json:"-"`
-	EventId        string         `gorm:"not null; unique; index;type:varchar(100)" json:"event_id"`
+	EventId        string         `gorm:"not null; unique; index;type:text" json:"event_id"`
 	Pubkey         string         `gorm:"index,type:btree;not null;type:varchar(100)" json:"pubkey"`
 	Kind           int            `gorm:"not null" json:"kind"`
 	EventCreatedAt int64          `gorm:"not null" json:"event_created_at"`
