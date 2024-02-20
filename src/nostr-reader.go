@@ -26,6 +26,10 @@ func main() {
 		log.Println(err.Error())
 		os.Exit(0)
 	}
+	if cfg.Server.Interval < 1 {
+		log.Println("Setting interval to 1 minute. This is the minimum")
+		cfg.Server.Interval = 1
+	}
 
 	var ctx context.Context = context.Background()
 	var st database.Storage
@@ -131,18 +135,19 @@ func main() {
 			// interval task
 			case tm := <-ticker.C:
 				log.Println("The Current time is: ", tm)
-				go intervalTask(ctx, &req)
+				go intervalTask(ctx, &req, 20)
 			}
 		}
 	}()
 
-	intervalTask(ctx, &req)
+	intervalTask(ctx, &req, 60)
 	fmt.Println("Server running: http://localhost:" + port)
 	log.Fatal(http.ListenAndServe(":"+port, mux))
 }
 
-func intervalTask(ctx context.Context, req *Requests) {
-	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+func intervalTask(ctx context.Context, req *Requests, timeOut int) {
+	tOut := time.Duration(timeOut) * time.Second
+	ctx, cancel := context.WithTimeout(ctx, tOut)
 	defer cancel()
 
 	createdAt := req.Db.GetLastTimeStamp(ctx)
