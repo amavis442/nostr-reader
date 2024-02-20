@@ -208,6 +208,8 @@ func (nostrWrapper *NostrWrapper) DoReply(ctx context.Context, content string, r
  */
 func (nostrWrapper *NostrWrapper) GetEvents(ctx context.Context, filter nostr.Filter) []*nostr.Event {
 	var m sync.Map
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 
 	nostrWrapper.Do(ctx, Relay{Read: true}, func(ctx context.Context, relay *nostr.Relay) bool {
 		evs, err := relay.QuerySync(ctx, filter)
