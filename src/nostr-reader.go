@@ -9,6 +9,7 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -113,11 +114,6 @@ func main() {
 
 	mux.Handle("/", http.FileServer(http.Dir(cfg.Server.Frontend)))
 
-	var port string = "8080"
-	if cfg.Server.Port > 0 {
-		port = fmt.Sprint(cfg.Server.Port)
-	}
-
 	if !(cfg.Server.Interval > 0) {
 		log.Println("Please set the interval in minutes in config.json")
 		os.Exit(0)
@@ -125,6 +121,7 @@ func main() {
 	intervalTimer := time.Duration(cfg.Server.Interval * 60)
 	ticker := time.NewTicker(intervalTimer * time.Second)
 
+	var wg sync.WaitGroup
 	// Creating channel using make
 	tickerChan := make(chan bool)
 	go func() {
@@ -135,20 +132,34 @@ func main() {
 			// interval task
 			case tm := <-ticker.C:
 				log.Println("The Current time is: ", tm)
-				go intervalTask(ctx, &req, 20)
+				wg.Add(1)
+				go intervalTask(&wg, ctx, &req, 60)
 			}
 		}
 	}()
 
-	intervalTask(ctx, &req, 60)
+	var port string = "8080"
+	if cfg.Server.Port > 0 {
+		port = fmt.Sprint(cfg.Server.Port)
+	}
+
 	fmt.Println("Server running: http://localhost:" + port)
-	log.Fatal(http.ListenAndServe(":"+port, mux))
+	err = http.ListenAndServe(":"+port, mux)
+	if err != nil {
+		log.Println("Could not start http server on this port: " + port)
+		log.Fatal(err)
+	}
+
+	wg.Wait()
 }
 
-func intervalTask(ctx context.Context, req *Requests, timeOut int) {
+func intervalTask(wg *sync.WaitGroup, ctx context.Context, req *Requests, timeOut int) {
 	tOut := time.Duration(timeOut) * time.Second
 	ctx, cancel := context.WithTimeout(ctx, tOut)
-	defer cancel()
+	defer func() {
+		wg.Done()
+		cancel()
+	}()
 
 	createdAt := req.Db.GetLastTimeStamp(ctx)
 	t := time.Unix(createdAt, 0)
@@ -158,6 +169,8 @@ func intervalTask(ctx context.Context, req *Requests, timeOut int) {
 
 	_, err := req.Db.SaveEvents(ctx, evs)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
+	log.Println("Done syncing")
+
 }
