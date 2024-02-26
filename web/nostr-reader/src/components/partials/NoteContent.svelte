@@ -4,6 +4,9 @@
 	import { tranlateContent } from '../../lib/state/main'
 	import Preview from './Preview/Preview.svelte'
 	import { createEventDispatcher } from 'svelte'
+
+	import ReadMore from './Readmore/ReadMore.svelte';
+
 	export let note: any
 
 	const dispatch = createEventDispatcher()
@@ -108,7 +111,9 @@
 </script>
 
 <span class="text-black text-md font-medium break-words">
-	<p on:click={textEvent} role="none">{@html content}</p>
+	<p on:click={textEvent} role="none">
+		<ReadMore textContent={content} maxWords={30} />
+	</p>
 	{#if import.meta.env.VITE_APP_TRANSLATE_URL && import.meta.env.VITE_APP_TRANSLATE_LANG}
 		<button on:click={tranlate} class="p-1 m-2" title="Translate"
 			>Translate to ({import.meta.env.VITE_APP_TRANSLATE_LANG})</button
