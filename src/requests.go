@@ -69,7 +69,7 @@ type ResponseRelay struct {
  */
 func (req *Requests) GetNotes(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 
 	var p Page
@@ -320,7 +320,7 @@ func (req *Requests) Unfollow(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) GetFollowedNotes(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 
 	var p Page
@@ -536,7 +536,7 @@ func (req *Requests) GetRelays(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) GetBookMarked(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 
 	var p Page

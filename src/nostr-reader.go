@@ -133,7 +133,7 @@ func main() {
 			case tm := <-ticker.C:
 				log.Println("The Current time is: ", tm)
 				wg.Add(1)
-				go intervalTask(&wg, ctx, &req, 60)
+				go intervalTask(&wg, ctx, &req, 120)
 			}
 		}
 	}()

@@ -251,10 +251,12 @@ func (nostrWrapper *NostrWrapper) GetEventData(createdAt int64, withOffset bool)
 		return nostr.Filter{}
 	}
 	var timeStamp nostr.Timestamp = nostr.Timestamp(createdAt + 1)
+	//var untilTimeStamp nostr.Timestamp = nostr.Timestamp(createdAt + 60*60*1000)
 	log.Println("Nostr Timestamp: ", timeStamp.Time().UTC())
 	filter := nostr.Filter{
 		Kinds: []int{nostr.KindTextNote, nostr.KindReaction, nostr.KindArticle, nostr.KindDeletion, nostr.KindProfileMetadata},
 		Since: &timeStamp,
+		Limit: 1000,
 	}
 
 	log.Println(filter)
