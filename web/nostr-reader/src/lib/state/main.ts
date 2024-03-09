@@ -251,9 +251,9 @@ export async function publish(msg: string, note: any|null) {
 			return res.json()
 		})
 		.then((response) => {
-			console.debug('Json is ', response)
+			console.debug('Json is ', response, ' and note is ', note)
 			const paginatorData = get(paginator)
-			if (note == '') {
+			if (response.status == 'ok' && note == null) {
 				refreshView({
 					page: paginatorData.current_page,
 					limit: paginatorData.limit,
@@ -264,7 +264,7 @@ export async function publish(msg: string, note: any|null) {
 				})
 			}
 
-			if (note != '') {
+			if (response.status == 'ok' && note != null) {
 				console.debug('Refresh after publish: ', note.event.id)
 				refreshView({
 					page: paginatorData.current_page,
