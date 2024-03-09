@@ -103,7 +103,7 @@ func (req *Requests) GetNotes(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) GetInbox(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 
 	var p Page
@@ -351,7 +351,7 @@ func (req *Requests) GetFollowedNotes(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) GetFollowedProfiles(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 
 	w.Header().Set("Content-Type", "application/json")
@@ -720,7 +720,7 @@ func (req *Requests) PreviewLink(w http.ResponseWriter, r *http.Request) {
 
 func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 
 	type Msg struct {
@@ -758,7 +758,7 @@ func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
 	response.Status = "ok"
 	response.Message = msg.Msg
 
-	jsonPostEv, _ := json.Marshal(postEv)
+	jsonPostEv, err := json.Marshal(postEv)
 	response.Data = string(jsonPostEv)
 
 	if err != nil {

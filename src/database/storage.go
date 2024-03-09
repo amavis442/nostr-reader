@@ -231,12 +231,9 @@ type EventTree struct {
 
 func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event) (Note, error) {
 	var tree EventTree
-	var pubkeys = make([]string, 0)
 	ptags, etags := make([]string, 0), make([]string, 0)
 
-	if len(ev.PubKey) == 64 {
-		pubkeys = append(pubkeys, ev.PubKey)
-	} else {
+	if len(ev.PubKey) != 64 {
 		fmt.Println("Incorrect pubkey to long max 64: ", ev.PubKey, " Content:", ev.Content)
 	}
 	ptags = ptags[:0]
@@ -267,7 +264,6 @@ func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event) (Note, error) 
 				continue
 			} else {
 				ptags = append(ptags, tag[1])
-				pubkeys = append(pubkeys, tag[1])
 				ptagsNum = ptagsNum + 1
 			}
 		}
@@ -653,7 +649,7 @@ func (st *Storage) getChildren(ctx context.Context, eventMap map[string]Event) e
 	 * Get all child notes
 	 */
 
-	tx := st.GormDB.Model(&Note{}).
+	tx := st.GormDB.WithContext(ctx).Model(&Note{}).
 		Select(`trees.root_event_id, trees.reply_event_id, notes.id, notes.event_id, notes.pubkey, notes.kind, notes.event_created_at, 
 		notes.content, notes.tags_full::json, notes.sig, notes.etags, notes.ptags,
 		profiles.name, profiles.about , profiles.picture,
