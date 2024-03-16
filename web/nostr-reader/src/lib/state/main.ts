@@ -1,5 +1,5 @@
 import { writable, get } from 'svelte/store'
-import type {Page, Paginator} from '../../types'
+import type { Page, Paginator } from '../../types'
 
 export const pageData = writable([])
 
@@ -59,11 +59,7 @@ export async function refreshView(params: Page) {
 				maxid: maxId,
 				context: null
 			})
-
-			pageData.update(() => {
-				return response.data
-			})
-			return response.data
+			pageData.set(response.data)
 		})
 		.then(() => {
 			//const elm: null|HTMLElement = document.getElementById("content")
@@ -85,7 +81,7 @@ export async function refresh() {
 			console.log('Json is ', response)
 			const paginatorData = get(paginator)
 			refreshView({
-				page:  paginatorData.current_page,
+				page: paginatorData.current_page,
 				limit: paginatorData.limit,
 				since: paginatorData.since,
 				renew: true,
@@ -239,7 +235,7 @@ export async function getLastSeenId(): Promise<number> {
 }
 
 //Todo: needs same fix as sunc note so only a portion of the view is updated and not the complete view.
-export async function publish(msg: string, note: any|null) {
+export async function publish(msg: string, note: any | null) {
 	await fetch(`${import.meta.env.VITE_API_LINK}/api/publish`, {
 		method: 'POST',
 		body: JSON.stringify({ msg: msg, event_id: note ? note.event.id : '' }),
