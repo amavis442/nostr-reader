@@ -446,6 +446,11 @@ func (st *Storage) GetPagination(ctx context.Context, p *Pagination, options Opt
 		since := maxTimeStamp - int64(p.Since*60*60*24)
 		tx.Where("notes.event_created_at > ?", fmt.Sprintf("%d", since))
 	}
+	if p.Since == 0 && (!options.BookMark && !options.Follow) {
+		var maxTimeStamp int64 = time.Now().Unix()
+		since := maxTimeStamp - int64(1*60*60*24)
+		tx.Where("notes.event_created_at > ?", fmt.Sprintf("%d", since))
+	}
 
 	if options.Follow {
 		tx.Joins("JOIN follows ON (follows.pubkey = notes.pubkey)")
