@@ -26,18 +26,22 @@
 
   function followUser(pubkey) {
     dispatch("followUser", pubkey);
+    note.profile.followed = true;
   }
 
   function unfollowUser(pubkey) {
     dispatch("unfollowUser", pubkey);
+    note.profile.followed = false;
   }
 
   function addBookmark(eventID) {
     dispatch("addBookmark", eventID);
+    note.bookmark = true;
   }
 
   function removeBookmark(eventID) {
     dispatch("removeBookmark", eventID);
+    note.bookmark = false;
   }
 
   function blockUser(pubkey) {
@@ -92,6 +96,9 @@
 
     return "";
   }
+
+  $: followed = note.profile.followed
+  $: bookmarked = note.bookmark
 </script>
 
 {#if note && note.event.kind == 1}
@@ -110,7 +117,7 @@
         >
           <div on:keyup={() => console.log("keyup")} class="w-16 mr-2" tabindex="0" role="button">
             <img
-              class="w-14 h-14 rounded-full {note.profile.followed
+              class="w-14 h-14 rounded-full {followed
                 ? 'border-2 border-green-800'
                 : ''}"
               src={note.profile.picture != ""
@@ -130,7 +137,7 @@
                       <span title={note.event.pubkey}
                         >{normalizeName(note.profile)}</span
                       >
-                      {#if note.profile.followed}
+                      {#if followed}
                         <i class="fa-solid fa-bookmark" />
                       {/if}
                       <small class="text-gray"
@@ -147,7 +154,7 @@
                         class="flex flex-row gap-1 content-normal justify-end"
                       >
                         <div>
-                          {#if note.profile.followed}
+                          {#if followed}
                             <button
                               on:click={unfollowUser(note.event.pubkey)}
                               title="unfollow"
@@ -165,7 +172,7 @@
                         </div>
 
                         <div>
-                          {#if note.bookmark}
+                          {#if bookmarked}
                             <button
                               on:click={removeBookmark(note.event.id)}
                               title="remove bookmark"
