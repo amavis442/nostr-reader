@@ -25,7 +25,7 @@
 
 	export let apiUrl: string = ''
 	export let renewData: boolean = false
-  export let context: (string|null) = null
+	export let context: string | null = null
 
 	onMount(async () => {
 		setApiUrl(apiUrl)
@@ -42,7 +42,7 @@
 			since: $paginator.since,
 			renew: renewData,
 			maxid: $paginator.maxid,
-      context: context
+			context: context
 		})
 
 		getNewNotesCounter()
@@ -99,7 +99,7 @@
 				<button
 					on:click={async () => {
 						await refreshView({
-							page: $paginator.current_page,
+							page: 1,
 							limit: $paginator.limit,
 							since: $paginator.since,
 							renew: true,
