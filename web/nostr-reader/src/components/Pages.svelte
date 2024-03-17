@@ -22,6 +22,7 @@
 		getLastSeenId
 	} from '../lib/state/main'
 	import { addBookmark, removeBookmark } from '../lib/state/bookmark'
+	import type { Note, Profile, NostrEvent } from '../types'
 
 	export let apiUrl: string = ''
 	export let renewData: boolean = false
@@ -53,7 +54,7 @@
 		}
 	})
 
-	function createReplyTextNote(replyToNote: any) {
+	function createReplyTextNote(replyToNote: Note) {
 		openModal(CreateNoteModal, {
 			note: replyToNote,
 			onSendTextNote: (noteText: string) => {
@@ -62,18 +63,18 @@
 		})
 	}
 
-	function createInfoModal(note: any) {
+	function createInfoModal(note: Note) {
 		openModal(InfoModal, {
 			note: note
 		})
 	}
 
-	function createProfileInfoModal(profile: any) {
+	function createProfileInfoModal(profile: Profile) {
 		openModal(ProfileInfoModal, {
 			profile: profile
 		})
 	}
-	function createNoteInfoModal(note: any) {
+	function createNoteInfoModal(note: NostrEvent) {
 		openModal(NoteInfoModal, {
 			note: note
 		})

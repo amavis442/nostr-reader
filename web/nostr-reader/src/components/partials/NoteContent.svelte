@@ -6,8 +6,9 @@
 	import { createEventDispatcher } from 'svelte'
 
 	import ReadMore from './Readmore/ReadMore.svelte';
+	import type { Note, Profile } from '../../types'
 
-	export let note: any
+	export let note: Note
 
 	const dispatch = createEventDispatcher()
 
@@ -26,13 +27,13 @@
 		content = toHtml(content)
 	})
 
-	let translatedContent = ''
+	let translatedContent: string = ''
 	async function tranlate() {
 		translatedContent = await tranlateContent(note.event.content)
 	}
 	function doNothing() {}
 
-	function processRefs(note: any): string {
+	function processRefs(note: Note): string {
 		const eventPrefix =
 			"<div class='rounded-2xl border border-solid border-medium bg-indigo-300 overflow-hidden p-1 m-2' id='noteid'> <i class='fa-regular fa-note-sticky'></i> "
 		const eventAffix = '</div>'
@@ -95,14 +96,14 @@
 		if (id) {
 			if (id.indexOf('profile_', 0) != -1) {
 				let profileId: string = id.replace('profile_', '')
-				let profile = note.refs.profile[profileId]
+				let profile: Profile = note.refs.profile[profileId]
 				dispatch('profileInfo', { profile: profile })
 			}
 
 			if (id.indexOf('note_', 0) != -1) {
 				let eventId: string = id.replace('note_', '')
 				console.debug('Got an id: ' + eventId)
-				let noteRef = note.refs.event[eventId]
+				let noteRef: Event = note.refs.event[eventId]
 				console.debug(noteRef)
 				dispatch('noteInfo', { note: noteRef })
 			}

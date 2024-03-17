@@ -39,6 +39,7 @@ export type Profile = {
 	pip05: string
 	lud16: string
 	display_name: string
+	followed: boolean
 	created_at: Date | null | undefined
 	updated_at: Date | null | undefined
 }
@@ -62,15 +63,41 @@ export type Reaction = {
 	updated_at?: Date | null | undefined
 }
 
-export type Note = {
+
+export type NostrEvent = {
+	id: string
+	content: string
+	pubkey: string
+	kind: int
+	content: string
+	tags: string[][]
+	sig: string
+	created_at: int
+}
+
+export type NostrNote = {
 	event_id: string
 	pubkey: string
 	kind: int
 	event_created_at: int64
 	content: string
-	tags: string
+	tags: string[][]
 	sig: string
 	reaction?: Array<Reaction>
 	created_at: Date | null | undefined
 	updated_at?: Date | null | undefined
+}
+
+export type Note = {
+	bookmark: boolean
+	children: Note[] | null
+	content: string
+	event: NostrEvent
+	garbage: boolean
+	profile: Profile
+	refs: {
+		event: NostrEvent[] | null
+		profile: Profile[] | null
+	}
+	tree: int
 }

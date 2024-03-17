@@ -1,10 +1,11 @@
 <script lang="ts">
   import { closeModal } from "svelte-modals";
   import Button from "../Button.svelte";
+	import type { NostrEvent } from "../../../types"
 
   // provided by <Modals />
   export let isOpen: boolean;
-  export let note;
+  export let note: NostrEvent;
 </script>
 
 {#if isOpen}
