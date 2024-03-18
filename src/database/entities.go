@@ -25,10 +25,10 @@ func (entity *Relay) BeforeUpdate(tx *gorm.DB) error {
 }
 
 type Note struct {
-	ID             uint           `json:"-"`
+	ID             uint           `gorm:"primaryKey" json:"-"`
 	EventId        string         `gorm:"not null; unique; index;type:text" json:"event_id"`
 	Pubkey         string         `gorm:"index,type:btree;not null;type:varchar(100)" json:"pubkey"`
-	Kind           int            `gorm:"not null" json:"kind"`
+	Kind           int            `gorm:"not null;index;" json:"kind"`
 	EventCreatedAt int64          `gorm:"not null" json:"event_created_at"`
 	Content        string         `json:"content"`
 	TagsFull       string         `json:"tags"`
@@ -40,6 +40,7 @@ type Note struct {
 	Reaction       []Reaction     `gorm:"default:null" json:"reactions"`
 	CreatedAt      time.Time      `gorm:"default:current_timestamp" json:"-"`
 	UpdatedAt      time.Time      `gorm:"default:null" json:"-"`
+	Root           bool           `gorm:"default:false;index;comment:Is this the root note" json:"-"`
 }
 
 func (entity *Note) BeforeUpdate(tx *gorm.DB) error {

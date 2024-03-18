@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math"
 	"regexp"
 	"strings"
 	"time"
@@ -88,19 +87,6 @@ func (st *Storage) CheckError(err error) {
 	if err != nil {
 		log.Println("Query:: ", err.Error())
 		panic(err)
-	}
-}
-
-func (st *Storage) Paginate(value interface{}, pagination *Pagination, db *gorm.DB) func(db *gorm.DB) *gorm.DB {
-	var totalRows int64
-	st.GormDB.Model(value).Count(&totalRows)
-
-	pagination.TotalRows = totalRows
-	totalPages := int(math.Ceil(float64(totalRows) / float64(pagination.Limit)))
-	pagination.TotalPages = totalPages
-
-	return func(db *gorm.DB) *gorm.DB {
-		return db.Offset(pagination.GetOffset()).Limit(pagination.GetLimit()).Order(pagination.GetSort())
 	}
 }
 
@@ -232,6 +218,7 @@ type EventTree struct {
 func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event) (Note, error) {
 	var tree EventTree
 	ptags, etags := make([]string, 0), make([]string, 0)
+	isRoot := true
 
 	if len(ev.PubKey) != 64 {
 		fmt.Println("Incorrect pubkey to long max 64: ", ev.PubKey, " Content:", ev.Content)
@@ -254,9 +241,11 @@ func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event) (Note, error) 
 			}
 			if len(tag) == 4 && tag[3] == "root" {
 				tree.RootTag = tag[1]
+				isRoot = false
 			}
 			if len(tag) == 4 && tag[3] == "reply" {
 				tree.ReplyTag = tag[1]
+				isRoot = false
 			}
 		case tag[0] == "p":
 			if len(tag) < 1 || len(tag[1]) != 64 {
@@ -332,6 +321,7 @@ func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event) (Note, error) 
 	note.Etags = etags
 	note.Garbage = Garbage
 	note.Raw = jsonbuf.Bytes()
+	note.Root = isRoot
 
 	tx := st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true})
 	if st.Env == "devel" {
@@ -381,7 +371,7 @@ func (st *Storage) GetNewNotesCount(ctx context.Context, maxId int, options Opti
 		Select(`COUNT(notes.id)`).
 		Joins("LEFT JOIN blocks  on (blocks.pubkey = notes.pubkey)").
 		Where("notes.kind = 1").
-		Where("notes.etags='{}'").
+		Where("notes.root = true").
 		Where("blocks.pubkey IS NULL").
 		Where("notes.garbage = false").
 		Where("notes.id > ?", maxId)
@@ -430,7 +420,7 @@ func (st *Storage) GetPagination(ctx context.Context, p *Pagination, options Opt
 		Joins("LEFT JOIN blocks  on (blocks.pubkey = notes.pubkey)").
 		//Joins("LEFT JOIN seens on (seens.event_id = notes.event_id)").
 		Where("notes.kind = 1").
-		Where("notes.etags='{}'").
+		Where("notes.root = true").
 		Where("blocks.pubkey IS NULL").
 		//Where("seens.event_id IS NULL").
 		Where("notes.garbage = false")
