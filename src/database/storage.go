@@ -410,7 +410,7 @@ func (st *Storage) GetLastSeenID(ctx context.Context) (int, error) {
  */
 func (st *Storage) GetPagination(ctx context.Context, p *Pagination, options Options) error {
 
-	tx := st.GormDB.Model(&Note{}).
+	tx := st.GormDB.Table("notes").
 		Select(`notes.id, notes.event_id, notes.pubkey, notes.kind, notes.event_created_at, 
 		notes.content, notes.tags_full::json, notes.sig, notes.etags, notes.ptags,
 		profiles.name, profiles.about , profiles.picture,
@@ -644,7 +644,7 @@ func (st *Storage) getChildren(ctx context.Context, eventMap map[string]Event) e
 	 * Get all child notes
 	 */
 
-	tx := st.GormDB.WithContext(ctx).Model(&Note{}).
+	tx := st.GormDB.WithContext(ctx).Table("notes").
 		Select(`trees.root_event_id, trees.reply_event_id, notes.id, notes.event_id, notes.pubkey, notes.kind, notes.event_created_at, 
 		notes.content, notes.tags_full::json, notes.sig, notes.etags, notes.ptags,
 		profiles.name, profiles.about , profiles.picture,
