@@ -189,7 +189,7 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) ([]string
 			continue
 		}
 
-		etags, _, _, _ := st.processTags(ev)
+		etags, _, _, _, _ := st.processTags(ev)
 
 		if ev.Kind == 0 {
 			st.SaveProfile(ctx, ev)
@@ -226,8 +226,7 @@ type EventTree struct {
 	ReplyTag string
 }
 
-func (st *Storage) processTags(ev *nostr.Event) (etags []string, ptags []string, hasNotification bool, isRoot bool) {
-	var tree EventTree
+func (st *Storage) processTags(ev *nostr.Event) (etags []string, ptags []string, hasNotification bool, isRoot bool, tree EventTree) {
 	ptags, etags = make([]string, 0), make([]string, 0)
 	isRoot = true
 
@@ -269,13 +268,13 @@ func (st *Storage) processTags(ev *nostr.Event) (etags []string, ptags []string,
 		}
 	}
 
-	return etags, ptags, hasNotification, isRoot
+	return etags, ptags, hasNotification, isRoot, tree
 }
 
 func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event) (Note, error) {
 	var tree EventTree
 
-	etags, ptags, hasNotification, isRoot := st.processTags(ev)
+	etags, ptags, hasNotification, isRoot, tree := st.processTags(ev)
 	ptagsNum := len(ptags)
 	etagsNum := len(etags)
 
@@ -349,9 +348,9 @@ func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event) (Note, error) 
 		tx = tx.Debug()
 	}
 
-	if !hasNotification {
-		err = tx.Create(&note).Error
-	}
+	//if !hasNotification {
+	err = tx.Create(&note).Error
+	//}
 
 	if err != nil {
 		return Note{}, err
