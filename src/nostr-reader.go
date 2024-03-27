@@ -37,6 +37,7 @@ func main() {
 	var nostrWrapper wrapper.NostrWrapper
 	nostrWrapper.SetConfig(&cfg.Config)
 	st.SetEnvironment(cfg.Env)
+	st.Pubkey = cfg.PubKey
 
 	err = st.Connect(ctx, cfg.Database) // Does not make a connection immediatly but prepares so it does not yet know if the pg server is available.
 	if err != nil {
