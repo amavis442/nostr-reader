@@ -48,6 +48,20 @@ func (entity *Note) BeforeUpdate(tx *gorm.DB) error {
 	return nil
 }
 
+type Notification struct {
+	ID        uint `gorm:"primaryKey" json:"id"`
+	NoteID    uint `gorm:"not null"  json:"note_id"`
+	Note      Note
+	Seen      bool      `gorm:"default:false" json:"seen"`
+	CreatedAt time.Time `gorm:"default:current_timestamp" json:"-"`
+	UpdatedAt time.Time `gorm:"default:null" json:"-"`
+}
+
+func (entity *Notification) BeforeUpdate(tx *gorm.DB) error {
+	entity.UpdatedAt = time.Now()
+	return nil
+}
+
 type Profile struct {
 	ID          uint      `json:"-"`
 	Pubkey      string    `gorm:"index,type:btree;not null;unique;type:varchar(100)" json:"pubkey"`

@@ -26,10 +26,12 @@ import (
  * The filter is used for certain words in de posts we want to filter out, because they can be spam
  */
 type Storage struct {
-	Filter []string
-	Count  int64
-	GormDB *gorm.DB
-	Env    string
+	Filter        []string
+	Count         int64
+	GormDB        *gorm.DB
+	Env           string
+	Pubkey        string
+	Notifications []string
 }
 
 type DbConfig struct {
@@ -96,6 +98,8 @@ func (st *Storage) CheckError(err error) {
 func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
 	var err error
 
+	st.Notifications = make([]string, 0)
+
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable TimeZone=Europe/Amsterdam",
 		cfg.Host,
 		cfg.User,
@@ -108,7 +112,7 @@ func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
 		PrepareStmt: true,
 	})
 
-	st.GormDB.AutoMigrate(&Note{}, &Profile{}, &Block{}, &Follow{}, &Seen{}, &Tree{}, &Bookmark{}, &Relay{})
+	st.GormDB.AutoMigrate(&Note{}, &Profile{}, &Notification{}, &Block{}, &Follow{}, &Seen{}, &Tree{}, &Bookmark{}, &Relay{})
 
 	st.GormDB.Exec(`DO $$ BEGIN
     		CREATE TYPE vote AS ENUM('like','dislike');
@@ -178,22 +182,29 @@ func (st *Storage) SaveProfiles(ctx context.Context, evs []*nostr.Event) {
  */
 func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) ([]string, error) {
 	var pubkeys = make([]string, 0)
+	st.Notifications = make([]string, 0) // reset if already set
+
 	for _, ev := range evs {
 		if ev.CreatedAt.Time().Unix() > time.Now().Unix() {
 			continue
 		}
 
-		note, err := st.SaveNote(ctx, ev)
-		if err != nil {
-			return []string{}, err
-		}
-		pubkeys = append(pubkeys, note.Pubkey)
-		if note.ID > 0 && ev.Kind == 0 {
+		etags, _, _, _ := st.processTags(ev)
+
+		if ev.Kind == 0 {
 			st.SaveProfile(ctx, ev)
 		}
 
+		if ev.Kind == 1 {
+			note, err := st.SaveNote(ctx, ev)
+			if err != nil {
+				return []string{}, err
+			}
+			pubkeys = append(pubkeys, note.Pubkey)
+		}
+
 		// votes
-		if note.ID > 0 && ev.Kind == 7 && len(note.Etags) > 0 {
+		if ev.Kind == 7 && len(etags) > 0 {
 			t := ev.Tags.GetFirst([]string{"e"})
 			if t != nil {
 				targetEventId := t.Value()
@@ -202,7 +213,7 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) ([]string
 				st.GormDB.WithContext(ctx).Where("event_id = ?", targetEventId).Find(&result) // only add votes for existing
 
 				if result.ID > 0 {
-					st.SaveReaction(ctx, ev, targetEventId, note.ID)
+					st.SaveReaction(ctx, ev, targetEventId, result.ID)
 				}
 			}
 		}
@@ -215,21 +226,20 @@ type EventTree struct {
 	ReplyTag string
 }
 
-func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event) (Note, error) {
+func (st *Storage) processTags(ev *nostr.Event) (etags []string, ptags []string, hasNotification bool, isRoot bool) {
 	var tree EventTree
-	ptags, etags := make([]string, 0), make([]string, 0)
-	isRoot := true
+	ptags, etags = make([]string, 0), make([]string, 0)
+	isRoot = true
 
 	if len(ev.PubKey) != 64 {
 		fmt.Println("Incorrect pubkey to long max 64: ", ev.PubKey, " Content:", ev.Content)
 	}
 	ptags = ptags[:0]
 	etags = etags[:0]
-	ptagsNum := 0
-	etagsNum := 0
 
 	tree.RootTag = ""
 	tree.ReplyTag = ""
+	hasNotification = false
 	for _, tag := range ev.Tags {
 		switch {
 		case tag[0] == "e":
@@ -237,7 +247,6 @@ func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event) (Note, error) 
 				continue
 			} else {
 				etags = append(etags, tag[1])
-				etagsNum = etagsNum + 1
 			}
 			if len(tag) == 4 && tag[3] == "root" {
 				tree.RootTag = tag[1]
@@ -253,10 +262,22 @@ func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event) (Note, error) 
 				continue
 			} else {
 				ptags = append(ptags, tag[1])
-				ptagsNum = ptagsNum + 1
+				if tag[1] == st.Pubkey {
+					hasNotification = true
+				}
 			}
 		}
 	}
+
+	return etags, ptags, hasNotification, isRoot
+}
+
+func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event) (Note, error) {
+	var tree EventTree
+
+	etags, ptags, hasNotification, isRoot := st.processTags(ev)
+	ptagsNum := len(ptags)
+	etagsNum := len(etags)
 
 	tagJson, err := json.Marshal(ev.Tags)
 	if err != nil {
@@ -327,7 +348,10 @@ func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event) (Note, error) 
 	if st.Env == "devel" {
 		tx = tx.Debug()
 	}
-	err = tx.Create(&note).Error
+
+	if !hasNotification {
+		err = tx.Create(&note).Error
+	}
 
 	if err != nil {
 		return Note{}, err
@@ -336,19 +360,25 @@ func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event) (Note, error) 
 	if note.ID > 0 && len(tree.RootTag) > 0 {
 		treeData := Tree{EventId: ev.ID, RootEventId: tree.RootTag, ReplyEventId: tree.ReplyTag}
 		st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&treeData)
+
+		if hasNotification {
+			notification := Notification{NoteID: note.ID}
+			st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&notification)
+		}
 	}
 
 	return note, nil
 }
 
-func (st *Storage) SaveReaction(ctx context.Context, ev *nostr.Event, targetEventId string, noteId uint) {
+func (st *Storage) SaveReaction(ctx context.Context, ev *nostr.Event, targetEventId string, notesId uint) {
 	vote := Reaction{
 		Pubkey:        ev.PubKey,
 		Content:       ev.Content,
 		CurrentVote:   Like,
 		TargetEventId: targetEventId,
 		FromEventId:   ev.ID,
-		NoteID:        noteId}
+		NoteID:        notesId,
+	}
 	if ev.Content == "-" {
 		vote.CurrentVote = Dislike
 	}
