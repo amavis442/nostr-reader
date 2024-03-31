@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"amavis442/nostr-reader/nostr/tag"
+
 	"github.com/lib/pq"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/nbd-wtf/go-nostr"
@@ -189,7 +191,7 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) ([]string
 			continue
 		}
 
-		etags, _, _, _, _ := st.processTags(ev)
+		etags, _, _, _, _ := tag.ProcessTags(ev, st.Pubkey)
 
 		if ev.Kind == 0 {
 			st.SaveProfile(ctx, ev)
@@ -221,60 +223,10 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) ([]string
 	return pubkeys, nil
 }
 
-type EventTree struct {
-	RootTag  string
-	ReplyTag string
-}
-
-func (st *Storage) processTags(ev *nostr.Event) (etags []string, ptags []string, hasNotification bool, isRoot bool, tree EventTree) {
-	ptags, etags = make([]string, 0), make([]string, 0)
-	isRoot = true
-
-	if len(ev.PubKey) != 64 {
-		fmt.Println("Incorrect pubkey to long max 64: ", ev.PubKey, " Content:", ev.Content)
-	}
-	ptags = ptags[:0]
-	etags = etags[:0]
-
-	tree.RootTag = ""
-	tree.ReplyTag = ""
-	hasNotification = false
-	for _, tag := range ev.Tags {
-		switch {
-		case tag[0] == "e":
-			if len(tag) < 1 || len(tag[1]) != 64 {
-				continue
-			} else {
-				etags = append(etags, tag[1])
-			}
-			if len(tag) == 4 && tag[3] == "root" {
-				tree.RootTag = tag[1]
-				isRoot = false
-			}
-			if len(tag) == 4 && tag[3] == "reply" {
-				tree.ReplyTag = tag[1]
-				isRoot = false
-			}
-		case tag[0] == "p":
-			if len(tag) < 1 || len(tag[1]) != 64 {
-				log.Println("Query:: P# tag not valid: ", tag)
-				continue
-			} else {
-				ptags = append(ptags, tag[1])
-				if tag[1] == st.Pubkey {
-					hasNotification = true
-				}
-			}
-		}
-	}
-
-	return etags, ptags, hasNotification, isRoot, tree
-}
-
 func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event) (Note, error) {
-	var tree EventTree
+	var tree tag.EventTree
 
-	etags, ptags, hasNotification, isRoot, tree := st.processTags(ev)
+	etags, ptags, hasNotification, isRoot, tree := tag.ProcessTags(ev, st.Pubkey)
 	ptagsNum := len(ptags)
 	etagsNum := len(etags)
 
