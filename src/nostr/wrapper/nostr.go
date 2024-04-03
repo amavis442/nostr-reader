@@ -168,9 +168,10 @@ func (nostrWrapper *NostrWrapper) DoReply(ctx context.Context, content string, r
 				ev.Tags = ev.Tags.AppendUnique(tag)
 			}
 		}
-
+		// For the clients that do not use the root/reply tags which is a rubbish
 		if !hasRootTag && len(replyETags) > 0 {
-			ev.Tags = ev.Tags.AppendUnique(nostr.Tag{"e", replyEv.ID, "", "root"})
+			ev.Tags = ev.Tags.AppendUnique(nostr.Tag{"e", replyETags[0][1], "", "root"})
+			hasRootTag = true
 		}
 		if hasRootTag && len(replyETags) > 0 {
 			ev.Tags = ev.Tags.AppendUnique(nostr.Tag{"e", replyEv.ID, "", "reply"})
