@@ -141,14 +141,27 @@ func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
 		then.Year(),
 		then.Month(),
 		then.Day())
-	err = st.GormDB.Exec(`DELETE FROM reactions WHERE note_id in (SELECT id fROM notes WHERE created_at < $1);`, past).Error
-	if err != nil {
-		log.Println(err.Error())
-	}
-	err = st.GormDB.Exec(`DELETE fROM notes WHERE created_at < $1;`, past).Error
-	if err != nil {
-		log.Println(err.Error())
-	}
+
+	st.GormDB.Transaction(func(tx *gorm.DB) error {
+		err = tx.Exec(`DELETE FROM reactions WHERE note_id in (SELECT id FROM notes WHERE created_at <= $1);`, past).Error
+		if err != nil {
+			log.Println(err.Error())
+			return err
+		}
+		err = tx.Exec(`DELETE FROM notifications WHERE note_id in (SELECT id FROM notes WHERE created_at <= $1);`, past).Error
+		if err != nil {
+			log.Println(err.Error())
+			return err
+		}
+		err = tx.Exec(`DELETE FROM notes WHERE created_at <= $1;`, past).Error
+		if err != nil {
+			log.Println(err.Error())
+			return err
+		}
+
+		return nil
+	})
+
 	fmt.Println("Connected to database:", cfg.Dbname)
 	return err
 }
