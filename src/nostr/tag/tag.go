@@ -53,7 +53,7 @@ func ProcessTags(ev *nostr.Event, pubkey string) (etags []string, ptags []string
 				continue
 			} else {
 				ptags = append(ptags, tag[1])
-				if tag[1] == pubkey {
+				if tag[1] == pubkey && ev.PubKey != pubkey {
 					hasNotification = true
 				}
 			}
