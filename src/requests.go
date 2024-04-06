@@ -742,16 +742,25 @@ func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
 	log.Println("Msg to publish: ", msg.Msg)
 	var postEv nostr.Event
 	if msg.Event_id == "" {
-		postEv, _ = req.Nostr.DoPost(ctx, msg.Msg)
-
+		postEv, _ = req.Nostr.DoPost(msg.Msg)
 		req.Db.SaveEvents(ctx, []*nostr.Event{&postEv})
+
+		success, err := req.Nostr.BroadCast(ctx, postEv)
+		if !success || err != nil {
+			log.Println("Post:: cannot post")
+		}
 	}
 
 	if msg.Event_id != "" {
 		replyEv, _ := req.Db.FindRawEvent(ctx, msg.Event_id)
-		postEv, _ = req.Nostr.DoReply(ctx, msg.Msg, *replyEv)
-
+		postEv, _ = req.Nostr.DoReply(msg.Msg, *replyEv)
 		req.Db.SaveEvents(ctx, []*nostr.Event{&postEv})
+
+		success, err := req.Nostr.BroadCast(ctx, postEv)
+
+		if !success || err != nil {
+			log.Println("Reply:: cannot reply")
+		}
 	}
 
 	response := &Response{}

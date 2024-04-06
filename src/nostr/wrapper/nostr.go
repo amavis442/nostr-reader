@@ -91,7 +91,10 @@ func (nostrWrapper *NostrWrapper) Do(ctx context.Context, r Relay, f func(contex
 	wg.Wait()
 }
 
-func (nostrWrapper *NostrWrapper) DoPost(ctx context.Context, content string) (nostr.Event, error) {
+/*
+ * Creates a new message
+ */
+func (nostrWrapper *NostrWrapper) DoPost(content string) (nostr.Event, error) {
 	var err error
 	ev := nostr.Event{}
 	ev.Tags = nostr.Tags{}
@@ -107,28 +110,13 @@ func (nostrWrapper *NostrWrapper) DoPost(ctx context.Context, content string) (n
 		return nostr.Event{}, err
 	}
 
-	var success atomic.Int64
-	nostrWrapper.Do(ctx, Relay{Write: true}, func(ctx context.Context, relay *nostr.Relay) bool {
-		err := relay.Publish(ctx, ev)
-		if err != nil {
-			log.Println("Post:: ", relay.URL, err)
-		} else {
-			success.Add(1)
-		}
-		log.Println("Post:: Publish to: [", relay.URL, "], Event data: ", ev)
-		return true
-	})
-
-	if success.Load() == 0 {
-		log.Println("Post:: cannot post")
-		return nostr.Event{}, errors.New("cannot post")
-	}
-	log.Println("Post:: Saving post: ", ev)
-
 	return ev, nil
 }
 
-func (nostrWrapper *NostrWrapper) DoReply(ctx context.Context, content string, replyEv nostr.Event) (nostr.Event, error) {
+/*
+ * Creates a reply message
+ */
+func (nostrWrapper *NostrWrapper) DoReply(content string, replyEv nostr.Event) (nostr.Event, error) {
 	if replyEv.ID == "" {
 		log.Println("Reply::Wrong function call. needs event_id since it is a reply")
 		return nostr.Event{}, errors.New("no reply event in call")
@@ -183,24 +171,28 @@ func (nostrWrapper *NostrWrapper) DoReply(ctx context.Context, content string, r
 		return nostr.Event{}, err
 	}
 
+	return ev, nil
+}
+
+func (nostrWrapper *NostrWrapper) BroadCast(ctx context.Context, ev nostr.Event) (bool, error) {
 	var success atomic.Int64
 	nostrWrapper.Do(ctx, Relay{Write: true}, func(ctx context.Context, relay *nostr.Relay) bool {
 		err := relay.Publish(ctx, ev)
 		if err != nil {
-			log.Println("Reply:: ", relay.URL, err)
+			log.Println("broadcast:: ", relay.URL, err)
 		} else {
 			success.Add(1)
 		}
-		log.Println("Reply:: publish to: [", relay.URL, "], Event data: ", ev)
+		log.Println("broadcast to: [", relay.URL, "], event data: ", ev)
 		return true
 	})
 
 	if success.Load() == 0 {
-		log.Println("Reply:: cannot reply")
-		return nostr.Event{}, errors.New("cannot reply")
+		log.Println("cannot broadcast")
+		return false, errors.New("cannot Broadcast")
 	}
 
-	return ev, nil
+	return true, nil
 }
 
 /**
