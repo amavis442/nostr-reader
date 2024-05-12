@@ -386,6 +386,9 @@ func (st *Storage) GetNewNotesCount(ctx context.Context, maxId int, options Opti
 
 	if options.Follow {
 		tx.Joins("JOIN follows ON (follows.pubkey = notes.pubkey)")
+	} else {
+		tx.Joins("LEFT JOIN follows ON (follows.pubkey = notes.pubkey)")
+		tx.Where("follows.pubkey is null")
 	}
 
 	if options.BookMark {
@@ -454,6 +457,7 @@ func (st *Storage) GetPagination(ctx context.Context, p *Pagination, options Opt
 		tx.Joins("JOIN follows ON (follows.pubkey = notes.pubkey)")
 	} else {
 		tx.Joins("LEFT JOIN follows ON (follows.pubkey = notes.pubkey)")
+		tx.Where("follows.pubkey is null")
 	}
 
 	if options.BookMark {
