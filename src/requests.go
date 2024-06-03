@@ -48,6 +48,7 @@ type Page struct {
 	Maxid   int
 	Renew   bool
 	Context string
+	Ids     []string
 }
 
 type Response struct {
@@ -90,7 +91,13 @@ func (req *Requests) GetNotes(w http.ResponseWriter, r *http.Request) {
 	pagination.SetRenew(p.Renew)
 	pagination.SetMaxId(p.Maxid)
 
-	err = req.Db.GetPagination(ctx, &pagination, database.Options{Follow: false, BookMark: false})
+	if p.Context == "page.refesh" {
+		err = req.Db.GetPaginationRefeshPage(ctx, &pagination, &p.Ids, database.Options{Follow: false, BookMark: false})
+		log.Println(p.Context)
+	}
+	if p.Context == "" {
+		err = req.Db.GetPagination(ctx, &pagination, database.Options{Follow: false, BookMark: false})
+	}
 
 	if err != nil {
 		log.Println(err)
@@ -338,7 +345,15 @@ func (req *Requests) GetFollowedNotes(w http.ResponseWriter, r *http.Request) {
 	pagination.SetSince(p.Since)
 	pagination.SetRenew(p.Renew)
 	pagination.SetMaxId(p.Maxid)
-	err = req.Db.GetPagination(ctx, &pagination, database.Options{Follow: true, BookMark: false})
+
+	if p.Context == "page.refresh" {
+		log.Println("Context us ")
+		err = req.Db.GetPaginationRefeshPage(ctx, &pagination, &p.Ids, database.Options{Follow: true, BookMark: false})
+	}
+
+	if p.Context == "follow" || p.Context == "" {
+		err = req.Db.GetPagination(ctx, &pagination, database.Options{Follow: true, BookMark: false})
+	}
 
 	if err != nil {
 		log.Println(err)

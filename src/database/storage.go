@@ -510,6 +510,77 @@ func (st *Storage) GetPagination(ctx context.Context, p *Pagination, options Opt
 	return nil
 }
 
+/**
+ * Do not show all data in an endless scrol page, but paginate it for easy access
+ * and ignore the garbage tagged posts
+ *
+ */
+func (st *Storage) GetPaginationRefeshPage(ctx context.Context, p *Pagination, ids *[]string, options Options) error {
+	eventIds := ""
+	for _, id := range *ids {
+		eventIds = eventIds + `'` + id + `',`
+	}
+	eventIds = eventIds[:len(eventIds)-1]
+
+	tx := st.GormDB.Debug().Table("notes").
+		Select(`notes.id, notes.event_id, notes.pubkey, notes.kind, notes.event_created_at, 
+		notes.content, notes.tags_full::json, notes.sig, notes.etags, notes.ptags,
+		profiles.name, profiles.about , profiles.picture,
+		profiles.website, profiles.nip05, profiles.lud16, profiles.display_name, 
+		follows.pubkey follow, bookmarks.event_id bookmarked`).
+		Joins("LEFT JOIN profiles ON (profiles.pubkey = notes.pubkey)").
+		Joins("LEFT JOIN blocks  on (blocks.pubkey = notes.pubkey)").
+		//Joins("LEFT JOIN seens on (seens.event_id = notes.event_id)").
+		Where("notes.kind = 1").
+		Where("notes.root = true").
+		Where("blocks.pubkey IS NULL").
+		//Where("seens.event_id IS NULL").
+		Where("notes.garbage = false").
+		Where("notes.event_id IN (" + eventIds + ")")
+
+	if options.Follow {
+		tx.Joins("JOIN follows ON (follows.pubkey = notes.pubkey)")
+	} else {
+		tx.Joins("LEFT JOIN follows ON (follows.pubkey = notes.pubkey)")
+		tx.Where("follows.pubkey is null")
+	}
+
+	if options.BookMark {
+		tx.Joins("JOIN bookmarks ON (bookmarks.event_id = notes.event_id)")
+	} else {
+		tx.Joins("LEFT JOIN bookmarks ON (bookmarks.event_id = notes.event_id)")
+	}
+
+	var count int64
+	tx.Count(&count)
+
+	tx.Limit(p.Limit)
+	if p.Offset > 0 {
+		tx.Offset(int(p.Offset))
+	}
+
+	tx.Order("notes.event_created_at DESC")
+	rows, err := tx.Rows()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
+	p.SetTotal(count)
+	p.SetTo()
+	eventMap, keys, _, _ := st.procesEventRows(rows, p)
+	st.getChildren(ctx, eventMap)
+
+	events := make([]Event, 0)
+	// Make sure the order stays the same
+	for _, k := range keys {
+		events = append(events, eventMap[k])
+	}
+
+	p.Data = events
+	return nil
+}
+
 func (st *Storage) procesEventRows(rows *sql.Rows, p *Pagination) (map[string]Event, []string, map[int64]string, error) {
 	eventMap := make(map[string]Event)
 	var keys []string
