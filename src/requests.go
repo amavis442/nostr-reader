@@ -93,9 +93,8 @@ func (req *Requests) GetNotes(w http.ResponseWriter, r *http.Request) {
 
 	if p.Context == "page.refesh" {
 		err = req.Db.GetPaginationRefeshPage(ctx, &pagination, &p.Ids, database.Options{Follow: false, BookMark: false})
-		log.Println(p.Context)
 	}
-	if p.Context == "" {
+	if p.Context != "page.refresh" {
 		err = req.Db.GetPagination(ctx, &pagination, database.Options{Follow: false, BookMark: false})
 	}
 
