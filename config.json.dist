@@ -1,0 +1,40 @@
+{
+    "database": {
+        "user" : "",
+        "password": "",
+        "dbname": "",
+        "port": 5432,
+        "host": "localhost",
+        "retention": 14
+    },
+    "server": {
+        "port": 8080,
+		"frontend": "./dist"
+    },
+    "env": "prod",
+    "relays": {
+        "wss://nostr.anchel.nl": {
+            "read": true,
+            "write": true,
+            "search": true
+        }, 
+        "wss://relay.plebstr.com": {
+            "read": true,
+            "write": true,
+            "search": true
+        }, 
+        "wss://relay.nostr.vet": {
+            "read": true,
+            "write": true,
+            "search": true
+        }, 
+        "wss://nostrue.com": {
+            "read": true,
+            "write": true,
+            "search": true
+        }
+    },
+	"privatekey": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "nip05": "https://nostrcheck.me/",
+    "filter": [] 
+}

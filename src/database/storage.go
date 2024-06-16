@@ -37,11 +37,12 @@ type Storage struct {
 }
 
 type DbConfig struct {
-	User     string
-	Password string
-	Dbname   string
-	Port     int
-	Host     string
+	User      string
+	Password  string
+	Dbname    string
+	Port      int
+	Host      string
+	Retention int
 }
 
 type UserProfile struct {
@@ -135,8 +136,8 @@ func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
 	st.GormDB.Exec(`DROP TRIGGER IF EXISTS delete_trigger ON notes;`)
 	st.GormDB.Exec(`CREATE TRIGGER delete_trigger BEFORE INSERT ON notes FOR EACH ROW EXECUTE FUNCTION delete_submission();`)
 
-	log.Println("Cleaning history greater then 7 days")
-	then := time.Now().AddDate(0, 0, -7)
+	log.Printf(`Cleaning history older then %d days`, cfg.Retention)
+	then := time.Now().AddDate(0, 0, -1*cfg.Retention)
 	past := fmt.Sprintf("%d-%d-%d 00:00:00\n",
 		then.Year(),
 		then.Month(),
