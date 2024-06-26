@@ -555,11 +555,6 @@ func (st *Storage) GetPaginationRefeshPage(ctx context.Context, p *Pagination, i
 	var count int64
 	tx.Count(&count)
 
-	tx.Limit(p.Limit)
-	if p.Offset > 0 {
-		tx.Offset(int(p.Offset))
-	}
-
 	tx.Order("notes.event_created_at DESC")
 	rows, err := tx.Rows()
 	if err != nil {

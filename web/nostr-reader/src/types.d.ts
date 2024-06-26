@@ -6,6 +6,7 @@ export type Page = {
 	renew: boolean
 	context?: string | null
 	ids?: array|null
+	total?: number|null
 }
 
 export interface IRefreshView {

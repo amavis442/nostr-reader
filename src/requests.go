@@ -49,6 +49,7 @@ type Page struct {
 	Renew   bool
 	Context string
 	Ids     []string
+	Total   int
 }
 
 type Response struct {
@@ -348,6 +349,7 @@ func (req *Requests) GetFollowedNotes(w http.ResponseWriter, r *http.Request) {
 	if p.Context == "page.refresh" {
 		log.Println("Context us ")
 		err = req.Db.GetPaginationRefeshPage(ctx, &pagination, &p.Ids, database.Options{Follow: true, BookMark: false})
+		pagination.SetTotal(int64(p.Total))
 	}
 
 	if p.Context == "follow" || p.Context == "" {

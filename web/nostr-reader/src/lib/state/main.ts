@@ -295,7 +295,8 @@ export async function syncNote() {
 		renew: false,
 		maxid: paginatorData.maxid,
 		context: "page.refresh",
-		ids: ids
+		ids: ids,
+		total: paginatorData.total
 	})
 }
 
