@@ -78,7 +78,24 @@
 		)
 	}
 
-	let borderColor = 'border-indigo-' + (note.tree * 100 + 400)
+	// For tailwind to recognise all the colors to include
+	let borderColor = 'border-blue-100'
+	switch (note.tree) {
+		case 0:
+			borderColor = 'border-blue-200'
+			break
+		case 1:
+			borderColor = 'border-blue-300'
+			break
+		case 2:
+			borderColor = 'border-blue-400'
+			break
+		case 3:
+			borderColor = 'border-blue-500'
+			break
+		default:
+			borderColor = 'border-blue-100'
+	}
 
 	function align() {
 		if (note.tree == 0) return ''
@@ -107,7 +124,7 @@
 	<li>
 		<div class="flex flex-col items-top p-2 w-full overflow-hidden mb-2">
 			<div
-				class="flex flex-col overflow-y-auto bg-white rounded-lg p-1 {firstBlock()} {$$props[
+				class="flex flex-col overflow-y-auto bg-slate-600 rounded-lg p-1 {firstBlock()} {$$props[
 					'class'
 				]
 					? $$props['class']
@@ -115,9 +132,14 @@
 			>
 				<div
 					id={note.id}
-					class="flex flex-row w-full min-h-full {align()} items-top gap-2 mb-2 overflow-y-auto bg-white rounded-lg p-1 {childBlock()}"
+					class="flex w-full min-h-full {align()} items-top gap-2 mb-2 overflow-y-auto bg-slate-200 rounded-lg p-1 {childBlock()}"
 				>
-					<div on:keyup={() => console.log('keyup')} class="w-16 mr-2" tabindex="0" role="button">
+					<div
+						on:keyup={() => console.log('keyup')}
+						class="w-16 mr-2 max-w-min min-w-fit"
+						tabindex="0"
+						role="button"
+					>
 						<img
 							class="w-14 h-14 rounded-full {followed ? 'border-2 border-green-800' : ''}"
 							src={note.profile.picture != '' ? note.profile.picture : placeholder}
@@ -126,84 +148,74 @@
 						/>
 					</div>
 
-					<div class="flex-col w-full">
+					<div class="flex flex-col w-full">
 						<div class="px-2">
-							<div class="h-12">
-								<div class="flex gap-2 h-12 w-full">
-									<div class="text-left order-first w-6/12">
-										<strong class="text-black text-sm font-medium">
-											<span title={note.event.pubkey}>{normalizeName(note.profile)}</span>
-											{#if followed}
-												<i class="fa-solid fa-bookmark" />
-											{/if}
-											<small class="text-gray"
-												>{new Date(note.event.created_at * 1000).toLocaleString('nl-NL')}</small
-											>
-										</strong>
-									</div>
+							<div class="flex gap-2 h-14 w-full py-2 border-b border-gray-400">
+								<div class="text-left order-first w-6/12">
+									<strong class="text-black text-sm font-medium">
+										<span title={note.event.pubkey}>{normalizeName(note.profile)}</span>
+										{#if followed}
+											<i class="fa-solid fa-bookmark" />
+										{/if}
+										<small class="text-gray"
+											>{new Date(note.event.created_at * 1000).toLocaleString('nl-NL')}</small
+										>
+									</strong>
+								</div>
 
-									<div class="text-right order-last md:w-6/12">
-										<span class="text-right">
-											<div class="flex flex-row gap-1 content-normal justify-end">
-												<div>
-													{#if followed}
-														<button
-															on:click={unfollowUser(note.event.pubkey)}
-															title="unfollow"
-															class="p-1"><Icon src={FaSolidUserMinus} size="24" /></button
-														>
-													{:else}
-														<button
-															on:click={followUser(note.event.pubkey)}
-															title="follow"
-															class="p-1"><Icon src={FaSolidUserPlus} size="24" /></button
-														>
-													{/if}
-												</div>
-
-												<div>
-													{#if bookmarked}
-														<button
-															on:click={removeBookmark(note.event.id)}
-															title="remove bookmark"
-															class="p-1"><Icon src={FaSolidBookmark} size="24" /></button
-														>
-													{:else}
-														<button
-															on:click={addBookmark(note.event.id)}
-															title="add bookmark"
-															class="p-1"><Icon src={FaBookmark} size="24" /></button
-														>
-													{/if}
-												</div>
-
-												<div>
-													<button on:click={reply(note)} title="reply" class="p-1"
-														><Icon src={FaCommentDots} size="24" /></button
+								<div class="text-right order-last md:w-6/12">
+									<div class="text-right">
+										<div class="flex content-normal justify-end">
+											<div>
+												{#if followed}
+													<button on:click={unfollowUser(note.event.pubkey)} title="unfollow"
+														><Icon src={FaSolidUserMinus} size="24" color="white" /></button
 													>
-												</div>
-												<div>
-													<button on:click={info(note)} title="info" class="p-1"
-														><Icon src={FaSolidInfoCircle} size="24" /></button
+												{:else}
+													<button on:click={followUser(note.event.pubkey)} title="follow"
+														><Icon src={FaSolidUserPlus} size="24" color="white" /></button
 													>
-												</div>
-												<div>
-													<button on:click={syncnote(note)} title="sync note" class="p-1"
-														><Icon src={FaSolidSync} size="24" /></button
-													>
-												</div>
-												<div>
-													<button on:click={blockUser(note.event.pubkey)} class="p-1" title="block"
-														><Icon src={FaSolidBan} size="24" /></button
-													>
-												</div>
-												<div>
-													<button on:click={gotoTopOfPage(note)} class="p-1" title="block"
-														><Icon src={FaSolidLongArrowAltUp} size="24" /></button
-													>
-												</div>
+												{/if}
 											</div>
-										</span>
+
+											<div>
+												{#if bookmarked}
+													<button on:click={removeBookmark(note.event.id)} title="remove bookmark"
+														><Icon src={FaSolidBookmark} size="24" color="white" /></button
+													>
+												{:else}
+													<button on:click={addBookmark(note.event.id)} title="add bookmark"
+														><Icon src={FaBookmark} size="24" color="white" /></button
+													>
+												{/if}
+											</div>
+
+											<div>
+												<button on:click={reply(note)} title="reply"
+													><Icon src={FaCommentDots} size="24" color="white" /></button
+												>
+											</div>
+											<div>
+												<button on:click={info(note)} title="info"
+													><Icon src={FaSolidInfoCircle} size="24" color="white" /></button
+												>
+											</div>
+											<div>
+												<button on:click={syncnote(note)} title="sync note"
+													><Icon src={FaSolidSync} size="24" color="white" /></button
+												>
+											</div>
+											<div>
+												<button on:click={blockUser(note.event.pubkey)} title="block"
+													><Icon src={FaSolidBan} size="24" color="white" /></button
+												>
+											</div>
+											<div>
+												<button on:click={gotoTopOfPage(note)} title="block"
+													><Icon src={FaSolidLongArrowAltUp} size="24" color="white" /></button
+												>
+											</div>
+										</div>
 									</div>
 								</div>
 							</div>
@@ -236,9 +248,9 @@
 				{#if repliesExpanded}
 					{#if note.children && Object.keys(note.children).length > 0}
 						<ul>
-							{#each Object.values(note.children) as note (note.id)}
+							{#each Object.values(note.children) as note (note.event.id)}
 								<li>
-									<!--on:banUser is required here so that the event is forwarded-->
+									<!--on:blockUser is required here so that the event is forwarded-->
 									<!--https://dev.to/mohamadharith/workaround-for-bubbling-custom-events-in-svelte-3khk-->
 									<svelte:self
 										{note}
@@ -291,6 +303,30 @@
 	}
 
 	button {
-		@apply p-1 bg-slate-400 rounded ml-1 mr-1 text-white;
+		@apply p-1 bg-blue-600 hover:bg-blue-700 rounded ml-1 mr-1 text-white;
+	}
+
+	include-color-blue-100 {
+		@apply border-blue-100;
+	}
+
+	include-color-blue-200 {
+		@apply border-blue-200;
+	}
+
+	include-color-blue-300 {
+		@apply border-blue-300;
+	}
+
+	include-color-blue-400 {
+		@apply border-blue-400;
+	}
+
+	include-color-blue-500 {
+		@apply border-blue-500;
+	}
+
+	include-color-blue-600 {
+		@apply border-blue-600;
 	}
 </style>
