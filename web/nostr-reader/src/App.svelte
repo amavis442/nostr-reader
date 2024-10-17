@@ -19,8 +19,8 @@
 
 <Router url="{url}">
   <div class="flex justify-center">
-    <header
-      class="mt-6 items-center pl-4 border-gray-600 border-b space-y-3 pb-5 xl:w-2/12 md:w-3/12 sm:w-full"
+    <div
+      class="flex flex-col pt-6 items-center pl-4 space-y-3 pb-5 xl:w-1/12 md:w-3/12 sm:w-full"
     >
       <nav>
         <p class="nav-p">
@@ -62,7 +62,7 @@
           </Link>
         </p>
       </nav>
-    </header>
+    </div>
 
     <main class="xl:w-6/12 md:w-9/12 sm:w-full overflow-y-auto">
       <Route path="/" component="{Followed}" />

@@ -1,19 +1,9 @@
 @tailwind base;
-@layer base {
-  html {
-    @apply text-neutral-800;
-  }
-  html.dark {
-    @apply text-neutral-50;
-    @apply bg-neutral-800;
-  }
-}
-
 @tailwind components;
 @tailwind utilities;
 
 #root {
-  @apply  w-screen h-screen bg-gray-800;
+  @apply w-screen h-screen bg-gray-600;
 }
 
 .dropdown-menu {
@@ -21,7 +11,7 @@
   origin-top-right
   bg-white dark:bg-gray-700 text-gray-700 
   dark:text-gray-200 rounded border-gray-100 dark:border-gray-700 
-  shadow-md z-10 outline-none divide-y divide-solid z-50
+  shadow-md z-20 outline-none divide-y divide-solid
   space-y-1;
 }
 
@@ -31,7 +21,7 @@
 }
 
 .nav-p {
-  @apply px-6 py-2.5 bg-blue-600 text-white font-medium text-xs
+  @apply px-6 py-2.5 bg-blue-600 text-white font-medium font-sans text-xs text-center
   leading-tight uppercase rounded shadow-md hover:bg-blue-700
   hover:shadow-lg focus:bg-blue-700 focus:shadow-lg focus:outline-none
   focus:ring-0 active:bg-blue-800 active:shadow-lg transition duration-150
