@@ -281,13 +281,13 @@ export async function publish(msg: string, note: Note | null) {
 export async function syncNote() {
 	const paginatorData = get(paginator)
 	const currentPageData = get(pageData)
-	let ids:Array<string> = [];
+	let ids: Array<string> = [];
 
 	currentPageData.forEach((note) => {
 		ids.push(note.event.id)
 	})
 	//JSON.stringify(ids)
-		
+
 	await refreshView({
 		page: paginatorData.current_page,
 		limit: paginatorData.limit,
