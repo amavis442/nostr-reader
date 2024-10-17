@@ -4,6 +4,7 @@ import (
 	"amavis442/nostr-reader/database"
 	"amavis442/nostr-reader/nostr/wrapper"
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"mime"
@@ -12,6 +13,22 @@ import (
 	"sync"
 	"time"
 )
+
+func CORS(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Access-Control-Allow-Origin", "*")
+		w.Header().Add("Access-Control-Allow-Credentials", "true")
+		w.Header().Add("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		w.Header().Add("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+
+		if r.Method == "OPTIONS" {
+			http.Error(w, "No Content", http.StatusNoContent)
+			return
+		}
+
+		next(w, r)
+	}
+}
 
 /**
  * Main app
@@ -22,6 +39,27 @@ import (
  * Process all the http calls
  */
 func main() {
+	devMode := false
+
+	modePtr := flag.String("mode", "prod", "Production or development? Valid options are prod or dev")
+	helpPtr := flag.Bool("h", false, "Show help dialog")
+
+	flag.Parse()
+
+	if *modePtr == "dev" {
+		devMode = true
+	}
+	if *modePtr != "dev" && *modePtr != "prod" {
+		fmt.Println("Unkown mode: ", *modePtr, ". See -mode for valid modes")
+		return
+	}
+	if *helpPtr {
+		fmt.Println("Use -mode=dev when working on frontend. It still does the same thing as in production")
+		return
+	}
+
+	fmt.Println("Mode is: ", *modePtr)
+
 	cfg, err := LoadConfig()
 	if err != nil {
 		log.Println(err.Error())
@@ -61,59 +99,61 @@ func main() {
 	 * Get events that already are stored in the database
 	 * This will not SYNC the local database with that of the relays.
 	 */
-	mux.HandleFunc("/api/getnotes", req.GetNotes)
-	mux.HandleFunc("/api/getinbox", req.GetInbox)
+	mux.HandleFunc("/api/getnotes", CORS(req.GetNotes))
+	mux.HandleFunc("/api/getinbox", CORS(req.GetInbox))
 
-	mux.HandleFunc("/api/getnewnotescount", req.GetNewNotesCount)
+	mux.HandleFunc("/api/getnewnotescount", CORS(req.GetNewNotesCount))
 
-	mux.HandleFunc("/api/getlastseenid", req.GetLastSeenID)
+	mux.HandleFunc("/api/getlastseenid", CORS(req.GetLastSeenID))
 
 	/**
 	 * Put a user on the naughty list
 	 */
-	mux.HandleFunc("/api/blockuser", req.BlockUser)
+	mux.HandleFunc("/api/blockuser", CORS(req.BlockUser))
 
 	/**
 	 * Put a user on the follow list
 	 * This is all local and will not send an event for followlist
 	 */
-	mux.HandleFunc("/api/followuser", req.Follow)
-	mux.HandleFunc("/api/unfollowuser", req.Unfollow)
-	mux.HandleFunc("/api/getfollownotes", req.GetFollowedNotes)
-	mux.HandleFunc("/api/getfollowed", req.GetFollowedProfiles)
+	mux.HandleFunc("/api/followuser", CORS(req.Follow))
+	mux.HandleFunc("/api/unfollowuser", CORS(req.Unfollow))
+	mux.HandleFunc("/api/getfollownotes", CORS(req.GetFollowedNotes))
+	mux.HandleFunc("/api/getfollowed", CORS(req.GetFollowedProfiles))
 
 	/**
 	 * Bookmark events you want to keep track of
 	 */
-	mux.HandleFunc("/api/bookmark", req.AddBookMark)
-	mux.HandleFunc("/api/removebookmark", req.RemoveBookMark)
-	mux.HandleFunc("/api/getbookmarked", req.GetBookMarked)
+	mux.HandleFunc("/api/bookmark", CORS(req.AddBookMark))
+	mux.HandleFunc("/api/removebookmark", CORS(req.RemoveBookMark))
+	mux.HandleFunc("/api/getbookmarked", CORS(req.GetBookMarked))
 
 	/**
 	* Relay settings
 	 */
-	mux.HandleFunc("/api/addrelay", req.AddRelay)
-	mux.HandleFunc("/api/removerelay", req.RemoveRelay)
-	mux.HandleFunc("/api/getrelays", req.GetRelays)
+	mux.HandleFunc("/api/addrelay", CORS(req.AddRelay))
+	mux.HandleFunc("/api/removerelay", CORS(req.RemoveRelay))
+	mux.HandleFunc("/api/getrelays", CORS(req.GetRelays))
 
 	/**
 	 * Sometimes it is nice to see pictures in the post and not just a link
 	 */
-	mux.HandleFunc("/api/preview/link", req.PreviewLink)
+	mux.HandleFunc("/api/preview/link", CORS(req.PreviewLink))
 
 	/**
 	 * Sometimes it is nice to see pictures in the post and not just a link
 	 */
-	mux.HandleFunc("/api/publish", req.Publish)
+	mux.HandleFunc("/api/publish", CORS(req.Publish))
 
 	/**
 	 * Use meta data set and get
 	 */
-	mux.HandleFunc("/api/getmetadata", req.GetMetaData)
-	mux.HandleFunc("/api/setmetadata", req.SetMetaData)
-	mux.HandleFunc("/api/getprofile", req.GetProfile)
+	mux.HandleFunc("/api/getmetadata", CORS(req.GetMetaData))
+	mux.HandleFunc("/api/setmetadata", CORS(req.SetMetaData))
+	mux.HandleFunc("/api/getprofile", CORS(req.GetProfile))
 
-	mux.Handle("/", http.FileServer(http.Dir(cfg.Server.Frontend)))
+	if cfg.Env == "prod" {
+		mux.Handle("/", http.FileServer(http.Dir(cfg.Server.Frontend)))
+	}
 
 	if !(cfg.Server.Interval > 0) {
 		log.Println("Please set the interval in minutes in config.json")
@@ -145,6 +185,9 @@ func main() {
 	}
 
 	fmt.Println("Server running: http://localhost:" + port)
+	if devMode {
+		fmt.Println("Running in dev mode, so no frontend.")
+	}
 	err = http.ListenAndServe(":"+port, mux)
 	if err != nil {
 		log.Println("Could not start http server on this port: " + port)
