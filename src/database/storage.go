@@ -827,7 +827,7 @@ func (st *Storage) getChildren(ctx context.Context, eventMap map[string]Event) e
 
 			if reply_event_id.Valid {
 				if reply_event_id.String == "" {
-					childEvent.Tree = 2
+					childEvent.Tree = 1
 					childEvent.Children = make(map[string]*Event, 0)
 					item.Children[childEvent.Event.ID] = &childEvent
 					//eventMap[root_event_id] = item
