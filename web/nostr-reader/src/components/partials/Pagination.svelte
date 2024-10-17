@@ -42,8 +42,8 @@
           on:click={() => changePage(page)}
           class="mx-1 flex h-9 w-9 items-center justify-center rounded-full {page ===
           $paginator.current_page
-            ? 'bg-gradient-to-tr from-pink-600 to-pink-400 p-0 text-sm text-white shadow-md shadow-pink-500/20 transition duration-150 ease-in-out'
-            : 'border border-blue-gray-100 bg-transparent p-0 text-sm text-blue-gray-500 transition duration-150 ease-in-out hover:bg-light-300'}"
+            ? 'bg-blue-600 hover:bg-blue-700 p-0 text-sm text-white shadow-md'
+            : 'border border-blue-100 bg-transparent p-0 text-sm text-blue-gray-500 transition duration-150 ease-in-out hover:bg-light-300'}"
           >{page}</a
         >
       </li>

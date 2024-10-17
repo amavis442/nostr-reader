@@ -1,9 +1,10 @@
 import defaultTheme from 'tailwindcss/defaultTheme';
-
+import colors from 'tailwindcss/colors'
 
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
+    './index.html',
     './src/**/*.{html,js,svelte,ts}'
   ],
   theme: {
@@ -27,7 +28,7 @@ export default {
       '20/80': '20% 80%',
       '20/40/20': '20% 60% 20%',
       'fixed': '40px 260px',
-    }
+    }, 
   },
   plugins: [],
 }
