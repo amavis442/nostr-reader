@@ -12,29 +12,9 @@
 		"frontend": "./dist"
     },
     "env": "prod",
-    "relays": {
-        "wss://nostr.anchel.nl": {
-            "read": true,
-            "write": true,
-            "search": true
-        }, 
-        "wss://relay.plebstr.com": {
-            "read": true,
-            "write": true,
-            "search": true
-        }, 
-        "wss://relay.nostr.vet": {
-            "read": true,
-            "write": true,
-            "search": true
-        }, 
-        "wss://nostrue.com": {
-            "read": true,
-            "write": true,
-            "search": true
-        }
-    },
-	"privatekey": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-    "nip05": "https://nostrcheck.me/",
+   	"nostr": {
+        "privatekey": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+        "nip05": "https://nostrcheck.me/"
+    }
     "filter": [] 
 }

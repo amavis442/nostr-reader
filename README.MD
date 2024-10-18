@@ -60,15 +60,10 @@ Minimal configuration. Need to be at ~/.config/nostr-reader/config.json or in <U
       "port": 8080,
       "frontend": "../web/nostr-reader/dist"
   },
-  "relays": {
-   "wss://relay.nostrcheck.me": {
-            "read": true,
-            "write": true,
-            "search": true
-    }
-  },
-  "privatekey": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-  "nip05": "https://nostrcheck.me/",
+  "nostr": {
+    "privatekey": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "nip05": "https://nostrcheck.me/"
+  }
 }
 
 ```
