@@ -5,9 +5,25 @@ import (
 	"time"
 
 	"github.com/lib/pq"
+	"github.com/nbd-wtf/go-nostr"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
+
+type Event struct {
+	Event    *nostr.Event      `json:"event"`
+	Profile  Profile           `json:"profile"`
+	Etags    []string          `json:"-"`
+	Ptags    []string          `json:"-"`
+	Garbage  bool              `json:"gargabe"`
+	Children map[string]*Event `json:"children"`
+	Tree     int64             `json:"tree"`
+	RootId   string            `json:"-"`
+	Bookmark bool              `json:"bookmark"`
+	Content  string            `json:"content"`
+	Refs     Refs              `json:"refs"`
+	Urls     []string          `json:"-"`
+}
 
 type Relay struct {
 	ID        uint      `json:"-"`
@@ -63,23 +79,31 @@ func (entity *Notification) BeforeUpdate(tx *gorm.DB) error {
 }
 
 type Profile struct {
-	ID          uint      `json:"-"`
-	Pubkey      string    `gorm:"index,type:btree;not null;unique;type:varchar(100)" json:"pubkey"`
-	Name        string    `json:"name"`
-	About       string    `json:"about"`
-	Picture     string    `json:"picture"`
-	Website     string    `json:"website"`
-	Nip05       string    `json:"nip05"`
-	Lud16       string    `json:"lud16"`
-	DisplayName string    `json:"display_name"`
-	Raw         string    `json:"-"`
-	CreatedAt   time.Time `gorm:"default:current_timestamp" json:"-"`
-	UpdatedAt   time.Time `gorm:"default:null" json:"-"`
+	ID          uint           `json:"-"`
+	Pubkey      string         `gorm:"index,type:btree;not null;unique;type:varchar(100)" json:"pubkey"`
+	Name        string         `gorm:"type:varchar(255)" json:"name"`
+	About       string         `gorm:"type:text" json:"about"`
+	Picture     string         `gorm:"type:varchar(255)" json:"picture"`
+	Website     string         `gorm:"type:varchar(255)" json:"website"`
+	Nip05       string         `gorm:"type:varchar(255)" json:"nip05"`
+	Lud16       string         `gorm:"type:varchar(255)" json:"lud16"`
+	DisplayName string         `gorm:"type:varchar(255)" json:"display_name"`
+	Raw         datatypes.JSON `json:"-"`
+	Url         string         `gorm:"type:varchar(255)" json:"url"`
+	CreatedAt   time.Time      `gorm:"default:current_timestamp" json:"-"`
+	UpdatedAt   time.Time      `gorm:"default:null" json:"-"`
+	Followed    bool           `gorm:"type:bool;default:false" json:"followed"`
+	Blocked     bool           `gorm:"type:bool;default:false" json:"blocked"`
 }
 
 func (entity *Profile) BeforeUpdate(tx *gorm.DB) error {
 	entity.UpdatedAt = time.Now()
 	return nil
+}
+
+type Refs struct {
+	Event   map[string]*nostr.Event `json:"event"`
+	Profile map[string]*Profile     `json:"profile"`
 }
 
 type Block struct {

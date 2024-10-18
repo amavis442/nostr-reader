@@ -82,20 +82,21 @@ func (wrapper *Wrapper) Do(ctx context.Context, r Relay, f func(context.Context,
 /*
  * Creates a new message
  */
-func (wrapper *Wrapper) DoPost(content string) (nostr.Event, error) {
+func (wrapper *Wrapper) DoPost(content string) (Event, error) {
 	var err error
-	ev := nostr.Event{}
-	ev.Tags = nostr.Tags{}
-	ev.PubKey, err = nostr.GetPublicKey(wrapper.Cfg.PrivateKey)
+	ev := Event{}
+	ev.Event = &nostr.Event{}
+	ev.Event.Tags = nostr.Tags{}
+	ev.Event.PubKey, err = nostr.GetPublicKey(wrapper.Cfg.PrivateKey)
 	if err != nil {
-		return nostr.Event{}, err
+		return Event{}, err
 	}
-	ev.CreatedAt = nostr.Now()
-	ev.Kind = nostr.KindTextNote
-	ev.Content = content
+	ev.Event.CreatedAt = nostr.Now()
+	ev.Event.Kind = nostr.KindTextNote
+	ev.Event.Content = content
 
-	if err := ev.Sign(wrapper.Cfg.PrivateKey); err != nil {
-		return nostr.Event{}, err
+	if err := ev.Event.Sign(wrapper.Cfg.PrivateKey); err != nil {
+		return Event{}, err
 	}
 
 	return ev, nil
@@ -104,74 +105,75 @@ func (wrapper *Wrapper) DoPost(content string) (nostr.Event, error) {
 /*
  * Creates a reply message
  */
-func (wrapper *Wrapper) DoReply(content string, replyEv nostr.Event) (nostr.Event, error) {
-	if replyEv.ID == "" {
+func (wrapper *Wrapper) DoReply(content string, replyEv Event) (Event, error) {
+	if replyEv.Event.ID == "" {
 		log.Println("Reply::Wrong function call. needs event_id since it is a reply")
-		return nostr.Event{}, errors.New("no reply event in call")
+		return Event{}, errors.New("no reply event in call")
 	}
 	var err error
-	ev := nostr.Event{}
-	ev.Tags = nostr.Tags{}
-	replyETags := replyEv.Tags.GetAll([]string{"e"})
+	ev := Event{}
+	ev.Event = &nostr.Event{}
+	ev.Event.Tags = nostr.Tags{}
+	replyETags := replyEv.Event.Tags.GetAll([]string{"e"})
 
-	ev.PubKey, err = nostr.GetPublicKey(wrapper.Cfg.PrivateKey)
+	ev.Event.PubKey, err = nostr.GetPublicKey(wrapper.Cfg.PrivateKey)
 	if err != nil {
-		return nostr.Event{}, err
+		return Event{}, err
 	}
-	ev.CreatedAt = nostr.Now()
-	ev.Kind = nostr.KindTextNote
-	ev.Content = content
+	ev.Event.CreatedAt = nostr.Now()
+	ev.Event.Kind = nostr.KindTextNote
+	ev.Event.Content = content
 
 	var hasRootTag bool = false
 
 	// We reply to the root of the Thread
 	if len(replyETags) == 0 {
-		ev.Tags = ev.Tags.AppendUnique(nostr.Tag{"e", replyEv.ID, "", "root"})
-		ev.Tags = ev.Tags.AppendUnique(nostr.Tag{"p", replyEv.PubKey})
+		ev.Event.Tags = ev.Event.Tags.AppendUnique(nostr.Tag{"e", replyEv.Event.ID, "", "root"})
+		ev.Event.Tags = ev.Event.Tags.AppendUnique(nostr.Tag{"p", replyEv.Event.PubKey})
 	}
 
 	// We reply to a reply which should have tags
-	if len(replyEv.Tags) > 0 {
-		for _, tag := range replyEv.Tags {
+	if len(replyEv.Event.Tags) > 0 {
+		for _, tag := range replyEv.Event.Tags {
 			if tag[0] == "e" && len(tag) > 2 {
 				if tag[3] == "root" {
-					ev.Tags = ev.Tags.AppendUnique(nostr.Tag{tag[0], tag[1], tag[2], "root"})
+					ev.Event.Tags = ev.Event.Tags.AppendUnique(nostr.Tag{tag[0], tag[1], tag[2], "root"})
 					hasRootTag = true
 				}
 			}
 
 			if tag[0] == "p" {
-				ev.Tags = ev.Tags.AppendUnique(tag)
+				ev.Event.Tags = ev.Event.Tags.AppendUnique(tag)
 			}
 		}
 		// For the clients that do not use the root/reply tags which is a rubbish
 		if !hasRootTag && len(replyETags) > 0 {
-			ev.Tags = ev.Tags.AppendUnique(nostr.Tag{"e", replyETags[0][1], "", "root"})
+			ev.Event.Tags = ev.Event.Tags.AppendUnique(nostr.Tag{"e", replyETags[0][1], "", "root"})
 			hasRootTag = true
 		}
 		if hasRootTag && len(replyETags) > 0 {
-			ev.Tags = ev.Tags.AppendUnique(nostr.Tag{"e", replyEv.ID, "", "reply"})
+			ev.Event.Tags = ev.Event.Tags.AppendUnique(nostr.Tag{"e", replyEv.Event.ID, "", "reply"})
 		}
-		ev.Tags = ev.Tags.AppendUnique(nostr.Tag{"p", replyEv.PubKey})
+		ev.Event.Tags = ev.Event.Tags.AppendUnique(nostr.Tag{"p", replyEv.Event.PubKey})
 	}
 
-	if err := ev.Sign(wrapper.Cfg.PrivateKey); err != nil {
-		return nostr.Event{}, err
+	if err := ev.Event.Sign(wrapper.Cfg.PrivateKey); err != nil {
+		return Event{}, err
 	}
 
 	return ev, nil
 }
 
-func (wrapper *Wrapper) BroadCast(ctx context.Context, ev nostr.Event) (bool, error) {
+func (wrapper *Wrapper) BroadCast(ctx context.Context, ev Event) (bool, error) {
 	var success atomic.Int64
 	wrapper.Do(ctx, Relay{Write: true}, func(ctx context.Context, relay *nostr.Relay) bool {
-		err := relay.Publish(ctx, ev)
+		err := relay.Publish(ctx, *ev.Event)
 		if err != nil {
 			log.Println("broadcast:: ", relay.URL, err)
 		} else {
 			success.Add(1)
 		}
-		log.Println("broadcast to: [", relay.URL, "], event data: ", ev)
+		log.Println("broadcast to: [", relay.URL, "], event data: ", ev.Event)
 		return true
 	})
 
@@ -187,7 +189,7 @@ func (wrapper *Wrapper) BroadCast(ctx context.Context, ev nostr.Event) (bool, er
  * Send a request over a websocket to get new events (notes) and make sure we only have 1 copy of that,
  * even when it is stored on many relays.
  */
-func (wrapper *Wrapper) GetEvents(ctx context.Context, filter nostr.Filter) []*nostr.Event {
+func (wrapper *Wrapper) GetEvents(ctx context.Context, filter nostr.Filter) []*Event {
 	var m sync.Map
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -202,16 +204,21 @@ func (wrapper *Wrapper) GetEvents(ctx context.Context, filter nostr.Filter) []*n
 			if _, ok := m.Load(ev.ID); !ok {
 				log.Println(relay.URL, "::", ev.CreatedAt.Time().UTC())
 				log.Println("Kind:", ev.Kind, "Event ID:", ev.ID)
-				m.LoadOrStore(ev.ID, ev)
+
+				myEvent := &Event{}
+				myEvent.Event = ev
+				myEvent.Urls = append(myEvent.Urls, relay.URL)
+
+				m.LoadOrStore(ev.ID, myEvent)
 			}
 		}
 
 		return true
 	})
 
-	var evs []*nostr.Event
+	var evs []*Event
 	m.Range(func(k, v any) bool {
-		evs = append(evs, v.(*nostr.Event))
+		evs = append(evs, v.(*Event))
 		return true
 	})
 
@@ -247,7 +254,7 @@ func (wrapper *Wrapper) GetEventData(createdAt int64, withOffset bool) nostr.Fil
 /**
  * Get the metadata of a bunch of Pubkeys and store them.
  */
-func (wrapper *Wrapper) UpdateProfiles(ctx context.Context, pubkeys []string) []*nostr.Event {
+func (wrapper *Wrapper) UpdateProfiles(ctx context.Context, pubkeys []string) []*Event {
 	if (len(pubkeys)) < 1 {
 		return nil
 	}
@@ -271,16 +278,19 @@ func (wrapper *Wrapper) UpdateProfiles(ctx context.Context, pubkeys []string) []
 		return true
 	})
 
-	var evs []*nostr.Event
+	var evs []*Event
 	m.Range(func(k, v any) bool {
-		evs = append(evs, v.(*nostr.Event))
+		var event Event
+		event.Event = v.(*nostr.Event)
+
+		evs = append(evs, &event)
 		return true
 	})
 
 	return evs
 }
 
-func (wrapper *Wrapper) GetMetaData(ctx context.Context) (nostr.Event, error) {
+func (wrapper *Wrapper) GetMetaData(ctx context.Context) (Event, error) {
 	pubkey := wrapper.Cfg.PubKey
 
 	filter := nostr.Filter{
@@ -304,11 +314,12 @@ func (wrapper *Wrapper) GetMetaData(ctx context.Context) (nostr.Event, error) {
 	})
 
 	if v, ok := m.Load(pubkey); ok {
-		event := v.(*nostr.Event)
-		return *event, nil
+		var event Event
+		event.Event = v.(*nostr.Event)
+		return event, nil
 	}
 
-	return nostr.Event{}, nil
+	return Event{}, nil
 }
 
 func (wrapper *Wrapper) DoPublishMetaData(ctx context.Context, user *Profile) error {

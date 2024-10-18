@@ -168,7 +168,11 @@ func (req *RequestHandler) StartSync(w http.ResponseWriter, r *http.Request) {
 	pubkeys, _ = req.Db.CheckProfiles(ctx, pubkeys, tresholdTime)
 	// Last but not least, try to get the user metadata
 	req.Nostr.UpdateProfiles(ctx, pubkeys)
-	req.Db.SaveProfiles(ctx, evs)
+	err = req.Db.SaveProfiles(ctx, evs)
+	if err != nil {
+		response.Status = "error"
+		response.Message = err.Error()
+	}
 
 	err = json.NewEncoder(w).Encode(response)
 	if err != nil {
@@ -747,16 +751,12 @@ func (req *RequestHandler) Publish(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
-	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept")
 
 	log.Println("Msg to publish: ", msg.Msg)
-	var postEv nostr.Event
+	var postEv Event
 	if msg.Event_id == "" {
 		postEv, _ = req.Nostr.DoPost(msg.Msg)
-		req.Db.SaveEvents(ctx, []*nostr.Event{&postEv})
+		req.Db.SaveEvents(ctx, []*Event{&postEv})
 
 		success, err := req.Nostr.BroadCast(ctx, postEv)
 		if !success || err != nil {
@@ -767,7 +767,7 @@ func (req *RequestHandler) Publish(w http.ResponseWriter, r *http.Request) {
 	if msg.Event_id != "" {
 		replyEv, _ := req.Db.FindRawEvent(ctx, msg.Event_id)
 		postEv, _ = req.Nostr.DoReply(msg.Msg, *replyEv)
-		req.Db.SaveEvents(ctx, []*nostr.Event{&postEv})
+		req.Db.SaveEvents(ctx, []*Event{&postEv})
 
 		success, err := req.Nostr.BroadCast(ctx, postEv)
 
@@ -815,7 +815,10 @@ func (req *RequestHandler) GetMetaData(w http.ResponseWriter, r *http.Request) {
 		response.Message = err.Error()
 	}
 
-	req.Db.SaveProfiles(ctx, []*nostr.Event{&event})
+	err = req.Db.SaveProfiles(ctx, []*Event{&event})
+	if err != nil {
+		panic(err)
+	}
 
 	err = json.NewEncoder(w).Encode(response)
 	if err != nil {

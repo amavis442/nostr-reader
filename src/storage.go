@@ -43,6 +43,7 @@ type DbConfig struct {
 	Retention int
 }
 
+/*
 type UserProfile struct {
 	Name        string `json:"name"`
 	About       string `json:"about"`
@@ -54,25 +55,7 @@ type UserProfile struct {
 	Pubkey      string `json:"pubkey"`
 	Followed    bool   `json:"followed"`
 }
-
-type Refs struct {
-	Event   map[string]*nostr.Event `json:"event"`
-	Profile map[string]*UserProfile `json:"profile"`
-}
-
-type Event struct {
-	Event    *nostr.Event      `json:"event"`
-	Profile  UserProfile       `json:"profile"`
-	Etags    []string          `json:"-"`
-	Ptags    []string          `json:"-"`
-	Garbage  bool              `json:"gargabe"`
-	Children map[string]*Event `json:"children"`
-	Tree     int64             `json:"tree"`
-	RootId   string            `json:"-"`
-	Bookmark bool              `json:"bookmark"`
-	Content  string            `json:"content"`
-	Refs     Refs              `json:"refs"`
-}
+*/
 
 func (st *Storage) SetEnvironment(env string) {
 	st.Env = env
@@ -165,16 +148,26 @@ func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
 	return err
 }
 
-func (st *Storage) SaveProfile(ctx context.Context, ev *nostr.Event) {
+func (st *Storage) SaveProfile(ctx context.Context, ev *Event) error {
 	var data Profile
 	err := json.Unmarshal([]byte(ev.Content), &data)
 	if err != nil {
 		//log.Println("Query:: ", err.Error(), ev.Content)
-		return
+		return err
+	}
+
+	jsonbuf := bytes.NewBuffer(nil)
+	jsonbuf.Reset()
+	enc := json.NewEncoder(jsonbuf)
+	// turn off stupid go json encoding automatically doing HTML escaping...
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(ev); err != nil {
+		log.Println(err)
+		return err
 	}
 
 	profile := Profile{
-		Pubkey:      ev.PubKey,
+		Pubkey:      ev.Event.PubKey,
 		Name:        data.Name,
 		About:       data.About,
 		Picture:     data.Picture,
@@ -182,7 +175,10 @@ func (st *Storage) SaveProfile(ctx context.Context, ev *nostr.Event) {
 		Nip05:       data.Nip05,
 		Lud16:       data.Lud16,
 		DisplayName: data.DisplayName,
-		Raw:         ev.String()}
+		Raw:         jsonbuf.Bytes(),
+		Followed:    false,
+		Url:         ev.Urls[0],
+	}
 	//st.GormDB.Clauses(clause.OnConflict{DoNothing: true}).Create(&profile)
 	st.GormDB.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "pubkey"}},
@@ -191,41 +187,51 @@ func (st *Storage) SaveProfile(ctx context.Context, ev *nostr.Event) {
 
 	// Should be in a dynamic list, so you can add to it or remove items.
 	if data.Picture != "" && len(data.Picture) > len("https://randomuser.me") && data.Picture[0:len("https://randomuser.me")] == "https://randomuser.me" {
-		st.CreateBlock(ctx, ev.PubKey)
+		st.CreateBlock(ctx, ev.Event.PubKey)
 	}
+
+	return nil
 }
 
 /**
  * Save user profiles for easy lookup
  */
-func (st *Storage) SaveProfiles(ctx context.Context, evs []*nostr.Event) {
+func (st *Storage) SaveProfiles(ctx context.Context, evs []*Event) error {
 	for _, ev := range evs {
-		st.SaveProfile(ctx, ev)
+		err := st.SaveProfile(ctx, ev)
+		if err != nil {
+			return err
+		}
 	}
+
+	return nil
 }
 
 /**
  * Save the events, mostly notes. Ignore duplicate events based on unique event id
  * This will normalize the content tag of the events with all the unwanted markup (Myaby put this in a helper function)
  */
-func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) ([]string, error) {
+func (st *Storage) SaveEvents(ctx context.Context, evs []*Event) ([]string, error) {
 	var pubkeys = make([]string, 0)
 
 	st.Notifications = make([]string, 0) // reset if already set
 
 	for _, ev := range evs {
-		if ev.CreatedAt.Time().Unix() > time.Now().Unix() {
+		if ev.Event.CreatedAt.Time().Unix() > time.Now().Unix() {
 			continue
 		}
 
-		etags, _, _, _, _ := ProcessTags(ev, st.Pubkey)
+		etags, _, _, _, _ := ProcessTags(ev.Event, st.Pubkey)
 
-		if ev.Kind == 0 {
-			st.SaveProfile(ctx, ev)
+		if ev.Event.Kind == 0 {
+			err := st.SaveProfile(ctx, ev)
+			if err != nil {
+				return []string{}, err
+			}
 		}
 
-		if ev.Kind == 1 {
-			note, err := st.SaveNote(ctx, ev)
+		if ev.Event.Kind == 1 {
+			note, err := st.SaveNote(ctx, ev.Event)
 			if err != nil {
 				return []string{}, err
 			}
@@ -233,8 +239,8 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) ([]string
 		}
 
 		// votes
-		if ev.Kind == 7 && len(etags) > 0 {
-			t := ev.Tags.GetFirst([]string{"e"})
+		if ev.Event.Kind == 7 && len(etags) > 0 {
+			t := ev.Event.Tags.GetFirst([]string{"e"})
 			if t != nil {
 				targetEventId := t.Value()
 
@@ -242,7 +248,7 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) ([]string
 				st.GormDB.WithContext(ctx).Where("event_id = ?", targetEventId).Find(&result) // only add votes for existing
 
 				if result.ID > 0 {
-					st.SaveReaction(ctx, ev, targetEventId, result.ID)
+					st.SaveReaction(ctx, ev.Event, targetEventId, result.ID)
 				}
 			}
 		}
@@ -672,7 +678,7 @@ func (st *Storage) procesEventRows(rows *sql.Rows, p *Pagination) (map[string]Ev
 func (st *Storage) parseReferences(note *Event) string {
 	refs := sdk.ParseReferences(note.Event)
 	note.Refs = Refs{}
-	note.Refs.Profile = make(map[string]*UserProfile, 0)
+	note.Refs.Profile = make(map[string]*Profile, 0)
 	note.Refs.Event = make(map[string]*nostr.Event, 0)
 
 	var content string = note.Event.Content
@@ -683,7 +689,7 @@ func (st *Storage) parseReferences(note *Event) string {
 				if profile, err := st.FindProfile(context.TODO(), pubkey); err == nil && profile.Name != "" {
 					//content = event.Content[:ref.Start] + "[~" + profile.Name + "~]" + event.Content[ref.End:]
 					content = strings.Replace(content, ref.Text, "[~["+profile.Pubkey+"]~]", -1)
-					note.Refs.Profile[profile.Pubkey] = &UserProfile{
+					note.Refs.Profile[profile.Pubkey] = &Profile{
 						Name:        profile.Name,
 						About:       profile.About,
 						Picture:     profile.Picture,
@@ -692,7 +698,8 @@ func (st *Storage) parseReferences(note *Event) string {
 						Lud16:       profile.Lud16,
 						DisplayName: profile.DisplayName,
 						Pubkey:      profile.Pubkey,
-						Followed:    false}
+						Followed:    false,
+					}
 				}
 			}
 		}
@@ -700,8 +707,8 @@ func (st *Storage) parseReferences(note *Event) string {
 			if len(ref.Event.ID) == 64 {
 				refEv, err := st.FindRawEvent(context.Background(), ref.Event.ID)
 				if err == nil && refEv != nil {
-					content = strings.Replace(content, ref.Text, "[~~["+refEv.ID+"]~~]", -1)
-					note.Refs.Event[refEv.ID] = refEv
+					content = strings.Replace(content, ref.Text, "[~~["+refEv.Event.ID+"]~~]", -1)
+					note.Refs.Event[refEv.Event.ID] = refEv.Event
 
 					//content = event.Content[:ref.Start] + "[~" + refEv.Content[0:end] + "~]" + event.Content[ref.End:]
 				}
@@ -1034,17 +1041,18 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 	return event, err
 }
 
-func (st *Storage) FindRawEvent(ctx context.Context, id string) (*nostr.Event, error) {
+func (st *Storage) FindRawEvent(ctx context.Context, id string) (*Event, error) {
 	var qry = `SELECT e.event_id, e.pubkey, e.kind, e.event_created_at, e.content, e.sig, e.tags_full::json
 	FROM notes e 
 	WHERE e.event_id = $1`
 
-	var event nostr.Event
-
+	event := Event{}
+	event.Event = &nostr.Event{}
+	//ev := event.Event{}
 	row := st.GormDB.WithContext(ctx).Raw(qry, id).Row()
 
-	err := row.Scan(&event.ID, &event.PubKey, &event.Kind, &event.CreatedAt,
-		&event.Content, &event.Sig, &event.Tags)
+	err := row.Scan(&event.Event.ID, &event.Event.PubKey, &event.Event.Kind, &event.Event.CreatedAt,
+		&event.Event.Content, &event.Event.Sig, &event.Event.Tags)
 
 	return &event, err
 }
