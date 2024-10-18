@@ -124,7 +124,7 @@
 	})
 </script>
 
-<div class="xl:w-8/12 lg:w-10/12 md:w-10/12 sm:w-full">
+<div class="w-10/12 p-4">
 	<div class="block p-6 rounded-lg shadow-lg w-full ml-6 mt-6 bg-blue-200">
 		<form on:submit|preventDefault>
 			<div class="row">
@@ -167,16 +167,20 @@
 				<hr class="m-2" />
 
 				{#each $relays as relay (relay.url)}
-					<div class="flex space-x-1 p-2">
-						<div class="justify-items-start w-6/12">
+					<div class="flex justify-between space-x-1 p-2">
+						<div class="w-1/2 rounded border border-gray-600 p-2 hover:bg-gray-400">
 							<strong>{relay.url}</strong>
 						</div>
-						<div class="justify-items-center w-3/12 p-1">
+						<div class="p-1">
 							{#if relay.write}<i class="fa-solid fa-pen"></i>{/if}
+						</div>
+						<div class="p-1">
 							{#if relay.read}<i class="fa-solid fa-book-open"></i>{/if}
+						</div>
+						<div class="p-1">
 							{#if relay.search}<i class="fa-solid fa-magnifying-glass"></i>{/if}
 						</div>
-						<div class="w-3/12 flex justify-end">
+						<div class="flex justify-end">
 							<button type="button" on:click={removeRelay(relay.url)} class="btn-remove">
 								<i class="fa-regular fa-circle-xmark"></i> Delete
 							</button>

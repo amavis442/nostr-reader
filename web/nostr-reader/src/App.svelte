@@ -58,13 +58,13 @@
         </p>
         <p class="nav-p {url === '/profiles' ? 'selected' : ''}">
           <Link to="profiles" title="Your followed profiles" let:active>
-            <span class="{active ? 'selected' : ''}">Profiles</span>
+            <span class="{active ? 'selected' : ''}">Followed</span>
           </Link>
         </p>
       </nav>
     </div>
 
-    <main class="xl:w-6/12 md:w-9/12 sm:w-full overflow-y-auto">
+    <main class="xl:w-8/12 md:w-9/12 sm:w-full overflow-y-auto">
       <Route path="/" component="{Followed}" />
       <Route path="global" component="{Feed}" />
       <Route path="inbox" component="{Inbox}" />

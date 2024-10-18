@@ -120,8 +120,8 @@
 	})
 </script>
 
-<div class="xl:w-8/12 lg:w-10/12 md:w-10/12 sm:w-full">
-	<div class="block p-6 rounded-lg shadow-lg bg-white w-full ml-6 mt-6 bg-blue-200">
+<div class="w-10/12  items-center p-2">
+	<div class="block p-6 rounded-lg shadow-lg bg-white w-full ml-6 mt-6 ">
 		<form on:submit|preventDefault={onSubmit}>
 			<div class="form-group mb-6">
 				<div class="md:w-2/12 flex justify-end">
