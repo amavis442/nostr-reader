@@ -1,8 +1,6 @@
 package main
 
 import (
-	"amavis442/nostr-reader/database"
-	nostrWrapper "amavis442/nostr-reader/nostr/wrapper"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -16,10 +14,10 @@ import (
 	"github.com/nbd-wtf/go-nostr/nip19"
 )
 
-type Requests struct {
-	Cfg   *Config
-	Db    *database.Storage
-	Nostr *nostrWrapper.NostrWrapper
+type RequestHandler struct {
+	Pubkey string
+	Db     *Storage
+	Nostr  *Wrapper
 }
 
 /**
@@ -63,13 +61,13 @@ type ResponseProfile struct {
 
 type ResponseRelay struct {
 	Response
-	Relays []database.Relay `json:"relays"`
+	Relays []Relay `json:"relays"`
 }
 
 /**
 * The API requests
  */
-func (req *Requests) GetNotes(w http.ResponseWriter, r *http.Request) {
+func (req *RequestHandler) GetNotes(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
@@ -84,7 +82,7 @@ func (req *Requests) GetNotes(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
 	w.WriteHeader(http.StatusOK)
 
-	pagination := database.Pagination{}
+	pagination := Pagination{}
 	pagination.SetLimit(p.Limit)
 	pagination.SetCurrentPage(p.Page)
 	pagination.SetSince(p.Since)
@@ -93,10 +91,10 @@ func (req *Requests) GetNotes(w http.ResponseWriter, r *http.Request) {
 	pagination.SetMaxId(p.Maxid)
 
 	if p.Context == "page.refesh" {
-		err = req.Db.GetPaginationRefeshPage(ctx, &pagination, &p.Ids, database.Options{Follow: false, BookMark: false})
+		err = req.Db.GetPaginationRefeshPage(ctx, &pagination, &p.Ids, Options{Follow: false, BookMark: false})
 	}
 	if p.Context != "page.refresh" {
-		err = req.Db.GetPagination(ctx, &pagination, database.Options{Follow: false, BookMark: false})
+		err = req.Db.GetPagination(ctx, &pagination, Options{Follow: false, BookMark: false})
 	}
 
 	if err != nil {
@@ -108,7 +106,7 @@ func (req *Requests) GetNotes(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) GetInbox(w http.ResponseWriter, r *http.Request) {
+func (req *RequestHandler) GetInbox(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
@@ -123,11 +121,11 @@ func (req *Requests) GetInbox(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
 	w.WriteHeader(http.StatusOK)
 
-	pagination := database.Pagination{}
+	pagination := Pagination{}
 	pagination.SetLimit(p.Limit)
 	pagination.SetCurrentPage(p.Page)
 	pagination.SetSince(p.Since)
-	err = req.Db.GetInbox(ctx, &pagination, req.Cfg.PubKey)
+	err = req.Db.GetInbox(ctx, &pagination, req.Pubkey)
 
 	if err != nil {
 		log.Println(err)
@@ -138,7 +136,7 @@ func (req *Requests) GetInbox(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) StartSync(w http.ResponseWriter, r *http.Request) {
+func (req *RequestHandler) StartSync(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
 	defer cancel()
 
@@ -178,7 +176,7 @@ func (req *Requests) StartSync(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) SyncNote(w http.ResponseWriter, r *http.Request) {
+func (req *RequestHandler) SyncNote(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
@@ -206,7 +204,6 @@ func (req *Requests) SyncNote(w http.ResponseWriter, r *http.Request) {
 	evs := req.Nostr.GetEvents(ctx, filter)
 
 	req.Db.SaveEvents(ctx, evs)
-
 	ev, _ := req.Db.FindEvent(ctx, j.ID)
 
 	log.Println("Need to get it", j.ID, filter)
@@ -223,7 +220,7 @@ func (req *Requests) SyncNote(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) BlockUser(w http.ResponseWriter, r *http.Request) {
+func (req *RequestHandler) BlockUser(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
@@ -251,7 +248,7 @@ func (req *Requests) BlockUser(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) Follow(w http.ResponseWriter, r *http.Request) {
+func (req *RequestHandler) Follow(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
@@ -293,7 +290,7 @@ func (req *Requests) Follow(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) Unfollow(w http.ResponseWriter, r *http.Request) {
+func (req *RequestHandler) Unfollow(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
@@ -325,7 +322,7 @@ func (req *Requests) Unfollow(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) GetFollowedNotes(w http.ResponseWriter, r *http.Request) {
+func (req *RequestHandler) GetFollowedNotes(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
@@ -339,7 +336,7 @@ func (req *Requests) GetFollowedNotes(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
 	w.WriteHeader(http.StatusOK)
 
-	pagination := database.Pagination{}
+	pagination := Pagination{}
 	pagination.SetLimit(p.Limit)
 	pagination.SetCurrentPage(p.Page)
 	pagination.SetSince(p.Since)
@@ -348,12 +345,12 @@ func (req *Requests) GetFollowedNotes(w http.ResponseWriter, r *http.Request) {
 
 	if p.Context == "page.refresh" {
 		log.Println("Context us ")
-		err = req.Db.GetPaginationRefeshPage(ctx, &pagination, &p.Ids, database.Options{Follow: true, BookMark: false})
+		err = req.Db.GetPaginationRefeshPage(ctx, &pagination, &p.Ids, Options{Follow: true, BookMark: false})
 		pagination.SetTotal(int64(p.Total))
 	}
 
 	if p.Context == "follow" || p.Context == "" {
-		err = req.Db.GetPagination(ctx, &pagination, database.Options{Follow: true, BookMark: false})
+		err = req.Db.GetPagination(ctx, &pagination, Options{Follow: true, BookMark: false})
 	}
 
 	if err != nil {
@@ -365,7 +362,7 @@ func (req *Requests) GetFollowedNotes(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) GetFollowedProfiles(w http.ResponseWriter, r *http.Request) {
+func (req *RequestHandler) GetFollowedProfiles(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
@@ -387,7 +384,7 @@ func (req *Requests) GetFollowedProfiles(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-func (req *Requests) AddBookMark(w http.ResponseWriter, r *http.Request) {
+func (req *RequestHandler) AddBookMark(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
@@ -420,7 +417,7 @@ func (req *Requests) AddBookMark(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) RemoveBookMark(w http.ResponseWriter, r *http.Request) {
+func (req *RequestHandler) RemoveBookMark(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
@@ -457,12 +454,12 @@ func (req *Requests) RemoveBookMark(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) AddRelay(w http.ResponseWriter, r *http.Request) {
+func (req *RequestHandler) AddRelay(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
-	var j database.Relay
+	var j Relay
 	err := json.NewDecoder(r.Body).Decode(&j)
 	if err != nil {
 		log.Println(err)
@@ -486,7 +483,7 @@ func (req *Requests) AddRelay(w http.ResponseWriter, r *http.Request) {
 	relays := req.Db.GetRelays(ctx)
 	response.Data = relays
 
-	UpdateRelays(&req.Nostr.Cfg, relays)
+	req.Nostr.UpdateRelays(relays)
 
 	err = json.NewEncoder(w).Encode(&response)
 	if err != nil {
@@ -494,12 +491,12 @@ func (req *Requests) AddRelay(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) RemoveRelay(w http.ResponseWriter, r *http.Request) {
+func (req *RequestHandler) RemoveRelay(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
-	var j database.Relay
+	var j Relay
 	err := json.NewDecoder(r.Body).Decode(&j)
 	if err != nil {
 		log.Println(err)
@@ -521,7 +518,7 @@ func (req *Requests) RemoveRelay(w http.ResponseWriter, r *http.Request) {
 	relays := req.Db.GetRelays(ctx)
 	response.Data = relays
 
-	UpdateRelays(&req.Nostr.Cfg, relays)
+	req.Nostr.UpdateRelays(relays)
 
 	err = json.NewEncoder(w).Encode(&response)
 	if err != nil {
@@ -529,7 +526,7 @@ func (req *Requests) RemoveRelay(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) GetRelays(w http.ResponseWriter, r *http.Request) {
+func (req *RequestHandler) GetRelays(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
@@ -550,7 +547,7 @@ func (req *Requests) GetRelays(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) GetBookMarked(w http.ResponseWriter, r *http.Request) {
+func (req *RequestHandler) GetBookMarked(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
@@ -564,13 +561,13 @@ func (req *Requests) GetBookMarked(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
 	w.WriteHeader(http.StatusOK)
 
-	pagination := database.Pagination{}
+	pagination := Pagination{}
 	pagination.SetLimit(p.Limit)
 	pagination.SetCurrentPage(p.Page)
 	pagination.SetSince(p.Since)
 	pagination.SetRenew(p.Renew)
 	pagination.SetMaxId(p.Maxid)
-	err = req.Db.GetPagination(ctx, &pagination, database.Options{Follow: false, BookMark: true})
+	err = req.Db.GetPagination(ctx, &pagination, Options{Follow: false, BookMark: true})
 
 	if err != nil {
 		log.Println(err)
@@ -581,7 +578,7 @@ func (req *Requests) GetBookMarked(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) GetNewNotesCount(w http.ResponseWriter, r *http.Request) {
+func (req *RequestHandler) GetNewNotesCount(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
@@ -595,7 +592,7 @@ func (req *Requests) GetNewNotesCount(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
 	w.WriteHeader(http.StatusOK)
 
-	options := database.Options{
+	options := Options{
 		Follow:   false,
 		BookMark: false,
 	}
@@ -626,7 +623,7 @@ func (req *Requests) GetNewNotesCount(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) GetLastSeenID(w http.ResponseWriter, r *http.Request) {
+func (req *RequestHandler) GetLastSeenID(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
@@ -652,7 +649,7 @@ func (req *Requests) GetLastSeenID(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) SearchEvent(w http.ResponseWriter, r *http.Request) {
+func (req *RequestHandler) SearchEvent(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
@@ -699,7 +696,7 @@ func (req *Requests) SearchEvent(w http.ResponseWriter, r *http.Request) {
 /**
  * Need an easy way to cancel this request when a new nextpage or refreshpage comes in
  */
-func (req *Requests) PreviewLink(w http.ResponseWriter, r *http.Request) {
+func (req *RequestHandler) PreviewLink(w http.ResponseWriter, r *http.Request) {
 	var mu sync.Mutex
 
 	defer r.Body.Close()
@@ -734,7 +731,7 @@ func (req *Requests) PreviewLink(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
+func (req *RequestHandler) Publish(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
@@ -798,7 +795,7 @@ func (req *Requests) Publish(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) GetMetaData(w http.ResponseWriter, r *http.Request) {
+func (req *RequestHandler) GetMetaData(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
@@ -826,12 +823,12 @@ func (req *Requests) GetMetaData(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) SetMetaData(w http.ResponseWriter, r *http.Request) {
+func (req *RequestHandler) SetMetaData(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	var user nostrWrapper.Profile
+	var user Profile
 	err := json.NewDecoder(r.Body).Decode(&user)
 	if err != nil {
 		log.Println(err)
@@ -841,7 +838,7 @@ func (req *Requests) SetMetaData(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
 	w.WriteHeader(http.StatusOK)
 
-	user.Pubkey = req.Cfg.PubKey
+	user.Pubkey = req.Pubkey
 	err = req.Nostr.DoPublishMetaData(ctx, &user)
 
 	response := &Response{}
@@ -860,7 +857,7 @@ func (req *Requests) SetMetaData(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (req *Requests) GetProfile(w http.ResponseWriter, r *http.Request) {
+func (req *RequestHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx := context.Background()
 
@@ -868,7 +865,7 @@ func (req *Requests) GetProfile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
 	w.WriteHeader(http.StatusOK)
 
-	profile, err := req.Db.FindProfile(ctx, req.Cfg.PubKey)
+	profile, err := req.Db.FindProfile(ctx, req.Pubkey)
 
 	response := &Response{}
 	response.Status = "ok"

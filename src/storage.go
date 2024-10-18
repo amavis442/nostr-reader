@@ -1,4 +1,4 @@
-package database
+package main
 
 import (
 	"bytes"
@@ -10,8 +10,6 @@ import (
 	"regexp"
 	"strings"
 	"time"
-
-	"amavis442/nostr-reader/nostr/tag"
 
 	"github.com/lib/pq"
 	"github.com/microcosm-cc/bluemonday"
@@ -212,6 +210,7 @@ func (st *Storage) SaveProfiles(ctx context.Context, evs []*nostr.Event) {
  */
 func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) ([]string, error) {
 	var pubkeys = make([]string, 0)
+
 	st.Notifications = make([]string, 0) // reset if already set
 
 	for _, ev := range evs {
@@ -219,7 +218,7 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) ([]string
 			continue
 		}
 
-		etags, _, _, _, _ := tag.ProcessTags(ev, st.Pubkey)
+		etags, _, _, _, _ := ProcessTags(ev, st.Pubkey)
 
 		if ev.Kind == 0 {
 			st.SaveProfile(ctx, ev)
@@ -252,9 +251,9 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*nostr.Event) ([]string
 }
 
 func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event) (Note, error) {
-	var tree tag.EventTree
+	var tree EventTree
 
-	etags, ptags, hasNotification, isRoot, tree := tag.ProcessTags(ev, st.Pubkey)
+	etags, ptags, hasNotification, isRoot, tree := ProcessTags(ev, st.Pubkey)
 	ptagsNum := len(ptags)
 	etagsNum := len(etags)
 

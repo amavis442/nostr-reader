@@ -33,7 +33,9 @@
             "search": true
         }
     },
-	"privatekey": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-    "nip05": "https://nostrcheck.me/",
+    "nostr': {
+	    "privatekey": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+        "nip05": "https://nostrcheck.me/"
+    },
     "filter": [] 
 }

@@ -1,9 +1,6 @@
 package main
 
 import (
-	"amavis442/nostr-reader/database"
-	"amavis442/nostr-reader/nostr/wrapper"
-	nostrWrapper "amavis442/nostr-reader/nostr/wrapper"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -15,21 +12,15 @@ import (
 	"github.com/nbd-wtf/go-nostr/nip19"
 )
 
-type Server struct {
-	Port     int64
-	Frontend string
-	Interval int64
-}
-
 /**
  * Used to store the config.json file and some database related stuff for easy access
  *
  */
 type Config struct {
-	Database *database.DbConfig
-	nostrWrapper.Config
-	Server *Server
-	Env    string
+	Database *DbConfig
+	Server   *ServerConfig
+	Env      string
+	Nostr    *WrapperConfig
 }
 
 func configDir() (string, error) {
@@ -70,14 +61,15 @@ func LoadConfig() (*Config, error) {
 		log.Fatal("Error during Unmarshal(): ", err)
 	}
 
-	if cfg.PrivateKey == "" {
+	if cfg.Nostr.PrivateKey == "" {
 		log.Println("You need to add your private key. This key will never be transmitted and stays local")
 		os.Exit(0)
 	}
 
 	var pubKey string
-	if cfg.PrivateKey[:4] == "nsec" {
-		if _, s, err := nip19.Decode(cfg.PrivateKey); err == nil {
+
+	if cfg.Nostr.PrivateKey[:4] == "nsec" {
+		if _, s, err := nip19.Decode(cfg.Nostr.PrivateKey); err == nil {
 			if pubKey, err = nostr.GetPublicKey(s.(string)); err != nil {
 				return nil, err
 			}
@@ -85,19 +77,13 @@ func LoadConfig() (*Config, error) {
 			return nil, err
 		}
 	} else {
-		pubKey, _ = nostr.GetPublicKey(cfg.PrivateKey)
+
+		pubKey, _ = nostr.GetPublicKey(cfg.Nostr.PrivateKey)
 	}
-	cfg.PubKey = pubKey
-	cfg.Nsec, _ = nip19.EncodePrivateKey(cfg.PrivateKey)
-	cfg.Npub, _ = nip19.EncodePublicKey(pubKey)
+
+	cfg.Nostr.PubKey = pubKey
+	cfg.Nostr.Nsec, _ = nip19.EncodePrivateKey(cfg.Nostr.PrivateKey)
+	cfg.Nostr.Npub, _ = nip19.EncodePublicKey(pubKey)
 
 	return &cfg, nil
-}
-
-func UpdateRelays(cfg *nostrWrapper.Config, relays []database.Relay) {
-	cfg.Relays = make(map[string]nostrWrapper.Relay, 0)
-
-	for _, relay := range relays {
-		cfg.Relays[relay.Url] = wrapper.Relay{Read: relay.Read, Write: relay.Write, Search: relay.Search}
-	}
 }

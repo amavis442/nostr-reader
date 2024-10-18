@@ -1,4 +1,4 @@
-package wrapper
+package main
 
 import (
 	"context"
@@ -13,42 +13,30 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
-type Relay struct {
-	Read   bool `json:"read"`
-	Write  bool `json:"write"`
-	Search bool `json:"search"`
-}
-
-type Config struct {
+type WrapperConfig struct {
 	Relays     map[string]Relay
 	PubKey     string
 	Npub       string
 	PrivateKey string
+	Nip05      string
 	Nsec       string
 	Filter     []string
-}
-
-type Profile struct {
-	Name        string `json:"name"`
-	About       string `json:"about"`
-	Picture     string `json:"picture"`
-	Website     string `json:"website"`
-	Nip05       string `json:"nip05"`
-	Lud16       string `json:"lud16"`
-	DisplayName string `json:"display_name"`
-	Pubkey      string `json:"pubkey"`
 }
 
 type RelayUrl string
 
 var KeyUrl RelayUrl = "relayUrl"
 
-type NostrWrapper struct {
-	Cfg Config
+type Wrapper struct {
+	Cfg WrapperConfig
 }
 
-func (nostrWrapper *NostrWrapper) SetConfig(cfg *Config) {
-	nostrWrapper.Cfg = *cfg
+func (wrapper *Wrapper) SetConfig(cfg *WrapperConfig) {
+	wrapper.Cfg = *cfg
+}
+
+func (wrapper *Wrapper) GetConfig() *WrapperConfig {
+	return &wrapper.Cfg
 }
 
 /*
@@ -58,9 +46,9 @@ func (nostrWrapper *NostrWrapper) SetConfig(cfg *Config) {
  * The f function is used to process to get data from the relays and return it for further processing.
  *
  */
-func (nostrWrapper *NostrWrapper) Do(ctx context.Context, r Relay, f func(context.Context, *nostr.Relay) bool) {
+func (wrapper *Wrapper) Do(ctx context.Context, r Relay, f func(context.Context, *nostr.Relay) bool) {
 	var wg sync.WaitGroup
-	for relayUrl, v := range nostrWrapper.Cfg.Relays {
+	for relayUrl, v := range wrapper.Cfg.Relays {
 		if r.Write && !v.Write {
 			continue
 		}
@@ -94,11 +82,11 @@ func (nostrWrapper *NostrWrapper) Do(ctx context.Context, r Relay, f func(contex
 /*
  * Creates a new message
  */
-func (nostrWrapper *NostrWrapper) DoPost(content string) (nostr.Event, error) {
+func (wrapper *Wrapper) DoPost(content string) (nostr.Event, error) {
 	var err error
 	ev := nostr.Event{}
 	ev.Tags = nostr.Tags{}
-	ev.PubKey, err = nostr.GetPublicKey(nostrWrapper.Cfg.PrivateKey)
+	ev.PubKey, err = nostr.GetPublicKey(wrapper.Cfg.PrivateKey)
 	if err != nil {
 		return nostr.Event{}, err
 	}
@@ -106,7 +94,7 @@ func (nostrWrapper *NostrWrapper) DoPost(content string) (nostr.Event, error) {
 	ev.Kind = nostr.KindTextNote
 	ev.Content = content
 
-	if err := ev.Sign(nostrWrapper.Cfg.PrivateKey); err != nil {
+	if err := ev.Sign(wrapper.Cfg.PrivateKey); err != nil {
 		return nostr.Event{}, err
 	}
 
@@ -116,7 +104,7 @@ func (nostrWrapper *NostrWrapper) DoPost(content string) (nostr.Event, error) {
 /*
  * Creates a reply message
  */
-func (nostrWrapper *NostrWrapper) DoReply(content string, replyEv nostr.Event) (nostr.Event, error) {
+func (wrapper *Wrapper) DoReply(content string, replyEv nostr.Event) (nostr.Event, error) {
 	if replyEv.ID == "" {
 		log.Println("Reply::Wrong function call. needs event_id since it is a reply")
 		return nostr.Event{}, errors.New("no reply event in call")
@@ -126,7 +114,7 @@ func (nostrWrapper *NostrWrapper) DoReply(content string, replyEv nostr.Event) (
 	ev.Tags = nostr.Tags{}
 	replyETags := replyEv.Tags.GetAll([]string{"e"})
 
-	ev.PubKey, err = nostr.GetPublicKey(nostrWrapper.Cfg.PrivateKey)
+	ev.PubKey, err = nostr.GetPublicKey(wrapper.Cfg.PrivateKey)
 	if err != nil {
 		return nostr.Event{}, err
 	}
@@ -167,16 +155,16 @@ func (nostrWrapper *NostrWrapper) DoReply(content string, replyEv nostr.Event) (
 		ev.Tags = ev.Tags.AppendUnique(nostr.Tag{"p", replyEv.PubKey})
 	}
 
-	if err := ev.Sign(nostrWrapper.Cfg.PrivateKey); err != nil {
+	if err := ev.Sign(wrapper.Cfg.PrivateKey); err != nil {
 		return nostr.Event{}, err
 	}
 
 	return ev, nil
 }
 
-func (nostrWrapper *NostrWrapper) BroadCast(ctx context.Context, ev nostr.Event) (bool, error) {
+func (wrapper *Wrapper) BroadCast(ctx context.Context, ev nostr.Event) (bool, error) {
 	var success atomic.Int64
-	nostrWrapper.Do(ctx, Relay{Write: true}, func(ctx context.Context, relay *nostr.Relay) bool {
+	wrapper.Do(ctx, Relay{Write: true}, func(ctx context.Context, relay *nostr.Relay) bool {
 		err := relay.Publish(ctx, ev)
 		if err != nil {
 			log.Println("broadcast:: ", relay.URL, err)
@@ -199,12 +187,12 @@ func (nostrWrapper *NostrWrapper) BroadCast(ctx context.Context, ev nostr.Event)
  * Send a request over a websocket to get new events (notes) and make sure we only have 1 copy of that,
  * even when it is stored on many relays.
  */
-func (nostrWrapper *NostrWrapper) GetEvents(ctx context.Context, filter nostr.Filter) []*nostr.Event {
+func (wrapper *Wrapper) GetEvents(ctx context.Context, filter nostr.Filter) []*nostr.Event {
 	var m sync.Map
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	nostrWrapper.Do(ctx, Relay{Read: true}, func(ctx context.Context, relay *nostr.Relay) bool {
+	wrapper.Do(ctx, Relay{Read: true}, func(ctx context.Context, relay *nostr.Relay) bool {
 		evs, err := relay.QuerySync(ctx, filter)
 		log.Println("Connecting to:", relay.URL)
 		if err != nil {
@@ -234,7 +222,7 @@ func (nostrWrapper *NostrWrapper) GetEvents(ctx context.Context, filter nostr.Fi
  * Before we try to get events, first get the last timestamp so we do not query all the events all the time but only the lastests.
  * We do not want to spam the relays when we just synced, so wait 60 seconds before we accept a new sync
  */
-func (nostrWrapper *NostrWrapper) GetEventData(createdAt int64, withOffset bool) nostr.Filter {
+func (wrapper *Wrapper) GetEventData(createdAt int64, withOffset bool) nostr.Filter {
 	var createdAtOffset int64 = time.Now().Unix() - 60
 	if createdAt < 1 {
 		createdAt = createdAtOffset
@@ -259,7 +247,7 @@ func (nostrWrapper *NostrWrapper) GetEventData(createdAt int64, withOffset bool)
 /**
  * Get the metadata of a bunch of Pubkeys and store them.
  */
-func (nostrWrapper *NostrWrapper) UpdateProfiles(ctx context.Context, pubkeys []string) []*nostr.Event {
+func (wrapper *Wrapper) UpdateProfiles(ctx context.Context, pubkeys []string) []*nostr.Event {
 	if (len(pubkeys)) < 1 {
 		return nil
 	}
@@ -270,7 +258,7 @@ func (nostrWrapper *NostrWrapper) UpdateProfiles(ctx context.Context, pubkeys []
 	}
 
 	var m sync.Map
-	nostrWrapper.Do(ctx, Relay{Read: true}, func(ctx context.Context, relay *nostr.Relay) bool {
+	wrapper.Do(ctx, Relay{Read: true}, func(ctx context.Context, relay *nostr.Relay) bool {
 		evs, err := relay.QuerySync(ctx, filter)
 		if err != nil {
 			return false
@@ -292,8 +280,8 @@ func (nostrWrapper *NostrWrapper) UpdateProfiles(ctx context.Context, pubkeys []
 	return evs
 }
 
-func (nostrWrapper *NostrWrapper) GetMetaData(ctx context.Context) (nostr.Event, error) {
-	pubkey := nostrWrapper.Cfg.PubKey
+func (wrapper *Wrapper) GetMetaData(ctx context.Context) (nostr.Event, error) {
+	pubkey := wrapper.Cfg.PubKey
 
 	filter := nostr.Filter{
 		Kinds:   []int{nostr.KindProfileMetadata},
@@ -302,7 +290,7 @@ func (nostrWrapper *NostrWrapper) GetMetaData(ctx context.Context) (nostr.Event,
 	}
 
 	var m sync.Map
-	nostrWrapper.Do(ctx, Relay{Read: true}, func(ctx context.Context, relay *nostr.Relay) bool {
+	wrapper.Do(ctx, Relay{Read: true}, func(ctx context.Context, relay *nostr.Relay) bool {
 		evs, err := relay.QuerySync(ctx, filter)
 		if err != nil {
 			return false
@@ -323,12 +311,12 @@ func (nostrWrapper *NostrWrapper) GetMetaData(ctx context.Context) (nostr.Event,
 	return nostr.Event{}, nil
 }
 
-func (nostrWrapper *NostrWrapper) DoPublishMetaData(ctx context.Context, user *Profile) error {
+func (wrapper *Wrapper) DoPublishMetaData(ctx context.Context, user *Profile) error {
 	var err error
 	ev := nostr.Event{}
 	ev.Tags = nostr.Tags{}
 
-	ev.PubKey, err = nostr.GetPublicKey(nostrWrapper.Cfg.PrivateKey)
+	ev.PubKey, err = nostr.GetPublicKey(wrapper.Cfg.PrivateKey)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -341,13 +329,13 @@ func (nostrWrapper *NostrWrapper) DoPublishMetaData(ctx context.Context, user *P
 		return err
 	}
 	ev.Content = string(c)
-	if err := ev.Sign(nostrWrapper.Cfg.PrivateKey); err != nil {
+	if err := ev.Sign(wrapper.Cfg.PrivateKey); err != nil {
 		return err
 	}
 
 	fmt.Println(ev)
 	var success atomic.Int64
-	nostrWrapper.Do(ctx, Relay{Write: true}, func(ctx context.Context, relay *nostr.Relay) bool {
+	wrapper.Do(ctx, Relay{Write: true}, func(ctx context.Context, relay *nostr.Relay) bool {
 		err := relay.Publish(ctx, ev)
 		if err != nil {
 			log.Println(relay.URL, err)
@@ -362,4 +350,12 @@ func (nostrWrapper *NostrWrapper) DoPublishMetaData(ctx context.Context, user *P
 	}
 
 	return nil
+}
+
+func (wrapper *Wrapper) UpdateRelays(relays []Relay) {
+	wrapper.Cfg.Relays = make(map[string]Relay, 0)
+
+	for _, relay := range relays {
+		wrapper.Cfg.Relays[relay.Url] = Relay{Read: relay.Read, Write: relay.Write, Search: relay.Search}
+	}
 }
