@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"regexp"
 	"strings"
 	"time"
@@ -117,7 +118,7 @@ func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
 	st.GormDB.Exec(`DROP TRIGGER IF EXISTS delete_trigger ON notes;`)
 	st.GormDB.Exec(`CREATE TRIGGER delete_trigger BEFORE INSERT ON notes FOR EACH ROW EXECUTE FUNCTION delete_submission();`)
 
-	log.Printf(`Cleaning history older then %d days`, cfg.Retention)
+	log.Printf(`Connect() -> Cleaning history older then %d days`, cfg.Retention)
 	then := time.Now().AddDate(0, 0, -1*cfg.Retention)
 	past := fmt.Sprintf("%d-%d-%d 00:00:00\n",
 		then.Year(),
@@ -144,13 +145,14 @@ func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
 		return nil
 	})
 
-	fmt.Println("Connected to database:", cfg.Dbname)
+	fmt.Println("Connect() -> Connected to database:", cfg.Dbname)
 	return err
 }
 
 func (st *Storage) SaveProfile(ctx context.Context, ev *Event) error {
 	var data Profile
-	err := json.Unmarshal([]byte(ev.Content), &data)
+	content := ev.Event.Content
+	err := json.Unmarshal([]byte(content), &data)
 	if err != nil {
 		//log.Println("Query:: ", err.Error(), ev.Content)
 		return err
@@ -161,7 +163,7 @@ func (st *Storage) SaveProfile(ctx context.Context, ev *Event) error {
 	enc := json.NewEncoder(jsonbuf)
 	// turn off stupid go json encoding automatically doing HTML escaping...
 	enc.SetEscapeHTML(false)
-	if err := enc.Encode(ev); err != nil {
+	if err := enc.Encode(ev.Event); err != nil {
 		log.Println(err)
 		return err
 	}
@@ -176,14 +178,24 @@ func (st *Storage) SaveProfile(ctx context.Context, ev *Event) error {
 		Lud16:       data.Lud16,
 		DisplayName: data.DisplayName,
 		Raw:         jsonbuf.Bytes(),
-		Followed:    false,
-		Url:         ev.Urls[0],
+		Urls:        ev.Urls,
+		UpdatedAt:   time.Now(),
 	}
+
+	slog.Info("SaveProfile() -> Adding or updating profile: pubkey = "+profile.Pubkey, "profile", profile)
+
+	//log.Println("SaveProfile() -> Adding or updating profile: pubkey = ", profile.Pubkey, " [", profile, "]")
+	log.Println("----------------------")
 	//st.GormDB.Clauses(clause.OnConflict{DoNothing: true}).Create(&profile)
-	st.GormDB.Clauses(clause.OnConflict{
+	st.GormDB.Model(&Profile{}).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "pubkey"}},
-		DoUpdates: clause.AssignmentColumns([]string{"name", "about", "picture", "website", "nip05", "lud16", "display_name", "raw"}),
+		DoUpdates: clause.AssignmentColumns([]string{"name", "about", "picture", "website", "nip05", "lud16", "display_name", "raw", "urls", "updated_at"}),
 	}).Create(&profile)
+
+	if st.GormDB.Error != nil {
+		log.Print(st.GormDB.Error.Error())
+		return st.GormDB.Error
+	}
 
 	// Should be in a dynamic list, so you can add to it or remove items.
 	if data.Picture != "" && len(data.Picture) > len("https://randomuser.me") && data.Picture[0:len("https://randomuser.me")] == "https://randomuser.me" {
@@ -217,7 +229,7 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*Event) ([]string, erro
 	st.Notifications = make([]string, 0) // reset if already set
 
 	for _, ev := range evs {
-		if ev.Event.CreatedAt.Time().Unix() > time.Now().Unix() {
+		if ev.Event.CreatedAt.Time().Unix() > time.Now().Unix() { // Ignore events with timestamp in the future.
 			continue
 		}
 
@@ -231,7 +243,7 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*Event) ([]string, erro
 		}
 
 		if ev.Event.Kind == 1 {
-			note, err := st.SaveNote(ctx, ev.Event)
+			note, err := st.SaveNote(ctx, ev)
 			if err != nil {
 				return []string{}, err
 			}
@@ -256,9 +268,9 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*Event) ([]string, erro
 	return pubkeys, nil
 }
 
-func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event) (Note, error) {
+func (st *Storage) SaveNote(ctx context.Context, event *Event) (Note, error) {
 	var tree EventTree
-
+	ev := event.Event
 	etags, ptags, hasNotification, isRoot, tree := ProcessTags(ev, st.Pubkey)
 	ptagsNum := len(ptags)
 	etagsNum := len(etags)
@@ -327,6 +339,8 @@ func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event) (Note, error) 
 	note.Garbage = Garbage
 	note.Raw = jsonbuf.Bytes()
 	note.Root = isRoot
+	note.Urls = event.Urls
+	note.UpdatedAt = time.Now()
 
 	tx := st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true})
 	if st.Env == "devel" {
@@ -343,11 +357,11 @@ func (st *Storage) SaveNote(ctx context.Context, ev *nostr.Event) (Note, error) 
 
 	if note.ID > 0 && len(tree.RootTag) > 0 {
 		treeData := Tree{EventId: ev.ID, RootEventId: tree.RootTag, ReplyEventId: tree.ReplyTag}
-		st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&treeData)
+		st.GormDB.Model(&Tree{}).WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&treeData)
 
 		if hasNotification {
 			notification := Notification{NoteID: note.ID}
-			st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&notification)
+			st.GormDB.Model(&Notification{}).WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&notification)
 		}
 	}
 
@@ -369,7 +383,7 @@ func (st *Storage) SaveReaction(ctx context.Context, ev *nostr.Event, targetEven
 
 	err := st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&vote).Error
 	if err != nil {
-		log.Println("Query error:: ", err.Error())
+		log.Println("SaveReaction() -> Query error:: ", err.Error())
 		panic(err)
 	}
 }
@@ -609,7 +623,7 @@ func (st *Storage) procesEventRows(rows *sql.Rows, p *Pagination) (map[string]Ev
 			&note.Event.Content, &note.Event.Tags, &note.Event.Sig,
 			(pq.Array)(&note.Etags), (pq.Array)(&note.Ptags),
 			&name, &about, &picture, &website, &nip05, &lud16, &displayname, &followed, &bookmarked); err != nil {
-			log.Println("Query:: ", err.Error())
+			log.Println("procesEventRows() -> Query:: ", err.Error())
 			panic(err)
 		}
 
@@ -667,7 +681,7 @@ func (st *Storage) procesEventRows(rows *sql.Rows, p *Pagination) (map[string]Ev
 	}
 	// Check for errors from iterating over rows.
 	if err := rows.Err(); err != nil {
-		log.Println("Query:: ", err)
+		log.Println("procesEventRows() -> Query:: ", err)
 		return nil, nil, nil, err
 	}
 	defer rows.Close()
@@ -699,6 +713,7 @@ func (st *Storage) parseReferences(note *Event) string {
 						DisplayName: profile.DisplayName,
 						Pubkey:      profile.Pubkey,
 						Followed:    false,
+						Blocked:     false,
 					}
 				}
 			}
@@ -904,7 +919,7 @@ func (st *Storage) GetInbox(ctx context.Context, p *Pagination, pubkey string) e
 	//rows, err := tx.Query(ctx, qry, pubkey)
 	rows, err := st.GormDB.WithContext(ctx).Raw(qry, pubkey).Rows()
 	if err != nil {
-		log.Println("Query:: ", err)
+		log.Println("GetInbox() -> Query:: ", err)
 		return nil
 	}
 	defer rows.Close()
@@ -951,9 +966,9 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 		(pq.Array)(&event.Etags), (pq.Array)(&event.Ptags), &name, &about, &picture, &website, &nip05, &lud16, &displayname)
 	switch {
 	case err == sql.ErrNoRows:
-		log.Printf("Query:: 404 no event with id %s\n", id)
+		log.Printf("FindEvent() -> Query:: 404 no event with id %s\n", id)
 	case err != nil:
-		log.Fatalf("Query:: 502 query error: %v\n", err)
+		log.Fatalf("FindEvent() -> Query:: 502 query error: %v\n", err)
 	}
 	event.Tree = 1
 	event.RootId = event.Event.ID
@@ -975,7 +990,7 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 	var treeRows *sql.Rows
 	treeRows, err = st.GormDB.WithContext(ctx).Raw(treeQry).Rows()
 	if err != nil {
-		log.Println("Query:: ", err)
+		log.Println("FindEvent() -> Query:: ", err)
 	}
 	for treeRows.Next() {
 		var childEvent Event
@@ -997,7 +1012,7 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 			&childEvent.Event.ID, &childEvent.Event.PubKey, &childEvent.Event.Kind, &childEvent.Event.CreatedAt, &childEvent.Event.Content, &childEvent.Event.Tags, &childEvent.Event.Sig,
 			(pq.Array)(&childEvent.Etags), (pq.Array)(&childEvent.Ptags), &name, &about, &picture,
 			&website, &nip05, &lud16, &displayname, &followed); err != nil {
-			log.Println("Query:: ", err.Error())
+			log.Println("FindEvent() -> Query:: ", err.Error())
 			panic(err)
 		}
 
@@ -1067,7 +1082,7 @@ func (st *Storage) CheckProfiles(ctx context.Context, pubkeys []string, epochtim
 
 	rows, err := st.GormDB.WithContext(ctx).Raw(qry, epochtime).Rows()
 	if err != nil {
-		log.Println("Query:: ", err)
+		log.Println("CheckProfile() -> Query:: ", err)
 		return []string{}, err
 	}
 
@@ -1113,7 +1128,7 @@ func (st *Storage) CreateBlock(ctx context.Context, pubkey string) error {
 func (st *Storage) CreateFollow(ctx context.Context, pubkey string) error {
 	followPubkey := Follow{Pubkey: pubkey}
 	if tx := st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&followPubkey); tx.Error != nil {
-		log.Println("Create follow: ", tx.Error.Error())
+		log.Println("CreateFollow() -> Create follow: ", tx.Error.Error())
 	}
 
 	return nil
@@ -1121,7 +1136,7 @@ func (st *Storage) CreateFollow(ctx context.Context, pubkey string) error {
 
 func (st *Storage) RemoveFollow(ctx context.Context, pubkey string) error {
 	if tx := st.GormDB.WithContext(ctx).Where("pubkey = ?", pubkey).Delete(&Follow{}); tx.Error != nil {
-		log.Println("Remove follow: ", tx.Error.Error())
+		log.Println("RemoveFollow() -> Remove follow: ", tx.Error.Error())
 	}
 
 	return nil
@@ -1145,7 +1160,7 @@ func (st *Storage) CreateBookMark(ctx context.Context, eventID string) error {
 	bookmark := Bookmark{EventId: eventID, NoteID: note.ID}
 	err := st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&bookmark).Error
 	if err != nil {
-		log.Println("Query:: ", err)
+		log.Println("CreateBookMark() -> Query:: ", err)
 		return err
 	}
 
@@ -1155,7 +1170,7 @@ func (st *Storage) CreateBookMark(ctx context.Context, eventID string) error {
 func (st *Storage) RemoveBookMark(ctx context.Context, eventID string) error {
 	err := st.GormDB.WithContext(ctx).Where("event_id = ?", eventID).Delete(&Bookmark{}).Error
 	if err != nil {
-		log.Println("Query:: ", err)
+		log.Println("RemoveBookMark() -> Query:: ", err)
 		return err
 	}
 
@@ -1168,7 +1183,7 @@ func (st *Storage) CreateRelay(ctx context.Context, relay *Relay) error {
 	log.Println(relay)
 	err := tx.Error
 	if err != nil {
-		log.Println("Query:: ", err)
+		log.Println("CreateRelay() -> Query:: ", err)
 		return err
 	}
 	return nil
@@ -1177,7 +1192,7 @@ func (st *Storage) CreateRelay(ctx context.Context, relay *Relay) error {
 func (st *Storage) RemoveRelay(ctx context.Context, url string) error {
 	err := st.GormDB.WithContext(ctx).Where("url = ?", url).Delete(&Relay{}).Error
 	if err != nil {
-		log.Println("Query:: ", err)
+		log.Println("RemoveRelay() -> Query:: ", err)
 		return err
 	}
 
@@ -1217,9 +1232,9 @@ func (st *Storage) FindProfile(ctx context.Context, pubkey string) (Profile, err
 	err := row.Scan(&name, &about, &picture, &website, &nip05, &lud16, &displayname)
 	switch {
 	case err == sql.ErrNoRows:
-		log.Printf("Query:: 404 no profile with pubkey %s\n", pubkey)
+		log.Printf("FindProfile() -> Query:: 404 no profile with pubkey %s\n", pubkey)
 	case err != nil:
-		log.Fatalf("Query:: 502 query error: %v\n", err)
+		log.Fatalf("FindProfile() -> Query:: 502 query error: %v\n", err)
 	}
 
 	profile.Pubkey = pubkey

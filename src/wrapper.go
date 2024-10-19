@@ -201,15 +201,22 @@ func (wrapper *Wrapper) GetEvents(ctx context.Context, filter nostr.Filter) []*E
 			return true
 		}
 		for _, ev := range evs {
-			if _, ok := m.Load(ev.ID); !ok {
+			resultEv, ok := m.Load(ev.ID)
+			if !ok {
 				log.Println(relay.URL, "::", ev.CreatedAt.Time().UTC())
 				log.Println("Kind:", ev.Kind, "Event ID:", ev.ID)
 
 				myEvent := &Event{}
+				myEvent.Event = &nostr.Event{}
 				myEvent.Event = ev
 				myEvent.Urls = append(myEvent.Urls, relay.URL)
 
 				m.LoadOrStore(ev.ID, myEvent)
+			}
+			if ok && resultEv != nil { // Event already exists but i want to store of all relays where this can be found.
+				existingEv := resultEv.(*Event)
+				existingEv.Urls = append(existingEv.Urls, relay.URL)
+				m.LoadOrStore(existingEv.Event.ID, existingEv)
 			}
 		}
 
@@ -281,6 +288,7 @@ func (wrapper *Wrapper) UpdateProfiles(ctx context.Context, pubkeys []string) []
 	var evs []*Event
 	m.Range(func(k, v any) bool {
 		var event Event
+		event.Event = &nostr.Event{}
 		event.Event = v.(*nostr.Event)
 
 		evs = append(evs, &event)
@@ -315,6 +323,7 @@ func (wrapper *Wrapper) GetMetaData(ctx context.Context) (Event, error) {
 
 	if v, ok := m.Load(pubkey); ok {
 		var event Event
+		event.Event = &nostr.Event{}
 		event.Event = v.(*nostr.Event)
 		return event, nil
 	}

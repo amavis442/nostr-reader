@@ -4,6 +4,7 @@ import (
 	"database/sql/driver"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/nbd-wtf/go-nostr"
 	"gorm.io/datatypes"
@@ -42,6 +43,7 @@ func (entity *Relay) BeforeUpdate(tx *gorm.DB) error {
 
 type Note struct {
 	ID             uint           `gorm:"primaryKey" json:"-"`
+	UID            uuid.UUID      `gorm:"type:char(36);"`
 	EventId        string         `gorm:"not null; unique; index;type:text" json:"event_id"`
 	Pubkey         string         `gorm:"index,type:btree;not null;type:varchar(100)" json:"pubkey"`
 	Kind           int            `gorm:"not null;index;" json:"kind"`
@@ -57,10 +59,18 @@ type Note struct {
 	CreatedAt      time.Time      `gorm:"default:current_timestamp" json:"-"`
 	UpdatedAt      time.Time      `gorm:"default:null" json:"-"`
 	Root           bool           `gorm:"default:false;index;comment:Is this the root note" json:"-"`
+	Urls           pq.StringArray `gorm:"type:text[];index:idx_notes_urls,type:gin" json:"-"`
+}
+
+func (entity *Note) BeforeCreate(tx *gorm.DB) error {
+	newUUID, err := uuid.NewV7()
+	tx.Statement.SetColumn("uid", newUUID)
+	return err
 }
 
 func (entity *Note) BeforeUpdate(tx *gorm.DB) error {
 	entity.UpdatedAt = time.Now()
+	tx.Statement.SetColumn("updated_at", time.Now())
 	return nil
 }
 
@@ -80,6 +90,7 @@ func (entity *Notification) BeforeUpdate(tx *gorm.DB) error {
 
 type Profile struct {
 	ID          uint           `json:"-"`
+	UID         uuid.UUID      `gorm:"type:char(36);"`
 	Pubkey      string         `gorm:"index,type:btree;not null;unique;type:varchar(100)" json:"pubkey"`
 	Name        string         `gorm:"type:varchar(255)" json:"name"`
 	About       string         `gorm:"type:text" json:"about"`
@@ -89,16 +100,24 @@ type Profile struct {
 	Lud16       string         `gorm:"type:varchar(255)" json:"lud16"`
 	DisplayName string         `gorm:"type:varchar(255)" json:"display_name"`
 	Raw         datatypes.JSON `json:"-"`
-	Url         string         `gorm:"type:varchar(255)" json:"url"`
+	Urls        pq.StringArray `gorm:"type:text[];index:idx_profile_urls,type:gin" json:"-"`
 	CreatedAt   time.Time      `gorm:"default:current_timestamp" json:"-"`
 	UpdatedAt   time.Time      `gorm:"default:null" json:"-"`
 	Followed    bool           `gorm:"type:bool;default:false" json:"followed"`
 	Blocked     bool           `gorm:"type:bool;default:false" json:"blocked"`
 }
 
-func (entity *Profile) BeforeUpdate(tx *gorm.DB) error {
-	entity.UpdatedAt = time.Now()
-	return nil
+func (profile *Profile) BeforeCreate(tx *gorm.DB) (err error) {
+	newUUID, err := uuid.NewV7()
+	profile.UID = newUUID
+	//tx.Statement.SetColumn("uid", newUUID)
+	return
+}
+
+func (profile *Profile) BeforeUpdate(tx *gorm.DB) (err error) {
+	profile.UpdatedAt = time.Now()
+	//tx.Statement.SetColumn("updated_at", time.Now())
+	return
 }
 
 type Refs struct {
