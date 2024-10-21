@@ -54,11 +54,11 @@ type Note struct {
 	Ptags          pq.StringArray `gorm:"type:text[];index:idx_notes_ptags,type:gin" json:"-" db:"ptags"`
 	Etags          pq.StringArray `gorm:"type:text[];index:idx_notes_etags,type:gin" json:"-" db:"etags"`
 	Sig            string         `gorm:"not null;type:varchar(200)" json:"sig" db:"sig"`
-	Garbage        bool           `gorm:"default:false" json:"-" db:"garbage"`
+	Garbage        bool           `gorm:"not null;default:false" json:"-" db:"garbage"`
 	Raw            datatypes.JSON `gorm:"not null;type:jsonb" json:"-" db:"raw"`
 	CreatedAt      sql.NullTime   `gorm:"default:current_timestamp" json:"-" db:"created_at"`
 	UpdatedAt      sql.NullTime   `gorm:"default:null" json:"-" db:"updated_at"`
-	Root           bool           `gorm:"default:false;index;comment:Is this the root note" json:"-" db:"root"`
+	Root           bool           `gorm:"not null;default:false;index;comment:Is this the root note" json:"-" db:"root"`
 	Urls           pq.StringArray `gorm:"type:text[];index:idx_notes_urls,type:gin" json:"urls" db:"urls"`
 	ProfileID      *uint          `json:"profile_id,omitempty"`
 }
@@ -104,8 +104,8 @@ type Profile struct {
 	Urls        pq.StringArray `gorm:"type:text[];index:idx_profile_urls,type:gin" json:"urls" db:"urls"`
 	CreatedAt   sql.NullTime   `gorm:"default:current_timestamp" json:"-" db:"created_at"`
 	UpdatedAt   sql.NullTime   `gorm:"default:null" json:"-" db:"updated_at"`
-	Followed    sql.NullBool   `gorm:"type:bool;default:false" json:"followed" db:"followed"`
-	Blocked     bool           `gorm:"type:bool;default:false" json:"blocked" db:"blocked"`
+	Followed    bool           `gorm:"type:bool;default:false;not null" json:"followed" db:"followed"`
+	Blocked     bool           `gorm:"type:bool;default:false;not null" json:"blocked" db:"blocked"`
 	Notes       []Note         `json:"-"`
 }
 

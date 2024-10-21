@@ -44,6 +44,8 @@ type DbConfig struct {
 	Retention int
 }
 
+var Missing_event_ids []string
+
 func (st *Storage) SetEnvironment(env string) {
 	st.Env = env
 }
@@ -86,21 +88,21 @@ func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
 	st.GormDB.AutoMigrate(&Note{}, &Profile{}, &Notification{}, &Block{}, &Follow{}, &Seen{}, &Tree{}, &Bookmark{}, &Relay{})
 
 	st.GormDB.Exec(`DO $$ BEGIN
-    		CREATE TYPE vote AS ENUM('like','dislike');
- 				EXCEPTION
-    			WHEN duplicate_object THEN null;
- 			END $$;`)
+		    		CREATE TYPE vote AS ENUM('like','dislike');
+		 				EXCEPTION
+		    			WHEN duplicate_object THEN null;
+		 			END $$;`)
 	st.GormDB.AutoMigrate(&Reaction{})
 
 	st.GormDB.Exec(`CREATE OR REPLACE FUNCTION delete_submission() RETURNS trigger AS $$
-	BEGIN  
-  		IF NEW.kind=5 THEN
-       		DELETE FROM notes WHERE ARRAY[event_id] && NEW.etags AND NEW.pubkey=pubkey;
-    		RETURN NULL;
-  		END IF;
-  		RETURN NEW;
-	END;
-	$$ LANGUAGE plpgsql;`)
+			BEGIN
+		  		IF NEW.kind=5 THEN
+		       		DELETE FROM notes WHERE ARRAY[event_id] && NEW.etags AND NEW.pubkey=pubkey;
+		    		RETURN NULL;
+		  		END IF;
+		  		RETURN NEW;
+			END;
+			$$ LANGUAGE plpgsql;`)
 	st.GormDB.Exec(`DROP TRIGGER IF EXISTS delete_trigger ON notes;`)
 	st.GormDB.Exec(`CREATE TRIGGER delete_trigger BEFORE INSERT ON notes FOR EACH ROW EXECUTE FUNCTION delete_submission();`)
 
@@ -130,6 +132,7 @@ func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
 
 		return nil
 	})
+	Missing_event_ids = make([]string, 0)
 
 	fmt.Println("Connect() -> Connected to database:", cfg.Dbname)
 	return err
@@ -251,6 +254,7 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*Event) ([]string, erro
 		}
 
 		if ev.Event.Kind == 1 {
+			Missing_event_ids = make([]string, 0)
 			note, err := st.SaveNote(ctx, ev)
 			if err != nil {
 				return []string{}, err
@@ -385,6 +389,29 @@ func (st *Storage) SaveNote(ctx context.Context, event *Event) (Note, error) {
 			notification := Notification{NoteID: note.ID}
 			st.GormDB.Model(&Notification{}).WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&notification)
 		}
+
+		/*
+			// Check if we already have the root Note
+			var searchNoteRootNote Note
+			err := st.GormDB.Model(&Note{}).Where(&Note{EventId: tree.RootTag}).Find(&searchNoteRootNote).Error
+			if err != nil {
+				return Note{}, err
+			}
+			if searchNoteRootNote.ID < 1 {
+				Missing_event_ids = append(Missing_event_ids, tree.RootTag)
+			}
+			// Same goes for reply which is replied to
+			if len(tree.ReplyTag) > 0 {
+				var searchNoteReplyNote Note
+				err = st.GormDB.Model(&Note{}).Where(&Note{EventId: tree.ReplyTag}).Find(&searchNoteReplyNote).Error
+				if err != nil {
+					return Note{}, err
+				}
+				if searchNoteReplyNote.ID < 1 {
+					Missing_event_ids = append(Missing_event_ids, tree.ReplyTag)
+				}
+			}
+		*/
 	}
 
 	return note, nil
@@ -468,7 +495,8 @@ func (st *Storage) GetPagination(ctx context.Context, p *Pagination, options Opt
 		notes.content, notes.tags_full::json, notes.sig, notes.etags, notes.ptags,
 		profiles.name, profiles.about , profiles.picture,
 		profiles.website, profiles.nip05, profiles.lud16, profiles.display_name, 
-		follows.pubkey follow, bookmarks.event_id bookmarked`).
+		CASE WHEN length(follows.pubkey) > 0 THEN TRUE ELSE FALSE END followed, 
+		CASE WHEN length(bookmarks.event_id) > 0 THEN TRUE ELSE FALSE END bookmarked`).
 		Joins("LEFT JOIN profiles ON (profiles.pubkey = notes.pubkey)").
 		Joins("LEFT JOIN blocks  on (blocks.pubkey = notes.pubkey)").
 		//Joins("LEFT JOIN seens on (seens.event_id = notes.event_id)").
@@ -574,7 +602,8 @@ func (st *Storage) GetPaginationRefeshPage(ctx context.Context, p *Pagination, i
 		notes.content, notes.tags_full::json, notes.sig, notes.etags, notes.ptags,
 		profiles.name, profiles.about , profiles.picture,
 		profiles.website, profiles.nip05, profiles.lud16, profiles.display_name, 
-		follows.pubkey follow, bookmarks.event_id bookmarked`).
+		CASE WHEN length(follows.pubkey) > 0 THEN TRUE ELSE FALSE END followed, 
+		CASE WHEN length(bookmarks.event_id) > 0 THEN TRUE ELSE FALSE END bookmarked`).
 		Joins("LEFT JOIN profiles ON (profiles.pubkey = notes.pubkey)").
 		Joins("LEFT JOIN blocks  on (blocks.pubkey = notes.pubkey)").
 		//Joins("LEFT JOIN seens on (seens.event_id = notes.event_id)").
@@ -640,8 +669,8 @@ func (st *Storage) procesEventRows(rows *sql.Rows, p *Pagination) (map[string]Ev
 		var nip05 sql.NullString
 		var lud16 sql.NullString
 		var displayname sql.NullString
-		var followed sql.NullString
-		var bookmarked sql.NullString
+		var followed bool
+		var bookmarked bool
 
 		note.Event = &nostr.Event{}
 		if err := rows.Scan(&id,
@@ -689,15 +718,8 @@ func (st *Storage) procesEventRows(rows *sql.Rows, p *Pagination) (map[string]Ev
 			note.Profile.DisplayName = displayname.String
 		}
 
-		note.Profile.Followed.Bool = false
-		if followed.Valid {
-			note.Profile.Followed.Bool = true
-		}
-		note.Bookmark = false
-		if bookmarked.Valid {
-			note.Bookmark = true
-		}
-
+		note.Profile.Followed = followed
+		note.Bookmark = bookmarked
 		//nostr.Event = json.Unmarshal()
 		note.Content = st.parseReferences(&note)
 
@@ -740,8 +762,9 @@ func (st *Storage) parseReferences(note *Event) string {
 						DisplayName: profile.DisplayName,
 						Pubkey:      profile.Pubkey,
 						Blocked:     false,
+						Followed:    false,
 					}
-					note.Refs.Profile[profile.Pubkey].Followed.Bool = false
+
 				}
 			}
 		}
@@ -776,7 +799,8 @@ func (st *Storage) getChildren(ctx context.Context, eventMap map[string]Event) e
 		notes.content, notes.tags_full::json, notes.sig, notes.etags, notes.ptags,
 		profiles.name, profiles.about , profiles.picture,
 		profiles.website, profiles.nip05, profiles.lud16, profiles.display_name, 
-		follows.pubkey follow, bookmarks.event_id bookmarked`).
+		CASE WHEN length(follows.pubkey) > 0 THEN TRUE ELSE FALSE END followed, 
+		CASE WHEN length(bookmarks.event_id) > 0 THEN TRUE ELSE FALSE END bookmarked`).
 		Joins("JOIN trees ON (trees.event_id = notes.event_id)").
 		Joins("LEFT JOIN profiles ON (profiles.pubkey = notes.pubkey)").
 		Joins("LEFT JOIN blocks ON (blocks.pubkey = notes.pubkey)").
@@ -820,8 +844,8 @@ func (st *Storage) getChildren(ctx context.Context, eventMap map[string]Event) e
 		var nip05 sql.NullString
 		var lud16 sql.NullString
 		var displayname sql.NullString
-		var followed sql.NullString
-		var bookmarked sql.NullString
+		var followed bool
+		var bookmarked bool
 		childEvent.Event = &nostr.Event{}
 
 		if err := treeRows.Scan(&root_event_id, &reply_event_id, &id,
@@ -860,14 +884,9 @@ func (st *Storage) getChildren(ctx context.Context, eventMap map[string]Event) e
 			childEvent.Profile.DisplayName = displayname.String
 		}
 
-		childEvent.Profile.Followed.Bool = false
-		if followed.Valid {
-			childEvent.Profile.Followed.Bool = true
-		}
-		childEvent.Bookmark = false
-		if bookmarked.Valid {
-			childEvent.Bookmark = true
-		}
+		childEvent.Profile.Followed = followed
+
+		childEvent.Bookmark = bookmarked
 
 		childEvent.Content = st.parseReferences(&childEvent)
 
@@ -1004,12 +1023,15 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 	treeQry := `SELECT t.root_event_id, t.reply_event_id, 
 	e.id, e.event_id, e.pubkey, e.kind, e.event_created_at, e.content,e.tags_full::json,e.sig, 
 	e.etags, e.ptags , u.name, u.about , u.picture,
-	u.website, u.nip05, u.lud16, u.display_name, f.pubkey follow
+	u.website, u.nip05, u.lud16, u.display_name, 
+	CASE WHEN length(f.pubkey) > 0 THEN TRUE ELSE FALSE end followed
+	CASE WHEN length(b.event_id) > 0 THEN TRUE ELSE FALSE end followed
 	FROM trees t, notes e 
 	LEFT JOIN profiles u ON (u.pubkey = e.pubkey ) 
 	LEFT JOIN blocks b on (b.pubkey = e.pubkey) 
 	LEFT JOIN seens s on (s.event_id = e.event_id)
 	LEFT JOIN follows f ON (f.pubkey = e.pubkey)
+	LEFT JOIN bookmarks b ON (b.note_id = e.id)
 	WHERE root_event_id IN (` + `'` + event.Event.ID + `')` +
 		` AND e.event_id = t.event_id
 	AND e.kind = 1 AND b.pubkey IS NULL AND s.event_id IS NULL AND e.garbage = false;`
@@ -1032,13 +1054,15 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 		var nip05 sql.NullString
 		var lud16 sql.NullString
 		var displayname sql.NullString
-		var followed sql.NullString
+		var followed bool
+		var bookmarked bool
+
 		childEvent.Event = &nostr.Event{}
 
 		if err := treeRows.Scan(&root_event_id, &reply_event_id, &id,
 			&childEvent.Event.ID, &childEvent.Event.PubKey, &childEvent.Event.Kind, &childEvent.Event.CreatedAt, &childEvent.Event.Content, &childEvent.Event.Tags, &childEvent.Event.Sig,
 			(pq.Array)(&childEvent.Etags), (pq.Array)(&childEvent.Ptags), &name, &about, &picture,
-			&website, &nip05, &lud16, &displayname, &followed); err != nil {
+			&website, &nip05, &lud16, &displayname, &followed, &bookmarked); err != nil {
 			log.Println("FindEvent() -> Query:: ", err.Error())
 			panic(err)
 		}
@@ -1072,11 +1096,8 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 			childEvent.Profile.DisplayName = displayname.String
 		}
 
-		childEvent.Profile.Followed.Bool = false
-		if followed.Valid {
-			childEvent.Profile.Followed.Bool = true
-		}
-
+		childEvent.Profile.Followed = followed
+		childEvent.Bookmark = bookmarked
 		event.Children[childEvent.Event.ID] = &childEvent
 	}
 

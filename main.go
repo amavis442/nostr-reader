@@ -138,6 +138,21 @@ func intervalTask(wg *sync.WaitGroup, ctx context.Context, st *Storage, nostrWra
 	if err != nil {
 		log.Println(err)
 	}
+
+	/*
+		if len(Missing_event_ids) > 0 {
+			//need to try to get them
+			filter = nostr.Filter{
+				IDs: Missing_event_ids,
+			}
+			evs := nostrWrapper.GetEvents(ctx, filter)
+
+			_, err := st.SaveEvents(ctx, evs)
+			if err != nil {
+				log.Println(err)
+			}
+		}
+	*/
 	log.Println("Done syncing")
 
 }
