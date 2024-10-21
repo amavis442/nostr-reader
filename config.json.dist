@@ -1,0 +1,14 @@
+{
+    "database": {
+        "user" : "",
+        "password": "",
+        "dbname": "",
+        "port": 5432,
+        "host": "localhost"
+    },
+    "nostr': {
+	    "privatekey": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+        "nip05": "https://nostrcheck.me/"
+    },
+    "filter": [] 
+}
