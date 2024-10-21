@@ -540,9 +540,6 @@ func (st *Storage) GetPagination(ctx context.Context, p *Pagination, options Opt
 		tx.Joins("JOIN follows ON (follows.pubkey = notes.pubkey)")
 	} else {
 		tx.Joins("LEFT JOIN follows ON (follows.pubkey = notes.pubkey)")
-		if !options.BookMark {
-			tx.Where("follows.pubkey is null")
-		}
 	}
 
 	if options.BookMark {
@@ -616,26 +613,15 @@ func (st *Storage) GetPaginationRefeshPage(ctx context.Context, p *Pagination, i
 		CASE WHEN length(bookmarks.event_id) > 0 THEN TRUE ELSE FALSE END bookmarked`).
 		Joins("LEFT JOIN profiles ON (profiles.pubkey = notes.pubkey)").
 		Joins("LEFT JOIN blocks  on (blocks.pubkey = notes.pubkey)").
+		Joins("JOIN follows ON (follows.pubkey = notes.pubkey)").
+		Joins("JOIN bookmarks ON (bookmarks.event_id = notes.event_id)").
 		//Joins("LEFT JOIN seens on (seens.event_id = notes.event_id)").
 		Where("notes.kind = 1").
+		Where("notes.root = true").
+		Where("blocks.pubkey IS NULL").
 		//Where("seens.event_id IS NULL").
 		Where("notes.garbage = false").
 		Where("notes.event_id IN (" + eventIds + ")")
-
-	if options.Follow {
-		tx.Joins("JOIN follows ON (follows.pubkey = notes.pubkey)")
-	} else {
-		tx.Joins("LEFT JOIN follows ON (follows.pubkey = notes.pubkey)")
-		tx.Where("follows.pubkey is null")
-	}
-
-	if options.BookMark {
-		tx.Joins("JOIN bookmarks ON (bookmarks.event_id = notes.event_id)")
-	} else {
-		tx.Joins("LEFT JOIN bookmarks ON (bookmarks.event_id = notes.event_id)").
-			Where("notes.root = true").
-			Where("blocks.pubkey IS NULL")
-	}
 
 	var count int64
 	tx.Count(&count)
