@@ -457,8 +457,6 @@ func (st *Storage) GetNewNotesCount(ctx context.Context, maxId int, options Opti
 		Select(`COUNT(notes.id)`).
 		Joins("LEFT JOIN blocks  on (blocks.pubkey = notes.pubkey)").
 		Where("notes.kind = 1").
-		Where("notes.root = true").
-		Where("blocks.pubkey IS NULL").
 		Where("notes.garbage = false").
 		Where("notes.id > ?", maxId)
 
@@ -471,6 +469,9 @@ func (st *Storage) GetNewNotesCount(ctx context.Context, maxId int, options Opti
 
 	if options.BookMark {
 		tx.Joins("JOIN bookmarks ON (bookmarks.event_id = notes.event_id)")
+	} else {
+		tx.Where("notes.root = true").
+			Where("blocks.pubkey IS NULL")
 	}
 
 	tx.Scan(&count)
