@@ -350,6 +350,20 @@ func (st *Storage) SaveNote(ctx context.Context, event *Event) (Note, error) {
 	note.Urls = event.Urls
 	note.UpdatedAt.Time = time.Now()
 
+	var searchProfile Profile
+	if err := st.GormDB.Model(&Profile{}).Where(Profile{Pubkey: ev.PubKey}).Find(&searchProfile).Error; err != nil {
+		switch {
+		case err == sql.ErrNoRows:
+			log.Printf("FindProfile() -> Query:: 404 no profile with pubkey %s\n", ev.PubKey)
+		default:
+			log.Fatalf("FindProfile() -> Query:: 502 query error: %v\n", err)
+		}
+		return Note{}, err
+	}
+	if searchProfile.ID > 0 {
+		note.ProfileID = &searchProfile.ID
+	}
+
 	tx := st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true})
 	if st.Env == "devel" {
 		tx = tx.Debug()
@@ -449,7 +463,7 @@ func (st *Storage) GetLastSeenID(ctx context.Context) (int, error) {
  */
 func (st *Storage) GetPagination(ctx context.Context, p *Pagination, options Options) error {
 
-	tx := st.GormDB.Table("notes").
+	tx := st.GormDB.Debug().Table("notes").
 		Select(`notes.id, notes.event_id, notes.pubkey, notes.kind, notes.event_created_at, 
 		notes.content, notes.tags_full::json, notes.sig, notes.etags, notes.ptags,
 		profiles.name, profiles.about , profiles.picture,
@@ -459,10 +473,13 @@ func (st *Storage) GetPagination(ctx context.Context, p *Pagination, options Opt
 		Joins("LEFT JOIN blocks  on (blocks.pubkey = notes.pubkey)").
 		//Joins("LEFT JOIN seens on (seens.event_id = notes.event_id)").
 		Where("notes.kind = 1").
-		Where("notes.root = true").
-		Where("blocks.pubkey IS NULL").
 		//Where("seens.event_id IS NULL").
 		Where("notes.garbage = false")
+
+	if !options.BookMark && !options.Follow {
+		tx.Where("notes.root = true").
+			Where("blocks.pubkey IS NULL")
+	}
 
 	// Needs a time stamp that stays the same else total will change with every call
 	if p.Since > 0 && (!options.BookMark && !options.Follow) {
@@ -485,13 +502,15 @@ func (st *Storage) GetPagination(ctx context.Context, p *Pagination, options Opt
 		tx.Joins("JOIN follows ON (follows.pubkey = notes.pubkey)")
 	} else {
 		tx.Joins("LEFT JOIN follows ON (follows.pubkey = notes.pubkey)")
-		tx.Where("follows.pubkey is null")
+		if !options.BookMark {
+			tx.Where("follows.pubkey is null")
+		}
 	}
 
 	if options.BookMark {
-		tx.Joins("JOIN bookmarks ON (bookmarks.event_id = notes.event_id)")
+		tx.Joins("JOIN bookmarks ON (bookmarks.note_id = notes.id)")
 	} else {
-		tx.Joins("LEFT JOIN bookmarks ON (bookmarks.event_id = notes.event_id)")
+		tx.Joins("LEFT JOIN bookmarks ON (bookmarks.note_id = notes.id)")
 	}
 
 	if !p.Renew {
@@ -972,10 +991,10 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 	row := st.GormDB.WithContext(ctx).Raw(qry, id).Row()
 	err := row.Scan(&event.Event.ID, &event.Event.PubKey, &event.Event.Kind, &event.Event.CreatedAt, &event.Event.Content, &event.Event.Tags, &event.Event.Sig,
 		(pq.Array)(&event.Etags), (pq.Array)(&event.Ptags), &name, &about, &picture, &website, &nip05, &lud16, &displayname)
-	switch {
-	case err == sql.ErrNoRows:
+	switch err {
+	case sql.ErrNoRows:
 		log.Printf("FindEvent() -> Query:: 404 no event with id %s\n", id)
-	case err != nil:
+	default:
 		log.Fatalf("FindEvent() -> Query:: 502 query error: %v\n", err)
 	}
 	event.Tree = 1
@@ -1165,7 +1184,7 @@ func (st *Storage) CreateBookMark(ctx context.Context, eventID string) error {
 	var note Note
 	st.GormDB.WithContext(ctx).Where("event_id = ?", eventID).Find(&note)
 
-	bookmark := Bookmark{EventId: eventID, NoteID: note.ID}
+	bookmark := Bookmark{EventId: eventID, NoteID: &note.ID}
 	err := st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&bookmark).Error
 	if err != nil {
 		log.Println("CreateBookMark() -> Query:: ", err)

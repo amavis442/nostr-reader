@@ -347,16 +347,18 @@ func (req *RequestHandler) GetFollowedNotes(w http.ResponseWriter, r *http.Reque
 	pagination.SetRenew(p.Renew)
 	pagination.SetMaxId(p.Maxid)
 
-	if p.Context == "page.refresh" {
+	switch p.Context {
+	case "page.refresh":
 		log.Println("Context us ")
 		err = req.Db.GetPaginationRefeshPage(ctx, &pagination, &p.Ids, Options{Follow: true, BookMark: false})
 		pagination.SetTotal(uint64(p.Total))
-	}
-
-	if p.Context == "follow" || p.Context == "" {
+	case "follow":
+		err = req.Db.GetPagination(ctx, &pagination, Options{Follow: true, BookMark: false})
+	case "bookmark":
+		err = req.Db.GetPagination(ctx, &pagination, Options{Follow: false, BookMark: true})
+	default:
 		err = req.Db.GetPagination(ctx, &pagination, Options{Follow: true, BookMark: false})
 	}
-
 	if err != nil {
 		log.Println(err)
 	}

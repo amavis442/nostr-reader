@@ -181,7 +181,7 @@ func (entity *Tree) BeforeUpdate(tx *gorm.DB) error {
 type Bookmark struct {
 	ID        uint   `json:"-"`
 	EventId   string `gorm:"index;not null;unique;type:varchar(100)" json:"event_id"`
-	NoteID    uint
+	NoteID    *uint
 	CreatedAt time.Time `gorm:"default:current_timestamp" json:"-"`
 	UpdatedAt time.Time `gorm:"default:null" json:"-"`
 }
