@@ -237,7 +237,8 @@ func (st *Storage) SaveProfiles(ctx context.Context, evs []*Event) error {
 func (st *Storage) SaveEvents(ctx context.Context, evs []*Event) ([]string, error) {
 	var pubkeys = make([]string, 0)
 
-	st.Notifications = make([]string, 0) // reset if already set
+	st.Notifications = make([]string, 0)  // reset if already set
+	Missing_event_ids = make([]string, 0) //reset
 
 	for _, ev := range evs {
 		if ev.Event.CreatedAt.Time().Unix() > time.Now().Unix() { // Ignore events with timestamp in the future.
@@ -254,7 +255,7 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*Event) ([]string, erro
 		}
 
 		if ev.Event.Kind == 1 {
-			Missing_event_ids = make([]string, 0)
+
 			note, err := st.SaveNote(ctx, ev)
 			if err != nil {
 				return []string{}, err
@@ -382,36 +383,44 @@ func (st *Storage) SaveNote(ctx context.Context, event *Event) (Note, error) {
 	}
 
 	if note.ID > 0 && len(tree.RootTag) > 0 {
-		treeData := Tree{EventId: ev.ID, RootEventId: tree.RootTag, ReplyEventId: tree.ReplyTag}
-		st.GormDB.Model(&Tree{}).WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&treeData)
-
+		var treeSearch Tree
+		if len(tree.ReplyTag) > 0 {
+			err = st.GormDB.Model(&Tree{}).Where(&Tree{RootEventId: tree.RootTag, ReplyEventId: tree.ReplyTag}).Find(&treeSearch).Error
+		} else {
+			err = st.GormDB.Model(&Tree{}).Where(&Tree{RootEventId: tree.RootTag}).Find(&treeSearch).Error
+		}
+		if err != nil {
+			return Note{}, err
+		}
+		if treeSearch.ID == 0 {
+			treeData := Tree{EventId: ev.ID, RootEventId: tree.RootTag, ReplyEventId: tree.ReplyTag}
+			st.GormDB.Model(&Tree{}).WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&treeData)
+		}
 		if hasNotification {
 			notification := Notification{NoteID: note.ID}
 			st.GormDB.Model(&Notification{}).WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&notification)
 		}
 
-		/*
-			// Check if we already have the root Note
-			var searchNoteRootNote Note
-			err := st.GormDB.Model(&Note{}).Where(&Note{EventId: tree.RootTag}).Find(&searchNoteRootNote).Error
+		// Check if we already have the root Note
+		var searchNoteRootNote Note
+		err = st.GormDB.Model(&Note{}).Where(&Note{EventId: tree.RootTag}).Find(&searchNoteRootNote).Error
+		if err != nil {
+			return Note{}, err
+		}
+		if searchNoteRootNote.ID == 0 {
+			Missing_event_ids = append(Missing_event_ids, tree.RootTag)
+		}
+		// Same goes for reply which is replied to
+		if len(tree.ReplyTag) > 0 {
+			var searchNoteReplyNote Note
+			err = st.GormDB.Model(&Note{}).Where(&Note{EventId: tree.ReplyTag}).Find(&searchNoteReplyNote).Error
 			if err != nil {
 				return Note{}, err
 			}
-			if searchNoteRootNote.ID < 1 {
-				Missing_event_ids = append(Missing_event_ids, tree.RootTag)
+			if searchNoteReplyNote.ID == 0 {
+				Missing_event_ids = append(Missing_event_ids, tree.ReplyTag)
 			}
-			// Same goes for reply which is replied to
-			if len(tree.ReplyTag) > 0 {
-				var searchNoteReplyNote Note
-				err = st.GormDB.Model(&Note{}).Where(&Note{EventId: tree.ReplyTag}).Find(&searchNoteReplyNote).Error
-				if err != nil {
-					return Note{}, err
-				}
-				if searchNoteReplyNote.ID < 1 {
-					Missing_event_ids = append(Missing_event_ids, tree.ReplyTag)
-				}
-			}
-		*/
+		}
 	}
 
 	return note, nil
@@ -504,7 +513,7 @@ func (st *Storage) GetPagination(ctx context.Context, p *Pagination, options Opt
 		//Where("seens.event_id IS NULL").
 		Where("notes.garbage = false")
 
-	if !options.BookMark && !options.Follow {
+	if !options.BookMark {
 		tx.Where("notes.root = true").
 			Where("blocks.pubkey IS NULL")
 	}
@@ -608,8 +617,6 @@ func (st *Storage) GetPaginationRefeshPage(ctx context.Context, p *Pagination, i
 		Joins("LEFT JOIN blocks  on (blocks.pubkey = notes.pubkey)").
 		//Joins("LEFT JOIN seens on (seens.event_id = notes.event_id)").
 		Where("notes.kind = 1").
-		Where("notes.root = true").
-		Where("blocks.pubkey IS NULL").
 		//Where("seens.event_id IS NULL").
 		Where("notes.garbage = false").
 		Where("notes.event_id IN (" + eventIds + ")")
@@ -624,7 +631,9 @@ func (st *Storage) GetPaginationRefeshPage(ctx context.Context, p *Pagination, i
 	if options.BookMark {
 		tx.Joins("JOIN bookmarks ON (bookmarks.event_id = notes.event_id)")
 	} else {
-		tx.Joins("LEFT JOIN bookmarks ON (bookmarks.event_id = notes.event_id)")
+		tx.Joins("LEFT JOIN bookmarks ON (bookmarks.event_id = notes.event_id)").
+			Where("notes.root = true").
+			Where("blocks.pubkey IS NULL")
 	}
 
 	var count int64

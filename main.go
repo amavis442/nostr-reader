@@ -8,6 +8,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/nbd-wtf/go-nostr"
 )
 
 const name = "nostr-reader"
@@ -139,20 +141,20 @@ func intervalTask(wg *sync.WaitGroup, ctx context.Context, st *Storage, nostrWra
 		log.Println(err)
 	}
 
-	/*
-		if len(Missing_event_ids) > 0 {
-			//need to try to get them
-			filter = nostr.Filter{
-				IDs: Missing_event_ids,
-			}
-			evs := nostrWrapper.GetEvents(ctx, filter)
-
-			_, err := st.SaveEvents(ctx, evs)
-			if err != nil {
-				log.Println(err)
-			}
+	if len(Missing_event_ids) > 0 {
+		log.Println("Sniping missing events...........")
+		//need to try to get them
+		filter = nostr.Filter{
+			IDs: Missing_event_ids,
 		}
-	*/
+		evs := nostrWrapper.GetEvents(ctx, filter)
+
+		_, err := st.SaveEvents(ctx, evs)
+		if err != nil {
+			log.Println(err)
+		}
+	}
+
 	log.Println("Done syncing")
 
 }
