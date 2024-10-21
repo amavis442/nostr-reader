@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"database/sql/driver"
 	"time"
 
@@ -23,7 +24,7 @@ type Event struct {
 	Bookmark bool              `json:"bookmark"`
 	Content  string            `json:"content"`
 	Refs     Refs              `json:"refs"`
-	Urls     []string          `json:"-"`
+	Urls     pq.StringArray    `json:"urls"`
 }
 
 type Relay struct {
@@ -42,24 +43,24 @@ func (entity *Relay) BeforeUpdate(tx *gorm.DB) error {
 }
 
 type Note struct {
-	ID             uint           `gorm:"primaryKey" json:"-"`
-	UID            uuid.UUID      `gorm:"type:char(36);"`
-	EventId        string         `gorm:"not null; unique; index;type:text" json:"event_id"`
-	Pubkey         string         `gorm:"index,type:btree;not null;type:varchar(100)" json:"pubkey"`
-	Kind           int            `gorm:"not null;index;" json:"kind"`
-	EventCreatedAt int64          `gorm:"not null" json:"event_created_at"`
-	Content        string         `json:"content"`
-	TagsFull       string         `json:"tags"`
-	Ptags          pq.StringArray `gorm:"type:text[];index:idx_notes_ptags,type:gin" json:"-"`
-	Etags          pq.StringArray `gorm:"type:text[];index:idx_notes_etags,type:gin" json:"-"`
-	Sig            string         `gorm:"not null;type:varchar(200)" json:"sig"`
-	Garbage        bool           `gorm:"default:false" json:"-"`
-	Raw            datatypes.JSON `json:"-"`
-	Reaction       []Reaction     `gorm:"default:null" json:"reactions"`
-	CreatedAt      time.Time      `gorm:"default:current_timestamp" json:"-"`
-	UpdatedAt      time.Time      `gorm:"default:null" json:"-"`
-	Root           bool           `gorm:"default:false;index;comment:Is this the root note" json:"-"`
-	Urls           pq.StringArray `gorm:"type:text[];index:idx_notes_urls,type:gin" json:"-"`
+	ID             uint           `gorm:"primaryKey" json:"-" db:"id"`
+	UID            uuid.UUID      `gorm:"type:char(36);" db:"uid"`
+	EventId        string         `gorm:"not null; unique; index;type:text" json:"event_id" db:"event_id"`
+	Pubkey         string         `gorm:"index,type:btree;not null;type:varchar(100)" json:"pubkey" db:"pubkey"`
+	Kind           int            `gorm:"not null;index;" json:"kind" db:"kind"`
+	EventCreatedAt int64          `gorm:"not null" json:"event_created_at" db:"event_created_at"`
+	Content        string         `json:"content" db:"content"`
+	TagsFull       string         `json:"tags" db:"tags_full"`
+	Ptags          pq.StringArray `gorm:"type:text[];index:idx_notes_ptags,type:gin" json:"-" db:"ptags"`
+	Etags          pq.StringArray `gorm:"type:text[];index:idx_notes_etags,type:gin" json:"-" db:"etags"`
+	Sig            string         `gorm:"not null;type:varchar(200)" json:"sig" db:"sig"`
+	Garbage        bool           `gorm:"default:false" json:"-" db:"garbage"`
+	Raw            datatypes.JSON `gorm:"not null;type:jsonb" json:"-" db:"raw"`
+	CreatedAt      sql.NullTime   `gorm:"default:current_timestamp" json:"-" db:"created_at"`
+	UpdatedAt      sql.NullTime   `gorm:"default:null" json:"-" db:"updated_at"`
+	Root           bool           `gorm:"default:false;index;comment:Is this the root note" json:"-" db:"root"`
+	Urls           pq.StringArray `gorm:"type:text[];index:idx_notes_urls,type:gin" json:"urls" db:"urls"`
+	ProfileID      *uint          `json:"profile_id,omitempty"`
 }
 
 func (entity *Note) BeforeCreate(tx *gorm.DB) error {
@@ -69,7 +70,7 @@ func (entity *Note) BeforeCreate(tx *gorm.DB) error {
 }
 
 func (entity *Note) BeforeUpdate(tx *gorm.DB) error {
-	entity.UpdatedAt = time.Now()
+	entity.UpdatedAt.Time = time.Now()
 	tx.Statement.SetColumn("updated_at", time.Now())
 	return nil
 }
@@ -89,22 +90,23 @@ func (entity *Notification) BeforeUpdate(tx *gorm.DB) error {
 }
 
 type Profile struct {
-	ID          uint           `json:"-"`
-	UID         uuid.UUID      `gorm:"type:char(36);"`
-	Pubkey      string         `gorm:"index,type:btree;not null;unique;type:varchar(100)" json:"pubkey"`
-	Name        string         `gorm:"type:varchar(255)" json:"name"`
-	About       string         `gorm:"type:text" json:"about"`
-	Picture     string         `gorm:"type:varchar(255)" json:"picture"`
-	Website     string         `gorm:"type:varchar(255)" json:"website"`
-	Nip05       string         `gorm:"type:varchar(255)" json:"nip05"`
-	Lud16       string         `gorm:"type:varchar(255)" json:"lud16"`
-	DisplayName string         `gorm:"type:varchar(255)" json:"display_name"`
-	Raw         datatypes.JSON `json:"-"`
-	Urls        pq.StringArray `gorm:"type:text[];index:idx_profile_urls,type:gin" json:"-"`
-	CreatedAt   time.Time      `gorm:"default:current_timestamp" json:"-"`
-	UpdatedAt   time.Time      `gorm:"default:null" json:"-"`
-	Followed    bool           `gorm:"type:bool;default:false" json:"followed"`
-	Blocked     bool           `gorm:"type:bool;default:false" json:"blocked"`
+	ID          uint           `json:"-" db:"id"`
+	UID         uuid.UUID      `gorm:"type:char(36);" db:"uid"`
+	Pubkey      string         `gorm:"index,type:btree;not null;unique;type:varchar(100)" json:"pubkey" db:"pubkey"`
+	Name        string         `gorm:"type:varchar(255)" json:"name" db:"name"`
+	About       string         `gorm:"type:text" json:"about" db:"about"`
+	Picture     string         `gorm:"type:varchar(255)" json:"picture" db:"picture"`
+	Website     string         `gorm:"type:varchar(255)" json:"website" db:"website"`
+	Nip05       string         `gorm:"type:varchar(255)" json:"nip05" db:"nip05"`
+	Lud16       string         `gorm:"type:varchar(255)" json:"lud16" db:"lud16"`
+	DisplayName string         `gorm:"type:varchar(255)" json:"display_name" db:"display_name"`
+	Raw         datatypes.JSON `gorm:"not null;type:jsonb" json:"-" db:"raw"`
+	Urls        pq.StringArray `gorm:"type:text[];index:idx_profile_urls,type:gin" json:"urls" db:"urls"`
+	CreatedAt   sql.NullTime   `gorm:"default:current_timestamp" json:"-" db:"created_at"`
+	UpdatedAt   sql.NullTime   `gorm:"default:null" json:"-" db:"updated_at"`
+	Followed    sql.NullBool   `gorm:"type:bool;default:false" json:"followed" db:"followed"`
+	Blocked     bool           `gorm:"type:bool;default:false" json:"blocked" db:"blocked"`
+	Notes       []Note         `json:"-"`
 }
 
 func (profile *Profile) BeforeCreate(tx *gorm.DB) (err error) {
@@ -115,7 +117,7 @@ func (profile *Profile) BeforeCreate(tx *gorm.DB) (err error) {
 }
 
 func (profile *Profile) BeforeUpdate(tx *gorm.DB) (err error) {
-	profile.UpdatedAt = time.Now()
+	profile.UpdatedAt.Time = time.Now()
 	//tx.Statement.SetColumn("updated_at", time.Now())
 	return
 }

@@ -44,20 +44,6 @@ type DbConfig struct {
 	Retention int
 }
 
-/*
-type UserProfile struct {
-	Name        string `json:"name"`
-	About       string `json:"about"`
-	Picture     string `json:"picture"`
-	Website     string `json:"website"`
-	Nip05       string `json:"nip05"`
-	Lud16       string `json:"lud16"`
-	DisplayName string `json:"display_name"`
-	Pubkey      string `json:"pubkey"`
-	Followed    bool   `json:"followed"`
-}
-*/
-
 func (st *Storage) SetEnvironment(env string) {
 	st.Env = env
 }
@@ -179,18 +165,38 @@ func (st *Storage) SaveProfile(ctx context.Context, ev *Event) error {
 		DisplayName: data.DisplayName,
 		Raw:         jsonbuf.Bytes(),
 		Urls:        ev.Urls,
-		UpdatedAt:   time.Now(),
 	}
+	profile.UpdatedAt.Time = time.Now()
 
 	slog.Info("SaveProfile() -> Adding or updating profile: pubkey = "+profile.Pubkey, "profile", profile)
 
 	//log.Println("SaveProfile() -> Adding or updating profile: pubkey = ", profile.Pubkey, " [", profile, "]")
 	log.Println("----------------------")
 	//st.GormDB.Clauses(clause.OnConflict{DoNothing: true}).Create(&profile)
-	st.GormDB.Model(&Profile{}).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "pubkey"}},
-		DoUpdates: clause.AssignmentColumns([]string{"name", "about", "picture", "website", "nip05", "lud16", "display_name", "raw", "urls", "updated_at"}),
-	}).Create(&profile)
+	/*
+		st.GormDB.Model(&Profile{}).Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "pubkey"}},
+			DoUpdates: clause.AssignmentColumns([]string{"name", "about", "picture", "website", "nip05", "lud16", "display_name", "raw", "urls", "updated_at"}),
+		}).Create(&profile)
+	*/
+	var searchProfile Profile
+	if err := st.GormDB.Model(&Profile{}).Where(Profile{Pubkey: ev.Event.PubKey}).Find(&searchProfile).Error; err != nil {
+		switch {
+		case err == sql.ErrNoRows:
+			log.Printf("FindProfile() -> Query:: 404 no profile with pubkey %s\n", ev.Event.PubKey)
+		case err != nil:
+			log.Fatalf("FindProfile() -> Query:: 502 query error: %v\n", err)
+		}
+		return err
+	}
+
+	result := st.GormDB.Where(Profile{Pubkey: ev.Event.PubKey}).
+		Assign(profile).
+		FirstOrCreate(&profile)
+	if result.Error != nil {
+		return result.Error
+	}
+	fmt.Println(profile)
 
 	if st.GormDB.Error != nil {
 		log.Print(st.GormDB.Error.Error())
@@ -201,7 +207,9 @@ func (st *Storage) SaveProfile(ctx context.Context, ev *Event) error {
 	if data.Picture != "" && len(data.Picture) > len("https://randomuser.me") && data.Picture[0:len("https://randomuser.me")] == "https://randomuser.me" {
 		st.CreateBlock(ctx, ev.Event.PubKey)
 	}
-
+	if searchProfile.ID != 0 {
+		st.GormDB.Model(&Note{}).Where(Note{Pubkey: ev.Event.PubKey}).Update("profile_id", searchProfile.ID)
+	}
 	return nil
 }
 
@@ -340,7 +348,7 @@ func (st *Storage) SaveNote(ctx context.Context, event *Event) (Note, error) {
 	note.Raw = jsonbuf.Bytes()
 	note.Root = isRoot
 	note.Urls = event.Urls
-	note.UpdatedAt = time.Now()
+	note.UpdatedAt.Time = time.Now()
 
 	tx := st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true})
 	if st.Env == "devel" {
@@ -493,7 +501,7 @@ func (st *Storage) GetPagination(ctx context.Context, p *Pagination, options Opt
 	var count int64
 	tx.Count(&count)
 
-	tx.Limit(p.Limit)
+	tx.Limit(int(p.Limit))
 	if p.Offset > 0 {
 		tx.Offset(int(p.Offset))
 	}
@@ -505,7 +513,7 @@ func (st *Storage) GetPagination(ctx context.Context, p *Pagination, options Opt
 	}
 	defer rows.Close()
 
-	p.SetTotal(count)
+	p.SetTotal(uint64(count))
 	p.SetTo()
 	eventMap, keys, seenMap, _ := st.procesEventRows(rows, p)
 	tx = st.GormDB.WithContext(ctx).Model(&Seen{})
@@ -581,7 +589,7 @@ func (st *Storage) GetPaginationRefeshPage(ctx context.Context, p *Pagination, i
 	}
 	defer rows.Close()
 
-	p.SetTotal(count)
+	p.SetTotal(uint64(count))
 	p.SetTo()
 	eventMap, keys, _, _ := st.procesEventRows(rows, p)
 	st.getChildren(ctx, eventMap)
@@ -596,15 +604,15 @@ func (st *Storage) GetPaginationRefeshPage(ctx context.Context, p *Pagination, i
 	return nil
 }
 
-func (st *Storage) procesEventRows(rows *sql.Rows, p *Pagination) (map[string]Event, []string, map[int64]string, error) {
+func (st *Storage) procesEventRows(rows *sql.Rows, p *Pagination) (map[string]Event, []string, map[uint64]string, error) {
 	eventMap := make(map[string]Event)
 	var keys []string
-	seenMap := make(map[int64]string)
+	seenMap := make(map[uint64]string)
 
 	canUpdateMaxId := (p.Renew || p.Maxid == 0)
 	for rows.Next() {
 		var note Event
-		var id int64
+		var id uint64
 		var name sql.NullString
 		var about sql.NullString
 		var picture sql.NullString
@@ -662,9 +670,9 @@ func (st *Storage) procesEventRows(rows *sql.Rows, p *Pagination) (map[string]Ev
 			note.Profile.DisplayName = displayname.String
 		}
 
-		note.Profile.Followed = false
+		note.Profile.Followed.Bool = false
 		if followed.Valid {
-			note.Profile.Followed = true
+			note.Profile.Followed.Bool = true
 		}
 		note.Bookmark = false
 		if bookmarked.Valid {
@@ -712,9 +720,9 @@ func (st *Storage) parseReferences(note *Event) string {
 						Lud16:       profile.Lud16,
 						DisplayName: profile.DisplayName,
 						Pubkey:      profile.Pubkey,
-						Followed:    false,
 						Blocked:     false,
 					}
+					note.Refs.Profile[profile.Pubkey].Followed.Bool = false
 				}
 			}
 		}
@@ -833,9 +841,9 @@ func (st *Storage) getChildren(ctx context.Context, eventMap map[string]Event) e
 			childEvent.Profile.DisplayName = displayname.String
 		}
 
-		childEvent.Profile.Followed = false
+		childEvent.Profile.Followed.Bool = false
 		if followed.Valid {
-			childEvent.Profile.Followed = true
+			childEvent.Profile.Followed.Bool = true
 		}
 		childEvent.Bookmark = false
 		if bookmarked.Valid {
@@ -925,7 +933,7 @@ func (st *Storage) GetInbox(ctx context.Context, p *Pagination, pubkey string) e
 	defer rows.Close()
 
 	eventMap, keys, _, _ := st.procesEventRows(rows, p)
-	p.SetTotal(int64(len(keys)))
+	p.SetTotal(uint64(len(keys)))
 	p.SetTo()
 
 	st.getChildren(ctx, eventMap)
@@ -1045,9 +1053,9 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 			childEvent.Profile.DisplayName = displayname.String
 		}
 
-		childEvent.Profile.Followed = false
+		childEvent.Profile.Followed.Bool = false
 		if followed.Valid {
-			childEvent.Profile.Followed = true
+			childEvent.Profile.Followed.Bool = true
 		}
 
 		event.Children[childEvent.Event.ID] = &childEvent

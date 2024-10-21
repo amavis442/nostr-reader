@@ -83,9 +83,9 @@ func (req *RequestHandler) GetNotes(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	pagination := Pagination{}
-	pagination.SetLimit(p.Limit)
-	pagination.SetCurrentPage(p.Page)
-	pagination.SetSince(p.Since)
+	pagination.SetLimit(uint(p.Limit))
+	pagination.SetCurrentPage(uint(p.Page))
+	pagination.SetSince(uint(p.Since))
 
 	pagination.SetRenew(p.Renew)
 	pagination.SetMaxId(p.Maxid)
@@ -122,9 +122,9 @@ func (req *RequestHandler) GetInbox(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	pagination := Pagination{}
-	pagination.SetLimit(p.Limit)
-	pagination.SetCurrentPage(p.Page)
-	pagination.SetSince(p.Since)
+	pagination.SetLimit(uint(p.Limit))
+	pagination.SetCurrentPage(uint(p.Page))
+	pagination.SetSince(uint(p.Since))
 	err = req.Db.GetInbox(ctx, &pagination, req.Pubkey)
 
 	if err != nil {
@@ -341,16 +341,16 @@ func (req *RequestHandler) GetFollowedNotes(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusOK)
 
 	pagination := Pagination{}
-	pagination.SetLimit(p.Limit)
-	pagination.SetCurrentPage(p.Page)
-	pagination.SetSince(p.Since)
+	pagination.SetLimit(uint(p.Limit))
+	pagination.SetCurrentPage(uint(p.Page))
+	pagination.SetSince(uint(p.Since))
 	pagination.SetRenew(p.Renew)
 	pagination.SetMaxId(p.Maxid)
 
 	if p.Context == "page.refresh" {
 		log.Println("Context us ")
 		err = req.Db.GetPaginationRefeshPage(ctx, &pagination, &p.Ids, Options{Follow: true, BookMark: false})
-		pagination.SetTotal(int64(p.Total))
+		pagination.SetTotal(uint64(p.Total))
 	}
 
 	if p.Context == "follow" || p.Context == "" {
@@ -566,9 +566,9 @@ func (req *RequestHandler) GetBookMarked(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusOK)
 
 	pagination := Pagination{}
-	pagination.SetLimit(p.Limit)
-	pagination.SetCurrentPage(p.Page)
-	pagination.SetSince(p.Since)
+	pagination.SetLimit(uint(p.Limit))
+	pagination.SetCurrentPage(uint(p.Page))
+	pagination.SetSince(uint(p.Since))
 	pagination.SetRenew(p.Renew)
 	pagination.SetMaxId(p.Maxid)
 	err = req.Db.GetPagination(ctx, &pagination, Options{Follow: false, BookMark: true})

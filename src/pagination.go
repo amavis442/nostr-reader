@@ -5,37 +5,37 @@ import "math"
 type Pagination struct {
 	Data interface{} `json:"data"`
 
-	Limit      int    `json:"limit,omitempty" query:"limit"`
-	Page       int    `json:"page,omitempty" query:"page"`
+	Limit      uint   `json:"limit,omitempty" query:"limit"`
+	Page       uint   `json:"page,omitempty" query:"page"`
 	Sort       string `json:"sort,omitempty" query:"sort"`
-	TotalRows  int64  `json:"total_rows"`
-	TotalPages int    `json:"total_pages"`
+	TotalRows  uint64 `json:"total_rows"`
+	TotalPages uint   `json:"total_pages"`
 
-	Pages       int64 `json:"pages"`
-	Total       int64 `json:"total"`
-	PerPage     int   `json:"per_page"`
-	Offset      int64 `json:"offset"`
-	CurrentPage int   `json:"current_page"`
-	LastPage    int64 `json:"last_page"`
-	From        int   `json:"from"`
-	To          int   `json:"to"`
-	Since       int   `json:"since"`
-	Renew       bool  `json:"renew"`
-	Maxid       int64 `json:"maxid"`
+	Pages       uint64 `json:"pages"`
+	Total       uint64 `json:"total"`
+	PerPage     uint   `json:"per_page"`
+	Offset      uint64 `json:"offset"`
+	CurrentPage uint   `json:"current_page"`
+	LastPage    uint64 `json:"last_page"`
+	From        uint   `json:"from"`
+	To          uint   `json:"to"`
+	Since       uint   `json:"since"`
+	Renew       bool   `json:"renew"`
+	Maxid       uint64 `json:"maxid"`
 }
 
-func (p *Pagination) GetOffset() int {
+func (p *Pagination) GetOffset() uint {
 	return (p.GetPage() - 1) * p.GetLimit()
 }
 
-func (p *Pagination) GetLimit() int {
+func (p *Pagination) GetLimit() uint {
 	if p.Limit == 0 {
 		p.Limit = 10
 	}
 	return p.Limit
 }
 
-func (p *Pagination) GetPage() int {
+func (p *Pagination) GetPage() uint {
 	if p.Page == 0 {
 		p.Page = 1
 	}
@@ -49,38 +49,38 @@ func (p *Pagination) GetSort() string {
 	return p.Sort
 }
 
-func (p *Pagination) SetTotal(recordCount int64) {
+func (p *Pagination) SetTotal(recordCount uint64) {
 	p.Total = recordCount
 	p.SetPages(recordCount)
 }
 
-func (p *Pagination) SetLimit(limit int) {
+func (p *Pagination) SetLimit(limit uint) {
 	p.Limit = limit
 	p.PerPage = limit
 }
 
-func (p *Pagination) SetSince(since int) {
+func (p *Pagination) SetSince(since uint) {
 	p.Since = since
 }
 
-func (p *Pagination) SetCurrentPage(current_page int) {
+func (p *Pagination) SetCurrentPage(current_page uint) {
 	p.CurrentPage = current_page
 	p.SetOffset()
 	p.SetLastPage()
 	p.setFrom()
 }
 
-func (p *Pagination) SetPages(recordCount int64) {
-	p.Pages = int64(math.Ceil(float64(recordCount) / float64(p.Limit)))
+func (p *Pagination) SetPages(recordCount uint64) {
+	p.Pages = uint64(math.Ceil(float64(recordCount) / float64(p.Limit)))
 	p.LastPage = p.Pages
 }
 
 func (p *Pagination) SetOffset() {
-	p.Offset = int64((p.CurrentPage - 1) * p.Limit)
+	p.Offset = uint64((p.CurrentPage - 1) * p.Limit)
 }
 
 func (p *Pagination) SetLastPage() {
-	p.LastPage = int64(math.Ceil(float64(p.Total) / float64(p.Limit)))
+	p.LastPage = uint64(math.Ceil(float64(p.Total) / float64(p.Limit)))
 }
 
 func (p *Pagination) setFrom() {
@@ -88,15 +88,15 @@ func (p *Pagination) setFrom() {
 }
 
 func (p *Pagination) SetTo() {
-	if p.CurrentPage == int(p.LastPage) {
-		p.To = int(p.Total)
+	if p.CurrentPage == uint(p.LastPage) {
+		p.To = uint(p.Total)
 	} else {
 		p.To = (p.CurrentPage-1)*p.Limit + p.Limit // Not correct at end
 	}
 }
 
 func (p *Pagination) SetMaxId(maxid int) {
-	p.Maxid = int64(maxid)
+	p.Maxid = uint64(maxid)
 }
 
 func (p *Pagination) SetRenew(renew bool) {

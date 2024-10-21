@@ -10,11 +10,17 @@ import (
 	"time"
 )
 
+const name = "nostr-reader"
+
+const version = "0.0.10"
+
 func main() {
 	devMode := false
 
 	helpPtr := flag.Bool("h", false, "Show help dialog")
 	modePtr := flag.Bool("dev", false, "Run in dev mode?")
+	versionPtr := flag.Bool("version", false, "Show version")
+	namePtr := flag.Bool("name", false, "Show name")
 	syncIntervalPtr := flag.Int("sync", 5, "What is the time (in minutes) between sync of relays to local database?")
 
 	flag.Parse()
@@ -24,6 +30,15 @@ func main() {
 	}
 	if *helpPtr {
 		flag.Usage()
+		return
+	}
+	if *versionPtr {
+		fmt.Println(version)
+		return
+	}
+
+	if *namePtr {
+		fmt.Println(name)
 		return
 	}
 
@@ -54,6 +69,10 @@ func main() {
 	st.Pubkey = cfg.Nostr.PubKey
 
 	err = st.Connect(ctx, cfg.Database) // Does not make a connection immediately but prepares so it does not yet know if the pg server is available.
+
+	var gq GQ
+	gq.Config = cfg.Database
+	gq.Connect(ctx)
 
 	if err != nil {
 		log.Println(err.Error())
