@@ -1,0 +1,828 @@
+basePath: /
+definitions:
+  main.BookMark:
+    properties:
+      event_id:
+        type: string
+    type: object
+  main.Msg:
+    properties:
+      event_id:
+        description: If it is a reply
+        type: string
+      msg:
+        type: string
+    type: object
+  main.PageRequest:
+    properties:
+      context:
+        type: string
+      cursor:
+        type: integer
+      end_id:
+        type: integer
+      ids[]:
+        items:
+          type: string
+        type: array
+      per_page:
+        type: integer
+      renew:
+        type: boolean
+      since:
+        type: integer
+      start_id:
+        type: integer
+      total:
+        type: integer
+    type: object
+  main.Pagination:
+    properties:
+      cursor:
+        type: integer
+      end_id:
+        type: integer
+      next_cursor:
+        type: integer
+      per_page:
+        type: integer
+      previous_cursor:
+        type: integer
+      since:
+        type: integer
+      sort:
+        type: string
+      start_id:
+        type: integer
+      total:
+        type: integer
+    type: object
+  main.Profile:
+    properties:
+      about:
+        type: string
+      blocked:
+        type: boolean
+      display_name:
+        type: string
+      followed:
+        type: boolean
+      lud16:
+        type: string
+      name:
+        type: string
+      nip05:
+        type: string
+      picture:
+        type: string
+      pubkey:
+        type: string
+      uid:
+        type: string
+      urls:
+        items:
+          type: string
+        type: array
+      website:
+        type: string
+    type: object
+  main.Pubkey:
+    properties:
+      pubkey:
+        type: string
+    type: object
+  main.Relay:
+    properties:
+      read:
+        type: boolean
+      search:
+        type: boolean
+      url:
+        type: string
+      write:
+        type: boolean
+    type: object
+  main.Response:
+    description: Standard response to return to client
+    properties:
+      context:
+        type: string
+      data: {}
+      message:
+        type: string
+      status:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@swaggerouter.io
+    name: API Support
+    url: http://www.swaggerouter.io/support
+  description: Nostr Reader Api.
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swaggerouter.io/terms/
+  title: Nostr Reader API
+  version: "1.0"
+paths:
+  /api/addrelay:
+    post:
+      consumes:
+      - application/json
+      description: Add relay
+      parameters:
+      - description: Body for the retrieval of data
+        in: body
+        name: Body
+        required: true
+        schema:
+          $ref: '#/definitions/main.Relay'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Response'
+        "400":
+          description: error
+          schema:
+            type: string
+        "404":
+          description: error
+          schema:
+            type: string
+        "500":
+          description: error
+          schema:
+            type: string
+      summary: Add relay
+      tags:
+      - relay
+  /api/blockuser:
+    post:
+      consumes:
+      - application/json
+      description: Block user
+      parameters:
+      - description: Body for the retrieval of data
+        in: body
+        name: Body
+        required: true
+        schema:
+          $ref: '#/definitions/main.Pubkey'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Response'
+        "400":
+          description: error
+          schema:
+            type: string
+        "404":
+          description: error
+          schema:
+            type: string
+        "500":
+          description: error
+          schema:
+            type: string
+      summary: Block an anoying user
+      tags:
+      - user
+  /api/bookmark:
+    post:
+      consumes:
+      - application/json
+      description: Bookmark a note
+      parameters:
+      - description: Body for the retrieval of data
+        in: body
+        name: Body
+        required: true
+        schema:
+          $ref: '#/definitions/main.BookMark'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Response'
+        "400":
+          description: error
+          schema:
+            type: string
+        "404":
+          description: error
+          schema:
+            type: string
+        "500":
+          description: error
+          schema:
+            type: string
+      summary: Bookmark a note
+      tags:
+      - bookmark
+  /api/followuser:
+    post:
+      consumes:
+      - application/json
+      description: Follow a user
+      parameters:
+      - description: Body for the retrieval of data
+        in: body
+        name: Body
+        required: true
+        schema:
+          $ref: '#/definitions/main.Pubkey'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Response'
+        "400":
+          description: error
+          schema:
+            type: string
+        "404":
+          description: error
+          schema:
+            type: string
+        "500":
+          description: error
+          schema:
+            type: string
+      summary: Follow a user
+      tags:
+      - user
+  /api/getbookmarked:
+    get:
+      consumes:
+      - application/json
+      description: Remove bookmark from note
+      parameters:
+      - description: Body for the retrieval of data
+        in: body
+        name: Body
+        required: true
+        schema:
+          $ref: '#/definitions/main.PageRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Pagination'
+        "400":
+          description: error
+          schema:
+            type: string
+        "404":
+          description: error
+          schema:
+            type: string
+        "500":
+          description: error
+          schema:
+            type: string
+      summary: Remove bookmark from note
+      tags:
+      - bookmark
+  /api/getfollowed:
+    get:
+      consumes:
+      - application/json
+      description: Profiles of the followed users
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Response'
+        "400":
+          description: error
+          schema:
+            type: string
+        "404":
+          description: error
+          schema:
+            type: string
+        "500":
+          description: error
+          schema:
+            type: string
+      summary: Profiles of the followed users
+      tags:
+      - user
+  /api/getfollownotes:
+    get:
+      consumes:
+      - application/json
+      description: get Notes
+      parameters:
+      - description: Cursor
+        in: query
+        name: cursor
+        required: true
+        type: integer
+      - description: Start id
+        in: query
+        name: start_id
+        required: true
+        type: integer
+      - description: End id
+        in: query
+        name: end_id
+        required: true
+        type: integer
+      - default: 10
+        description: Results per page
+        in: query
+        name: per_page
+        type: integer
+      - default: false
+        description: Renew page and ignore start_id
+        in: query
+        name: renew
+        type: boolean
+      - description: Since
+        in: query
+        name: since
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Response'
+        "400":
+          description: error
+          schema:
+            type: string
+        "404":
+          description: error
+          schema:
+            type: string
+        "500":
+          description: error
+          schema:
+            type: string
+      summary: Retrieve stored Notes
+      tags:
+      - notes
+  /api/getinbox:
+    get:
+      consumes:
+      - application/json
+      description: get Notes that you responded to
+      parameters:
+      - description: Body for the retrieval of data
+        in: body
+        name: Body
+        required: true
+        schema:
+          $ref: '#/definitions/main.PageRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Response'
+        "400":
+          description: error
+          schema:
+            type: string
+        "404":
+          description: error
+          schema:
+            type: string
+        "500":
+          description: error
+          schema:
+            type: string
+      summary: Retrieve stored Notes
+      tags:
+      - notes
+  /api/getlastseenid:
+    get:
+      consumes:
+      - application/json
+      description: Last seen note id
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Response'
+        "400":
+          description: error
+          schema:
+            type: string
+        "404":
+          description: error
+          schema:
+            type: string
+        "500":
+          description: error
+          schema:
+            type: string
+      summary: Last seen note id
+      tags:
+      - notes
+  /api/getmetadata:
+    get:
+      consumes:
+      - application/json
+      description: Set your profile data
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Response'
+        "400":
+          description: error
+          schema:
+            type: string
+        "404":
+          description: error
+          schema:
+            type: string
+        "500":
+          description: error
+          schema:
+            type: string
+      summary: Set your profile data
+      tags:
+      - profile
+  /api/getnewnotescount:
+    get:
+      consumes:
+      - application/json
+      description: Get count of new notes
+      parameters:
+      - description: Cursor
+        in: query
+        name: cursor
+        required: true
+        type: integer
+      - description: Start id
+        in: query
+        name: start_id
+        required: true
+        type: integer
+      - description: End id
+        in: query
+        name: end_id
+        required: true
+        type: integer
+      - default: 10
+        description: Results per page
+        in: query
+        name: per_page
+        type: integer
+      - default: false
+        description: Renew page and ignore start_id
+        in: query
+        name: renew
+        type: boolean
+      - description: Since
+        in: query
+        name: since
+        type: integer
+      - description: string enum
+        enum:
+        - follow
+        - bookmark
+        - refresh
+        - global
+        in: query
+        name: context
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Response'
+        "400":
+          description: error
+          schema:
+            type: string
+        "404":
+          description: error
+          schema:
+            type: string
+        "500":
+          description: error
+          schema:
+            type: string
+      summary: Get count of new notes
+      tags:
+      - notes
+  /api/getnotes:
+    get:
+      consumes:
+      - application/json
+      description: get Notes
+      parameters:
+      - description: Cursor
+        in: query
+        name: cursor
+        required: true
+        type: integer
+      - description: Start id
+        in: query
+        name: start_id
+        required: true
+        type: integer
+      - description: End id
+        in: query
+        name: end_id
+        required: true
+        type: integer
+      - default: 10
+        description: Results per page
+        in: query
+        name: per_page
+        type: integer
+      - default: false
+        description: Renew page and ignore start_id
+        in: query
+        name: renew
+        type: boolean
+      - description: Since
+        in: query
+        name: since
+        type: integer
+      - description: string enum
+        enum:
+        - follow
+        - bookmark
+        - refresh
+        - global
+        in: query
+        name: context
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Response'
+        "400":
+          description: error
+          schema:
+            type: string
+        "404":
+          description: error
+          schema:
+            type: string
+        "500":
+          description: error
+          schema:
+            type: string
+      summary: Retrieve stored Notes
+      tags:
+      - notes
+  /api/getprofile:
+    get:
+      consumes:
+      - application/json
+      description: Get your profile data
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Response'
+        "400":
+          description: error
+          schema:
+            type: string
+        "404":
+          description: error
+          schema:
+            type: string
+        "500":
+          description: error
+          schema:
+            type: string
+      summary: Get your profile data
+      tags:
+      - profile
+  /api/getrelays:
+    get:
+      consumes:
+      - application/json
+      description: Get relays
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Response'
+        "400":
+          description: error
+          schema:
+            type: string
+        "404":
+          description: error
+          schema:
+            type: string
+        "500":
+          description: error
+          schema:
+            type: string
+      summary: Get relays
+      tags:
+      - relay
+  /api/publish:
+    post:
+      consumes:
+      - application/json
+      description: Get count of new notes
+      parameters:
+      - description: Body for the retrieval of data
+        in: body
+        name: Body
+        required: true
+        schema:
+          $ref: '#/definitions/main.Msg'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Response'
+        "400":
+          description: error
+          schema:
+            type: string
+        "404":
+          description: error
+          schema:
+            type: string
+        "500":
+          description: error
+          schema:
+            type: string
+      summary: Get count of new notes
+      tags:
+      - publish
+  /api/removebookmark:
+    post:
+      consumes:
+      - application/json
+      description: Remove bookmark from note
+      parameters:
+      - description: Body for the retrieval of data
+        in: body
+        name: Body
+        required: true
+        schema:
+          $ref: '#/definitions/main.BookMark'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Response'
+        "400":
+          description: error
+          schema:
+            type: string
+        "404":
+          description: error
+          schema:
+            type: string
+        "500":
+          description: error
+          schema:
+            type: string
+      summary: Remove bookmark from note
+      tags:
+      - bookmark
+  /api/removerelay:
+    post:
+      consumes:
+      - application/json
+      description: Remove relay
+      parameters:
+      - description: Body for the retrieval of data
+        in: body
+        name: Body
+        required: true
+        schema:
+          $ref: '#/definitions/main.Relay'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Response'
+        "400":
+          description: error
+          schema:
+            type: string
+        "404":
+          description: error
+          schema:
+            type: string
+        "500":
+          description: error
+          schema:
+            type: string
+      summary: Remove relay
+      tags:
+      - relay
+  /api/setmetadata:
+    post:
+      consumes:
+      - application/json
+      description: Publish your profiledata to relays
+      parameters:
+      - description: Body for the retrieval of data
+        in: body
+        name: Body
+        required: true
+        schema:
+          $ref: '#/definitions/main.Profile'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Response'
+        "400":
+          description: error
+          schema:
+            type: string
+        "404":
+          description: error
+          schema:
+            type: string
+        "500":
+          description: error
+          schema:
+            type: string
+      summary: Publish your profile data
+      tags:
+      - profile
+  /api/unfollowuser:
+    post:
+      consumes:
+      - application/json
+      description: UnFollow a user
+      parameters:
+      - description: Body for the retrieval of data
+        in: body
+        name: Body
+        required: true
+        schema:
+          $ref: '#/definitions/main.Pubkey'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Response'
+        "400":
+          description: error
+          schema:
+            type: string
+        "404":
+          description: error
+          schema:
+            type: string
+        "500":
+          description: error
+          schema:
+            type: string
+      summary: Unfollow a user
+      tags:
+      - user
+swagger: "2.0"

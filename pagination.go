@@ -1,45 +1,61 @@
 package main
 
-import "math"
-
+// Return to client API
 type Pagination struct {
-	Data interface{} `json:"data"`
-
-	Limit      uint   `json:"limit,omitempty" query:"limit"`
-	Page       uint   `json:"page,omitempty" query:"page"`
-	Sort       string `json:"sort,omitempty" query:"sort"`
-	TotalRows  uint64 `json:"total_rows"`
-	TotalPages uint   `json:"total_pages"`
-
-	Pages       uint64 `json:"pages"`
-	Total       uint64 `json:"total"`
-	PerPage     uint   `json:"per_page"`
-	Offset      uint64 `json:"offset"`
-	CurrentPage uint   `json:"current_page"`
-	LastPage    uint64 `json:"last_page"`
-	From        uint   `json:"from"`
-	To          uint   `json:"to"`
-	Since       uint   `json:"since"`
-	Renew       bool   `json:"renew"`
-	Maxid       uint64 `json:"maxid"`
+	Cursor         uint64 `json:"cursor"`
+	NextCursor     uint64 `json:"next_cursor"`
+	PreviousCursor uint64 `json:"previous_cursor"`
+	StartId        uint64 `json:"start_id"`
+	EndId          uint64 `json:"end_id"`
+	PerPage        uint   `json:"per_page,omitempty" query:"per_page"`
+	Total          uint64 `json:"total"`
+	Since          uint   `json:"since"`
+	Sort           string `json:"sort,omitempty" query:"sort"`
 }
 
-func (p *Pagination) GetOffset() uint {
-	return (p.GetPage() - 1) * p.GetLimit()
+func (p *Pagination) SetCursor(cursor uint64) {
+	p.Cursor = cursor
 }
 
-func (p *Pagination) GetLimit() uint {
-	if p.Limit == 0 {
-		p.Limit = 10
+func (p *Pagination) GetPage() uint64 {
+	return p.Cursor
+}
+
+func (p *Pagination) SetStartId(start_id uint64) {
+	p.StartId = start_id
+}
+
+func (p *Pagination) GetStartId() uint64 {
+	return p.StartId
+}
+
+func (p *Pagination) SetEndId(end_id uint64) {
+	p.EndId = end_id
+}
+
+func (p *Pagination) GetEndId() uint64 {
+	return p.EndId
+}
+
+/*
+ * How many records per page should be shown
+ */
+func (p *Pagination) SetPerPage(perPage uint) {
+	p.PerPage = perPage
+}
+
+func (p *Pagination) GetPerPage() uint {
+	if p.PerPage == 0 {
+		p.PerPage = 10
 	}
-	return p.Limit
+	return p.PerPage
 }
 
-func (p *Pagination) GetPage() uint {
-	if p.Page == 0 {
-		p.Page = 1
-	}
-	return p.Page
+/*
+ * Number of records
+ */
+func (p *Pagination) SetTotal(recordCount uint64) {
+	p.Total = recordCount
 }
 
 func (p *Pagination) GetSort() string {
@@ -49,56 +65,13 @@ func (p *Pagination) GetSort() string {
 	return p.Sort
 }
 
-func (p *Pagination) SetTotal(recordCount uint64) {
-	p.Total = recordCount
-	p.SetPages(recordCount)
-}
-
-func (p *Pagination) SetLimit(limit uint) {
-	p.Limit = limit
-	p.PerPage = limit
-}
-
 func (p *Pagination) SetSince(since uint) {
 	p.Since = since
 }
 
-func (p *Pagination) SetCurrentPage(current_page uint) {
-	p.CurrentPage = current_page
-	p.SetOffset()
-	p.SetLastPage()
-	p.setFrom()
-}
-
-func (p *Pagination) SetPages(recordCount uint64) {
-	p.Pages = uint64(math.Ceil(float64(recordCount) / float64(p.Limit)))
-	p.LastPage = p.Pages
-}
-
-func (p *Pagination) SetOffset() {
-	p.Offset = uint64((p.CurrentPage - 1) * p.Limit)
-}
-
-func (p *Pagination) SetLastPage() {
-	p.LastPage = uint64(math.Ceil(float64(p.Total) / float64(p.Limit)))
-}
-
-func (p *Pagination) setFrom() {
-	p.From = (p.CurrentPage - 1) * p.Limit
-}
-
-func (p *Pagination) SetTo() {
-	if p.CurrentPage == uint(p.LastPage) {
-		p.To = uint(p.Total)
-	} else {
-		p.To = (p.CurrentPage-1)*p.Limit + p.Limit // Not correct at end
+func (p *Pagination) GetSince() uint {
+	if p.Since == 0 {
+		p.Since = 1
 	}
-}
-
-func (p *Pagination) SetMaxId(maxid int) {
-	p.Maxid = uint64(maxid)
-}
-
-func (p *Pagination) SetRenew(renew bool) {
-	p.Renew = renew
+	return p.Since
 }

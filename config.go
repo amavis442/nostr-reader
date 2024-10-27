@@ -20,6 +20,7 @@ type Config struct {
 	Database *DbConfig
 	Server   *ServerConfig
 	Env      string
+	Interval uint
 	Nostr    *WrapperConfig
 }
 

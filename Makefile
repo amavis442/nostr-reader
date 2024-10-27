@@ -1,4 +1,4 @@
-BINARY_NAME = nostr-reader-server.exe
+BINARY_NAME = nostr-reader.exe
 GOFLAGS = -ldflags="-s -w"
 
 all: clean build

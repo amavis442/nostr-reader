@@ -21,6 +21,7 @@ func main() {
 
 	helpPtr := flag.Bool("h", false, "Show help dialog")
 	modePtr := flag.Bool("dev", false, "Run in dev mode?")
+	disableSyncPtr := flag.Bool("disable-sync", false, "Disable sync? can be handy to test swaggerui/api?")
 	versionPtr := flag.Bool("version", false, "Show version")
 	namePtr := flag.Bool("name", false, "Show name")
 	syncIntervalPtr := flag.Int("sync", 5, "What is the time (in minutes) between sync of relays to local database?")
@@ -52,9 +53,11 @@ func main() {
 		log.Println(err.Error())
 		os.Exit(0)
 	}
-	if cfg.Server.Interval < 1 {
+
+	cfg.Interval = uint(*syncIntervalPtr)
+	if cfg.Interval < 1 {
 		log.Println("Setting interval to 1 minute. This is the minimum")
-		cfg.Server.Interval = 1
+		cfg.Interval = 1
 	}
 
 	fmt.Println("Your public key is: ", cfg.Nostr.PubKey)
@@ -72,10 +75,6 @@ func main() {
 
 	err = st.Connect(ctx, cfg.Database) // Does not make a connection immediately but prepares so it does not yet know if the pg server is available.
 
-	var gq GQ
-	gq.Config = cfg.Database
-	gq.Connect(ctx)
-
 	if err != nil {
 		log.Println(err.Error())
 		os.Exit(0)
@@ -84,15 +83,11 @@ func main() {
 	relays := st.GetRelays(ctx)
 	nostrWrapper.UpdateRelays(relays)
 
-	if !(cfg.Server.Interval > 0) {
-		log.Println("Please set the interval in minutes in config.json")
-		os.Exit(0)
-	}
+	var wg sync.WaitGroup
 
 	intervalTimer := time.Duration(*syncIntervalPtr * 60)
 	ticker := time.NewTicker(intervalTimer * time.Second)
 
-	var wg sync.WaitGroup
 	// Creating channel using make
 	tickerChan := make(chan bool)
 
@@ -105,7 +100,7 @@ func main() {
 			case tm := <-ticker.C:
 				log.Println("The Current time is: ", tm)
 				wg.Add(1)
-				go intervalTask(&wg, ctx, &st, &nostrWrapper, 120)
+				go intervalTask(&wg, ctx, &st, &nostrWrapper, 120, *disableSyncPtr)
 			}
 		}
 	}()
@@ -122,7 +117,11 @@ func main() {
 
 }
 
-func intervalTask(wg *sync.WaitGroup, ctx context.Context, st *Storage, nostrWrapper *Wrapper, timeOut int) {
+func intervalTask(wg *sync.WaitGroup, ctx context.Context, st *Storage, nostrWrapper *Wrapper, timeOut int, syncDisabled bool) {
+	if syncDisabled {
+		return
+	}
+
 	tOut := time.Duration(timeOut) * time.Second
 	ctx, cancel := context.WithTimeout(ctx, tOut)
 	defer func() {
@@ -155,6 +154,6 @@ func intervalTask(wg *sync.WaitGroup, ctx context.Context, st *Storage, nostrWra
 		}
 	}
 
-	log.Println("Done syncing")
+	log.Println(Green + "Done syncing" + Reset)
 
 }

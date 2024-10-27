@@ -6,6 +6,10 @@
         "port": 5432,
         "host": "localhost"
     },
+    "server": {
+        "port": 8080
+    },
+    "interval": 5,
     "nostr': {
 	    "privatekey": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
         "nip05": "https://nostrcheck.me/"

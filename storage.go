@@ -9,9 +9,12 @@ import (
 	"log"
 	"log/slog"
 	"regexp"
+	"runtime"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/nbd-wtf/go-nostr"
@@ -106,6 +109,20 @@ func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
 	st.GormDB.Exec(`DROP TRIGGER IF EXISTS delete_trigger ON notes;`)
 	st.GormDB.Exec(`CREATE TRIGGER delete_trigger BEFORE INSERT ON notes FOR EACH ROW EXECUTE FUNCTION delete_submission();`)
 
+	st.GormDB.Exec(`CREATE OR REPLACE VIEW notes_and_profiles
+		AS
+ 		SELECT notes.id, notes.uid as note_uuid, notes.event_id, notes.pubkey, notes.kind, notes.event_created_at,
+        notes.content, notes.tags_full::json, notes.sig, notes.etags, notes.ptags,
+        profiles.uid as profile_uuid, profiles.name, profiles.about , profiles.picture,
+        profiles.website, profiles.nip05, profiles.lud16, profiles.display_name,
+        CASE WHEN length(follows.pubkey) > 0 THEN TRUE ELSE FALSE END followed,
+        CASE WHEN length(bookmarks.event_id) > 0 THEN TRUE ELSE FALSE END bookmarked FROM "notes" 
+		  LEFT JOIN profiles ON (profiles.pubkey = notes.pubkey) 
+		  LEFT JOIN blocks  on (blocks.pubkey = notes.pubkey) 
+		  LEFT JOIN bookmarks ON (bookmarks.note_id = notes.id) 
+		  JOIN follows ON (follows.pubkey = notes.pubkey) 
+		  WHERE notes.kind = 1 AND notes.garbage = false AND notes.root = true AND blocks.pubkey IS NULL ORDER BY notes.id asc;`)
+
 	log.Printf(`Connect() -> Cleaning history older then %d days`, cfg.Retention)
 	then := time.Now().AddDate(0, 0, -1*cfg.Retention)
 	past := fmt.Sprintf("%d-%d-%d 00:00:00\n",
@@ -134,7 +151,7 @@ func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
 	})
 	Missing_event_ids = make([]string, 0)
 
-	fmt.Println("Connect() -> Connected to database:", cfg.Dbname)
+	log.Println("Connect() -> Connected to database:", cfg.Dbname)
 	return err
 }
 
@@ -143,7 +160,7 @@ func (st *Storage) SaveProfile(ctx context.Context, ev *Event) error {
 	content := ev.Event.Content
 	err := json.Unmarshal([]byte(content), &data)
 	if err != nil {
-		//log.Println("Query:: ", err.Error(), ev.Content)
+		log.Printf(Red + getCallerInfo(1) + " SaveProfile() --> Unmarshal:: " + err.Error() + Reset + "\n")
 		return err
 	}
 
@@ -156,9 +173,11 @@ func (st *Storage) SaveProfile(ctx context.Context, ev *Event) error {
 		log.Println(err)
 		return err
 	}
-
-	profile := Profile{
+	jsonBufBytes := jsonbuf.Bytes()
+	newUUID, _ := uuid.NewV7()
+	profile := &Profile{
 		Pubkey:      ev.Event.PubKey,
+		UID:         newUUID,
 		Name:        data.Name,
 		About:       data.About,
 		Picture:     data.Picture,
@@ -166,29 +185,21 @@ func (st *Storage) SaveProfile(ctx context.Context, ev *Event) error {
 		Nip05:       data.Nip05,
 		Lud16:       data.Lud16,
 		DisplayName: data.DisplayName,
-		Raw:         jsonbuf.Bytes(),
+		Raw:         jsonBufBytes,
 		Urls:        ev.Urls,
 	}
 	profile.UpdatedAt.Time = time.Now()
 
-	slog.Info("SaveProfile() -> Adding or updating profile: pubkey = "+profile.Pubkey, "profile", profile)
+	slog.Info(Yellow + "SaveProfile() -> Adding or updating profile: pubkey = " + profile.Pubkey + Reset)
 
-	//log.Println("SaveProfile() -> Adding or updating profile: pubkey = ", profile.Pubkey, " [", profile, "]")
-	log.Println("----------------------")
-	//st.GormDB.Clauses(clause.OnConflict{DoNothing: true}).Create(&profile)
-	/*
-		st.GormDB.Model(&Profile{}).Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "pubkey"}},
-			DoUpdates: clause.AssignmentColumns([]string{"name", "about", "picture", "website", "nip05", "lud16", "display_name", "raw", "urls", "updated_at"}),
-		}).Create(&profile)
-	*/
 	var searchProfile Profile
 	if err := st.GormDB.Model(&Profile{}).Where(Profile{Pubkey: ev.Event.PubKey}).Find(&searchProfile).Error; err != nil {
 		switch {
 		case err == sql.ErrNoRows:
-			log.Printf("FindProfile() -> Query:: 404 no profile with pubkey %s\n", ev.Event.PubKey)
-		case err != nil:
-			log.Fatalf("FindProfile() -> Query:: 502 query error: %v\n", err)
+			log.Printf(Yellow+"FindProfile() -> Query:: 404 no profile with pubkey %s\n"+Reset, ev.Event.PubKey)
+		default:
+			_, file, line, _ := runtime.Caller(0)
+			log.Fatalf(Yellow+"FindProfile(%s::%d) -> Query:: 502 query error: %v\n"+Reset, file, line, err)
 		}
 		return err
 	}
@@ -199,15 +210,15 @@ func (st *Storage) SaveProfile(ctx context.Context, ev *Event) error {
 	if result.Error != nil {
 		return result.Error
 	}
-	fmt.Println(profile)
 
 	if st.GormDB.Error != nil {
 		log.Print(st.GormDB.Error.Error())
 		return st.GormDB.Error
 	}
 
+	picture := data.Picture.String
 	// Should be in a dynamic list, so you can add to it or remove items.
-	if data.Picture != "" && len(data.Picture) > len("https://randomuser.me") && data.Picture[0:len("https://randomuser.me")] == "https://randomuser.me" {
+	if picture != "" && len(picture) > len("https://randomuser.me") && picture[0:len("https://randomuser.me")] == "https://randomuser.me" {
 		st.CreateBlock(ctx, ev.Event.PubKey)
 	}
 	if searchProfile.ID != 0 {
@@ -339,8 +350,10 @@ func (st *Storage) SaveNote(ctx context.Context, event *Event) (Note, error) {
 		return Note{}, err
 	}
 
+	newUUID, _ := uuid.NewV7()
 	note := Note{}
 	note.EventId = ev.ID
+	note.UID = newUUID
 	note.Pubkey = ev.PubKey
 	note.Kind = ev.Kind
 	note.EventCreatedAt = ev.CreatedAt.Time().Unix()
@@ -449,32 +462,15 @@ func (st *Storage) SaveReaction(ctx context.Context, ev *nostr.Event, targetEven
 type Options struct {
 	Follow   bool
 	BookMark bool
+	Renew    bool
 }
 
-func (st *Storage) GetNewNotesCount(ctx context.Context, maxId int, options Options) (int, error) {
+func (st *Storage) GetNewNotesCount(ctx context.Context, cursor uint64, options Options) (int, error) {
 	var count int
-	tx := st.GormDB.Model(&Note{}).
-		Select(`COUNT(notes.id)`).
-		Joins("LEFT JOIN blocks  on (blocks.pubkey = notes.pubkey)").
-		Where("notes.kind = 1").
-		Where("notes.garbage = false").
-		Where("notes.id > ?", maxId)
-
-	if options.Follow {
-		tx.Joins("JOIN follows ON (follows.pubkey = notes.pubkey)")
-	} else {
-		tx.Joins("LEFT JOIN follows ON (follows.pubkey = notes.pubkey)")
-		tx.Where("follows.pubkey is null")
-	}
-
-	if options.BookMark {
-		tx.Joins("JOIN bookmarks ON (bookmarks.event_id = notes.event_id)")
-	} else {
-		tx.Where("notes.root = true").
-			Where("blocks.pubkey IS NULL")
-	}
-
-	tx.Scan(&count)
+	tx := st.GormDB.Debug().Model(&NotesAndProfiles{}).
+		Select(`COUNT(id)`).
+		Where("id > ?", cursor).
+		Find(&count)
 
 	if tx.Error != nil {
 		return 0, tx.Error
@@ -493,149 +489,160 @@ func (st *Storage) GetLastSeenID(ctx context.Context) (int, error) {
 	return maxId, nil
 }
 
-/**
- * Do not show all data in an endless scrol page, but paginate it for easy access
- * and ignore the garbage tagged posts
- *
- */
-func (st *Storage) GetPagination(ctx context.Context, p *Pagination, options Options) error {
-
-	tx := st.GormDB.Debug().Table("notes").
-		Select(`notes.id, notes.event_id, notes.pubkey, notes.kind, notes.event_created_at, 
-		notes.content, notes.tags_full::json, notes.sig, notes.etags, notes.ptags,
-		profiles.name, profiles.about , profiles.picture,
-		profiles.website, profiles.nip05, profiles.lud16, profiles.display_name, 
-		CASE WHEN length(follows.pubkey) > 0 THEN TRUE ELSE FALSE END followed, 
-		CASE WHEN length(bookmarks.event_id) > 0 THEN TRUE ELSE FALSE END bookmarked`).
-		Joins("LEFT JOIN profiles ON (profiles.pubkey = notes.pubkey)").
-		Joins("LEFT JOIN blocks  on (blocks.pubkey = notes.pubkey)").
-		//Joins("LEFT JOIN seens on (seens.event_id = notes.event_id)").
-		Where("notes.kind = 1").
-		//Where("seens.event_id IS NULL").
-		Where("notes.garbage = false")
-
-	if !options.BookMark {
-		tx.Where("notes.root = true").
-			Where("blocks.pubkey IS NULL")
-	}
-
-	// Needs a time stamp that stays the same else total will change with every call
-	if p.Since > 0 && (!options.BookMark && !options.Follow) {
-		var maxTimeStamp int64 = time.Now().Unix()
-		if !p.Renew && p.Maxid > 0 {
-			st.GormDB.Model(&Note{}).
-				Select(`MAX(notes.event_created_at) event_created_at`).
-				Where("notes.id <= ?", p.Maxid).Scan(&maxTimeStamp)
+func (st *Storage) initPaging(p *Pagination, options Options) {
+	if p.Cursor == 0 {
+		var notesAndProfiles NotesAndProfiles
+		fmt.Println("Empty cursor")
+		if !options.BookMark {
+			var maxTimeStamp int64 = time.Now().Unix()
+			since := maxTimeStamp - int64(60*60*24*p.GetSince())
+			st.GormDB.Debug().Model(&NotesAndProfiles{}).
+				Where("event_created_at > ?", since).
+				Order("id ASC").
+				Limit(1).
+				Find(&notesAndProfiles)
+			p.Cursor = notesAndProfiles.ID
 		}
-		since := maxTimeStamp - int64(p.Since*60*60*24)
-		tx.Where("notes.event_created_at > ?", fmt.Sprintf("%d", since))
+		p.StartId = p.Cursor
 	}
-	if p.Since == 0 && (!options.BookMark && !options.Follow) {
-		var maxTimeStamp int64 = time.Now().Unix()
-		since := maxTimeStamp - int64(1*60*60*24)
-		tx.Where("notes.event_created_at > ?", fmt.Sprintf("%d", since))
-	}
+}
 
-	if options.Follow {
-		tx.Joins("JOIN follows ON (follows.pubkey = notes.pubkey)")
-	} else {
-		tx.Joins("LEFT JOIN follows ON (follows.pubkey = notes.pubkey)")
-	}
+type NotesAndProfiles struct {
+	ID             uint64          `gorm:"type:bigint"`
+	NoteUUID       uuid.UUID       `gorm:"type:uuid"`
+	EventId        string          `gorm:"type:text"`
+	Pubkey         string          `gorm:"type:varchar(100)"`
+	Kind           int             `gorm:"type:int"`
+	EventCreatedAt nostr.Timestamp `gorm:"type:bigint"`
+	Content        string          `gorm:"type:text"`
+	TagsFull       nostr.Tags      `gorm:"type:text"`
+	Sig            string          `gorm:"type:varchar(200)"`
+	Etags          pq.StringArray  `gorm:"type:text[]"`
+	Ptags          pq.StringArray  `gorm:"type:text[]"`
+	ProfileUUID    uuid.UUID       `gorm:"type:uuid"`
+	Name           NullString      `gorm:"type:varchar(255)"`
+	About          NullString      `gorm:"type:text"`
+	Picture        NullString      `gorm:"type:varchar(255)"`
+	Website        NullString      `gorm:"type:varchar(255)"`
+	Nip05          NullString      `gorm:"type:varchar(255)"`
+	Lud16          NullString      `gorm:"type:varchar(255)"`
+	DisplayName    NullString      `gorm:"type:varchar(255)"`
+	Followed       bool            `gorm:"type:bool;"`
+	Bookmarked     bool            `gorm:"type:bool;"`
+}
 
-	if options.BookMark {
-		tx.Joins("JOIN bookmarks ON (bookmarks.note_id = notes.id)")
-	} else {
-		tx.Joins("LEFT JOIN bookmarks ON (bookmarks.note_id = notes.id)")
-	}
+type ServerState int
 
-	if !p.Renew {
-		tx.Where("notes.id <= ?", fmt.Sprintf("%d", p.Maxid))
-	}
+const (
+	StateInit ServerState = iota
+	StateNext
+	StatePrev
+	StateRefresh
+)
 
-	var count int64
-	tx.Count(&count)
-
-	tx.Limit(int(p.Limit))
-	if p.Offset > 0 {
-		tx.Offset(int(p.Offset))
-	}
-
-	tx.Order("notes.event_created_at DESC")
-	rows, err := tx.Rows()
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer rows.Close()
-
-	p.SetTotal(uint64(count))
-	p.SetTo()
-	eventMap, keys, seenMap, _ := st.procesEventRows(rows, p)
-	tx = st.GormDB.WithContext(ctx).Model(&Seen{})
-	seens := []*Seen{}
-	for noteid, eventid := range seenMap {
-		seens = append(seens, &Seen{NoteID: uint(noteid), EventId: eventid})
-	}
-
-	result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&seens)
-	if result.Error != nil {
-		return result.Error
-	}
-	st.getChildren(ctx, eventMap)
-
-	events := make([]Event, 0)
-	// Make sure the order stays the same
-	for _, k := range keys {
-		events = append(events, eventMap[k])
-	}
-
-	p.Data = events
-	return nil
+var stateName = map[ServerState]string{
+	StateInit:    "init",
+	StateNext:    "next",
+	StatePrev:    "prev",
+	StateRefresh: "refresh",
 }
 
 /**
- * Do not show all data in an endless scrol page, but paginate it for easy access
+ * Do not show all data in an endless scroll page, but paginate it for easy access
  * and ignore the garbage tagged posts
  *
  */
-func (st *Storage) GetPaginationRefeshPage(ctx context.Context, p *Pagination, ids *[]string, options Options) error {
-	eventIds := ""
-	for _, id := range *ids {
-		eventIds = eventIds + `'` + id + `',`
+func (st *Storage) GetNotes(ctx context.Context, context string, p *Pagination, options Options) (*[]Event, error) {
+	var state string
+	if p.Cursor == 0 {
+		state = stateName[StateInit]
 	}
-	eventIds = eventIds[:len(eventIds)-1]
+	if p.Cursor > 0 {
+		state = stateName[StateRefresh]
+	}
+	if p.NextCursor != 0 {
+		state = stateName[StateNext]
+	}
+	if p.PreviousCursor != 0 {
+		state = stateName[StatePrev]
+	}
+	slog.Info("State is: ", "state", state)
+	st.initPaging(p, options)
 
-	tx := st.GormDB.Debug().Table("notes").
-		Select(`notes.id, notes.event_id, notes.pubkey, notes.kind, notes.event_created_at, 
-		notes.content, notes.tags_full::json, notes.sig, notes.etags, notes.ptags,
-		profiles.name, profiles.about , profiles.picture,
-		profiles.website, profiles.nip05, profiles.lud16, profiles.display_name, 
-		CASE WHEN length(follows.pubkey) > 0 THEN TRUE ELSE FALSE END followed, 
-		CASE WHEN length(bookmarks.event_id) > 0 THEN TRUE ELSE FALSE END bookmarked`).
-		Joins("LEFT JOIN profiles ON (profiles.pubkey = notes.pubkey)").
-		Joins("LEFT JOIN blocks  on (blocks.pubkey = notes.pubkey)").
-		Joins("JOIN follows ON (follows.pubkey = notes.pubkey)").
-		Joins("JOIN bookmarks ON (bookmarks.event_id = notes.event_id)").
-		//Joins("LEFT JOIN seens on (seens.event_id = notes.event_id)").
-		Where("notes.kind = 1").
-		Where("notes.root = true").
-		Where("blocks.pubkey IS NULL").
-		//Where("seens.event_id IS NULL").
-		Where("notes.garbage = false").
-		Where("notes.event_id IN (" + eventIds + ")")
+	tx := st.GormDB.Debug().Where("followed = ? and bookmarked = ?", options.Follow, options.BookMark)
 
-	var count int64
-	tx.Count(&count)
+	if state == stateName[StateInit] || state == stateName[StateRefresh] {
+		tx.Where("id > ?", p.Cursor).
+			Order("id ASC")
+	}
 
-	tx.Order("notes.event_created_at DESC")
-	rows, err := tx.Rows()
+	if state == stateName[StateNext] {
+		tx.Where("id > ?", p.NextCursor).
+			Order("id ASC")
+	}
+	if state == stateName[StatePrev] {
+		tx.Where("id < ?", p.PreviousCursor).
+			Order("id DESC")
+	}
+
+	tx.Limit(int(p.GetPerPage())) // Last one is not shown and only used for the next cursor
+
+	var rows []NotesAndProfiles
+	tx.Find(&rows)
+	if len(rows) == 0 {
+		return &[]Event{}, nil
+	}
+
+	p.NextCursor = 0
+	p.PreviousCursor = 0
+
+	sort.Slice(rows, func(i, j int) bool {
+		return rows[i].ID > rows[j].ID
+	})
+
+	//log.Println("Aantal rijen: ", len(rows), " Per page: ", p.PerPage, "Einde? ", !(len(rows) < int(p.PerPage)))
+	if (state == stateName[StateInit] || state == stateName[StateNext] || state == stateName[StateRefresh]) && !(len(rows) < int(p.PerPage)) {
+		next_cursor := rows[0]
+		p.NextCursor = next_cursor.ID
+	}
+
+	if (state == stateName[StatePrev] || state == stateName[StateRefresh]) && !(len(rows) < int(p.PerPage)) {
+		next_cursor := rows[0]
+		p.NextCursor = next_cursor.ID
+	}
+
+	if state == stateName[StateInit] || state == stateName[StateNext] || state == stateName[StateRefresh] {
+		prev_cursor := rows[len(rows)-1]
+		p.PreviousCursor = prev_cursor.ID
+	}
+	if (state == stateName[StatePrev] || state == stateName[StateRefresh]) && !(len(rows) < int(p.PerPage)) {
+		prev_cursor := rows[len(rows)-1]
+		p.PreviousCursor = prev_cursor.ID
+	}
+
+	sort.Slice(rows, func(i, j int) bool {
+		return rows[i].EventCreatedAt.Time().Unix() > rows[j].EventCreatedAt.Time().Unix()
+	})
+
+	eventMap, keys, _, err := st.procesEventRows(&rows)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err.Error())
 	}
-	defer rows.Close()
+	/*
+		tx = st.GormDB.WithContext(ctx).Model(&Seen{})
+		seens := []*Seen{}
+		for noteid, eventid := range seenMap {
+			seens = append(seens, &Seen{NoteID: uint(noteid), EventId: eventid})
+		}
 
-	p.SetTotal(uint64(count))
-	p.SetTo()
-	eventMap, keys, _, _ := st.procesEventRows(rows, p)
+		result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&seens)
+		if result.Error != nil {
+			return &[]Event{}, result.Error
+		}
+
+		log.Fatal(len(rows), p.PreviousCursor, p.Cursor, p.NextCursor)
+	*/
+
 	st.getChildren(ctx, eventMap)
 
 	events := make([]Event, 0)
@@ -644,93 +651,75 @@ func (st *Storage) GetPaginationRefeshPage(ctx context.Context, p *Pagination, i
 		events = append(events, eventMap[k])
 	}
 
-	p.Data = events
-	return nil
+	if p.EndId == 0 {
+		st.GormDB.Select("MAX(notes.id)").Find(&p.EndId)
+	}
+
+	return &events, nil
 }
 
-func (st *Storage) procesEventRows(rows *sql.Rows, p *Pagination) (map[string]Event, []string, map[uint64]string, error) {
+func (st *Storage) procesEventRows(rows *[]NotesAndProfiles) (map[string]Event, []string, map[uint64]string, error) {
 	eventMap := make(map[string]Event)
 	var keys []string
 	seenMap := make(map[uint64]string)
 
-	canUpdateMaxId := (p.Renew || p.Maxid == 0)
-	for rows.Next() {
+	for _, item := range *rows {
 		var note Event
-		var id uint64
-		var name sql.NullString
-		var about sql.NullString
-		var picture sql.NullString
-
-		var website sql.NullString
-		var nip05 sql.NullString
-		var lud16 sql.NullString
-		var displayname sql.NullString
-		var followed bool
-		var bookmarked bool
-
 		note.Event = &nostr.Event{}
-		if err := rows.Scan(&id,
-			&note.Event.ID, &note.Event.PubKey,
-			&note.Event.Kind, &note.Event.CreatedAt,
-			&note.Event.Content, &note.Event.Tags, &note.Event.Sig,
-			(pq.Array)(&note.Etags), (pq.Array)(&note.Ptags),
-			&name, &about, &picture, &website, &nip05, &lud16, &displayname, &followed, &bookmarked); err != nil {
-			log.Println("procesEventRows() -> Query:: ", err.Error())
-			panic(err)
-		}
-
-		if canUpdateMaxId && p.Maxid < id {
-			p.Maxid = id
-		}
+		note.Profile = Profile{}
+		note.Event.ID = item.EventId
 		if _, ok := eventMap[note.Event.ID]; ok {
 			continue
 		}
+		note.Event.Content = item.Content
+		note.Event.Kind = item.Kind
+		note.Event.PubKey = item.Pubkey
+		note.Profile.Pubkey = item.Pubkey
+		note.Event.Tags = item.TagsFull
+		note.Event.Sig = item.Sig
+		note.Event.CreatedAt = item.EventCreatedAt
 
 		note.RootId = note.Event.ID
 		note.Tree = 1
 
-		if name.Valid {
-			note.Profile.Name = name.String
+		if item.ProfileUUID.String() != "" {
+			note.Profile.UID = item.ProfileUUID
+		}
+
+		if item.Name.Valid {
+			note.Profile.Name = item.Name
 		} else {
-			note.Profile.Name = note.Event.PubKey
+			note.Profile.Name.String = item.Pubkey
 		}
-		if about.Valid {
-			note.Profile.About = about.String
+		if item.About.Valid {
+			note.Profile.About = item.About
 		}
-		if picture.Valid {
-			note.Profile.Picture = picture.String
+		if item.Picture.Valid {
+			note.Profile.Picture = item.Picture
+		}
+		if item.Website.Valid {
+			note.Profile.Website = item.Website
+		}
+		if item.Nip05.Valid {
+			note.Profile.Nip05 = item.Nip05
+		}
+		if item.Lud16.Valid {
+			note.Profile.Lud16 = item.Lud16
+		}
+		if item.DisplayName.Valid {
+			note.Profile.DisplayName = item.DisplayName
 		}
 
-		if website.Valid {
-			note.Profile.Website = website.String
-		}
-		if nip05.Valid {
-			note.Profile.Nip05 = nip05.String
-		}
-		if lud16.Valid {
-			note.Profile.Lud16 = lud16.String
-		}
-		if displayname.Valid {
-			note.Profile.DisplayName = displayname.String
-		}
-
-		note.Profile.Followed = followed
-		note.Bookmark = bookmarked
+		note.Profile.Followed = item.Followed
+		note.Bookmark = item.Bookmarked
 		//nostr.Event = json.Unmarshal()
 		note.Content = st.parseReferences(&note)
 
-		seenMap[id] = note.Event.ID
+		seenMap[item.ID] = note.Event.ID
 		note.Children = make(map[string]*Event, 0)
 		eventMap[note.Event.ID] = note
 		keys = append(keys, note.Event.ID) // Make sure the order stays the same @see https://go.dev/blog/maps
 	}
-	// Check for errors from iterating over rows.
-	if err := rows.Err(); err != nil {
-		log.Println("procesEventRows() -> Query:: ", err)
-		return nil, nil, nil, err
-	}
-	defer rows.Close()
-
 	return eventMap, keys, seenMap, nil
 }
 
@@ -745,7 +734,7 @@ func (st *Storage) parseReferences(note *Event) string {
 		if ref.Profile != nil {
 			pubkey := ref.Profile.PublicKey
 			if len(pubkey) == 64 {
-				if profile, err := st.FindProfile(context.TODO(), pubkey); err == nil && profile.Name != "" {
+				if profile, err := st.FindProfile(context.TODO(), pubkey); err == nil && profile.Name.String != "" {
 					//content = event.Content[:ref.Start] + "[~" + profile.Name + "~]" + event.Content[ref.End:]
 					content = strings.Replace(content, ref.Text, "[~["+profile.Pubkey+"]~]", -1)
 					note.Refs.Profile[profile.Pubkey] = &Profile{
@@ -832,14 +821,14 @@ func (st *Storage) getChildren(ctx context.Context, eventMap map[string]Event) e
 		var id int
 		var root_event_id string
 		var reply_event_id sql.NullString
-		var name sql.NullString
-		var about sql.NullString
-		var picture sql.NullString
+		var name NullString
+		var about NullString
+		var picture NullString
 
-		var website sql.NullString
-		var nip05 sql.NullString
-		var lud16 sql.NullString
-		var displayname sql.NullString
+		var website NullString
+		var nip05 NullString
+		var lud16 NullString
+		var displayname NullString
 		var followed bool
 		var bookmarked bool
 		childEvent.Event = &nostr.Event{}
@@ -854,36 +843,42 @@ func (st *Storage) getChildren(ctx context.Context, eventMap map[string]Event) e
 
 		childEvent.Tree = 2
 		childEvent.RootId = root_event_id
-
+		childEvent.Profile = Profile{}
+		childEvent.Profile.Pubkey = childEvent.Event.PubKey
 		if name.Valid {
-			childEvent.Profile.Name = name.String
+			childEvent.Profile.Name = name
 		} else {
-			childEvent.Profile.Name = childEvent.Event.PubKey
+			childEvent.Profile.Name.String = childEvent.Event.PubKey
 		}
 		if about.Valid {
-			childEvent.Profile.About = about.String
+			childEvent.Profile.About = about
 		}
 		if picture.Valid {
-			childEvent.Profile.Picture = picture.String
+			childEvent.Profile.Picture = picture
 		}
 
 		if website.Valid {
-			childEvent.Profile.Website = website.String
+			childEvent.Profile.Website = website
 		}
 		if nip05.Valid {
-			childEvent.Profile.Nip05 = nip05.String
+			childEvent.Profile.Nip05 = nip05
 		}
 		if lud16.Valid {
-			childEvent.Profile.Lud16 = lud16.String
+			childEvent.Profile.Lud16 = lud16
 		}
 		if displayname.Valid {
-			childEvent.Profile.DisplayName = displayname.String
+			childEvent.Profile.DisplayName = displayname
 		}
 
 		childEvent.Profile.Followed = followed
 
 		childEvent.Bookmark = bookmarked
 
+		/*
+			if childEvent.Event.PubKey == "39fa74ddf269649ce45d40b9de4ae8a8f94e7713d74d18901f1f24906c97e3e4" {
+				log.Fatal("Pubkey: ", childEvent.Event.PubKey, childEvent.Profile.Name)
+			}
+		*/
 		childEvent.Content = st.parseReferences(&childEvent)
 
 		if item, ok := eventMap[root_event_id]; ok {
@@ -936,17 +931,21 @@ func walk(parent *Event, payload Event, reply_event_id string, level int64) bool
 	return false
 }
 
-func (st *Storage) GetInbox(ctx context.Context, p *Pagination, pubkey string) error {
+func (st *Storage) GetInbox(ctx context.Context, p *Pagination, pubkey string) ([]Event, error) {
 	qry := `
 	SELECT
-	e0.id, e0.event_id, e0.pubkey, e0.kind, e0.event_created_at, e0.content, e0.tags_full::json, e0.sig, e0.etags, e0.ptags,  
-	u.name, u.about , u.picture,
-	u.website, u.nip05, u.lud16, u.display_name, f.pubkey follow, bm.event_id bookmarked
+		notes.id, notes.event_id, notes.pubkey, notes.kind, notes.event_created_at, 
+		notes.content, notes.tags_full::json, notes.sig, notes.etags, notes.ptags,
+		profiles.name, profiles.about , profiles.picture,
+		profiles.website, profiles.nip05, profiles.lud16, profiles.display_name, 
+		CASE WHEN length(follows.pubkey) > 0 THEN TRUE ELSE FALSE END followed, 
+		CASE WHEN length(bookmarks.event_id) > 0 THEN TRUE ELSE FALSE END bookmarked
 	FROM 
-	notes e0 
+	notes
+	LEFT JOIN profiles ON (profiles.pubkey = notes.pubkey)
 	LEFT JOIN follows f ON (f.pubkey = e0.pubkey)
 	LEFT JOIN bookmarks bm ON (bm.event_id = e0.event_id)
-	LEFT JOIN profiles u ON (u.pubkey = e0.pubkey ) 
+
 	JOIN
 	(SELECT
 	DISTINCT e0.event_id
@@ -958,17 +957,12 @@ func (st *Storage) GetInbox(ctx context.Context, p *Pagination, pubkey string) e
 	tbl.event_id = e0.event_id
 	ORDER BY e0.event_created_at DESC;`
 
+	var rows []NotesAndProfiles
 	//rows, err := tx.Query(ctx, qry, pubkey)
-	rows, err := st.GormDB.WithContext(ctx).Raw(qry, pubkey).Rows()
-	if err != nil {
-		log.Println("GetInbox() -> Query:: ", err)
-		return nil
-	}
-	defer rows.Close()
+	st.GormDB.WithContext(ctx).Raw(qry, pubkey).Limit(100).Find(&rows)
 
-	eventMap, keys, _, _ := st.procesEventRows(rows, p)
+	eventMap, keys, _, _ := st.procesEventRows(&rows)
 	p.SetTotal(uint64(len(keys)))
-	p.SetTo()
 
 	st.getChildren(ctx, eventMap)
 	events := make([]Event, 0)
@@ -976,8 +970,8 @@ func (st *Storage) GetInbox(ctx context.Context, p *Pagination, pubkey string) e
 	for _, k := range keys {
 		events = append(events, eventMap[k])
 	}
-	p.Data = events
-	return nil
+
+	return events, nil
 }
 
 /**
@@ -1068,28 +1062,28 @@ func (st *Storage) FindEvent(ctx context.Context, id string) (Event, error) {
 		childEvent.Children = make(map[string]*Event, 0)
 
 		if name.Valid {
-			childEvent.Profile.Name = name.String
+			childEvent.Profile.Name.String = name.String
 		} else {
-			childEvent.Profile.Name = event.Event.PubKey
+			childEvent.Profile.Name.String = event.Event.PubKey
 		}
 		if about.Valid {
-			childEvent.Profile.About = about.String
+			childEvent.Profile.About.String = about.String
 		}
 		if picture.Valid {
-			childEvent.Profile.Picture = picture.String
+			childEvent.Profile.Picture.String = picture.String
 		}
 
 		if website.Valid {
-			childEvent.Profile.Website = website.String
+			childEvent.Profile.Website.String = website.String
 		}
 		if nip05.Valid {
-			childEvent.Profile.Nip05 = nip05.String
+			childEvent.Profile.Nip05.String = nip05.String
 		}
 		if lud16.Valid {
-			childEvent.Profile.Lud16 = lud16.String
+			childEvent.Profile.Lud16.String = lud16.String
 		}
 		if displayname.Valid {
-			childEvent.Profile.DisplayName = displayname.String
+			childEvent.Profile.DisplayName.String = displayname.String
 		}
 
 		childEvent.Profile.Followed = followed
@@ -1283,28 +1277,28 @@ func (st *Storage) FindProfile(ctx context.Context, pubkey string) (Profile, err
 
 	profile.Pubkey = pubkey
 	if name.Valid {
-		profile.Name = name.String
+		profile.Name.String = name.String
 	} else {
-		profile.Name = pubkey
+		profile.Name.String = pubkey
 	}
 	if about.Valid {
-		profile.About = about.String
+		profile.About.String = about.String
 	}
 	if picture.Valid {
-		profile.Picture = picture.String
+		profile.Picture.String = picture.String
 	}
 
 	if website.Valid {
-		profile.Website = website.String
+		profile.Website.String = website.String
 	}
 	if nip05.Valid {
-		profile.Nip05 = nip05.String
+		profile.Nip05.String = nip05.String
 	}
 	if lud16.Valid {
-		profile.Lud16 = lud16.String
+		profile.Lud16.String = lud16.String
 	}
 	if displayname.Valid {
-		profile.DisplayName = displayname.String
+		profile.DisplayName.String = displayname.String
 	}
 
 	return profile, err

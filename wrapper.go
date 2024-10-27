@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -65,7 +66,7 @@ func (wrapper *Wrapper) Do(ctx context.Context, r Relay, f func(context.Context,
 
 			relay, err := nostr.RelayConnect(ctx, relayUrl)
 			if err != nil {
-				log.Println("Can't connect to relay: ", relay.URL)
+				log.Printf(Magenta+"Can't connect to relay: %s"+Reset, relay.URL)
 				return
 			}
 
@@ -173,7 +174,7 @@ func (wrapper *Wrapper) BroadCast(ctx context.Context, ev Event) (bool, error) {
 		} else {
 			success.Add(1)
 		}
-		log.Println("broadcast to: [", relay.URL, "], event data: ", ev.Event)
+		slog.Info(Cyan+"broadcast to: "+Reset, "relay", relay.URL, "data", ev.Event)
 		return true
 	})
 
@@ -196,15 +197,15 @@ func (wrapper *Wrapper) GetEvents(ctx context.Context, filter nostr.Filter) []*E
 
 	wrapper.Do(ctx, Relay{Read: true}, func(ctx context.Context, relay *nostr.Relay) bool {
 		evs, err := relay.QuerySync(ctx, filter)
-		log.Println("Connecting to:", relay.URL)
+		log.Printf(Yellow+"Connecting to: %s"+Reset, relay.URL)
 		if err != nil {
 			return true
 		}
 		for _, ev := range evs {
 			resultEv, ok := m.Load(ev.ID)
 			if !ok {
-				log.Println(relay.URL, "::", ev.CreatedAt.Time().UTC())
-				log.Println("Kind:", ev.Kind, "Event ID:", ev.ID)
+				//log.Println(relay.URL, "::", ev.CreatedAt.Time().UTC())
+				//log.Println("Kind:", ev.Kind, "Event ID:", ev.ID)
 
 				myEvent := &Event{}
 				myEvent.Event = &nostr.Event{}
@@ -246,8 +247,7 @@ func (wrapper *Wrapper) GetEventData(createdAt int64, withOffset bool) nostr.Fil
 		return nostr.Filter{}
 	}
 	var timeStamp nostr.Timestamp = nostr.Timestamp(createdAt + 1)
-	//var untilTimeStamp nostr.Timestamp = nostr.Timestamp(createdAt + 60*60*1000)
-	log.Println("Nostr Timestamp: ", timeStamp.Time().UTC())
+
 	filter := nostr.Filter{
 		Kinds: []int{nostr.KindTextNote, nostr.KindReaction, nostr.KindArticle, nostr.KindDeletion, nostr.KindProfileMetadata},
 		Since: &timeStamp,
