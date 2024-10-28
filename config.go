@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -54,16 +54,18 @@ func LoadConfig() (*Config, error) {
 	content, err := os.ReadFile(fp)
 	if err != nil {
 		fmt.Println("Done", err)
-		log.Fatal("Error when opening file: ", err)
+		slog.Error("Error when opening file", "error", err.Error())
+		os.Exit(1)
 	}
 
 	err = json.Unmarshal(content, &cfg)
 	if err != nil {
-		log.Fatal("Error during Unmarshal(): ", err)
+		slog.Error("Error during Unmarshal()", "error", err.Error())
+		os.Exit(1)
 	}
 
 	if cfg.Nostr.PrivateKey == "" {
-		log.Println("You need to add your private key. This key will never be transmitted and stays local")
+		slog.Info("You need to add your private key. This key will never be transmitted and stays local")
 		os.Exit(0)
 	}
 

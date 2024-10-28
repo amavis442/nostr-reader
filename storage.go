@@ -120,7 +120,7 @@ func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
 		  LEFT JOIN profiles ON (profiles.pubkey = notes.pubkey) 
 		  LEFT JOIN blocks  on (blocks.pubkey = notes.pubkey) 
 		  LEFT JOIN bookmarks ON (bookmarks.note_id = notes.id) 
-		  JOIN follows ON (follows.pubkey = notes.pubkey) 
+		  LEFT JOIN follows ON (follows.pubkey = notes.pubkey) 
 		  WHERE notes.kind = 1 AND notes.garbage = false AND notes.root = true AND blocks.pubkey IS NULL ORDER BY notes.id asc;`)
 
 	log.Printf(`Connect() -> Cleaning history older then %d days`, cfg.Retention)
@@ -470,6 +470,7 @@ func (st *Storage) GetNewNotesCount(ctx context.Context, cursor uint64, options 
 	tx := st.GormDB.Debug().Model(&NotesAndProfiles{}).
 		Select(`COUNT(id)`).
 		Where("id > ?", cursor).
+		Where("followed = ? and bookmarked = ?", options.Follow, options.BookMark).
 		Find(&count)
 
 	if tx.Error != nil {
@@ -494,8 +495,14 @@ func (st *Storage) initPaging(p *Pagination, options Options) {
 		var notesAndProfiles NotesAndProfiles
 		fmt.Println("Empty cursor")
 		if !options.BookMark {
-			var maxTimeStamp int64 = time.Now().Unix()
-			since := maxTimeStamp - int64(60*60*24*p.GetSince())
+			//var maxTimeStamp int64 = time.Now().Unix()
+			currentTime := time.Now()
+			year := currentTime.Year()
+			month := currentTime.Month()
+			day := currentTime.Day()
+			loc, _ := time.LoadLocation("Local")
+			since := time.Date(year, time.Month(month), day, 0, 0, 0, 0, loc).Unix()
+			//since := maxTimeStamp - int64(60*60*24*p.GetSince())
 			st.GormDB.Debug().Model(&NotesAndProfiles{}).
 				Where("event_created_at > ?", since).
 				Order("id ASC").
@@ -600,7 +607,6 @@ func (st *Storage) GetNotes(ctx context.Context, context string, p *Pagination, 
 		return rows[i].ID > rows[j].ID
 	})
 
-	//log.Println("Aantal rijen: ", len(rows), " Per page: ", p.PerPage, "Einde? ", !(len(rows) < int(p.PerPage)))
 	if (state == stateName[StateInit] || state == stateName[StateNext] || state == stateName[StateRefresh]) && !(len(rows) < int(p.PerPage)) {
 		next_cursor := rows[0]
 		p.NextCursor = next_cursor.ID
@@ -624,24 +630,21 @@ func (st *Storage) GetNotes(ctx context.Context, context string, p *Pagination, 
 		return rows[i].EventCreatedAt.Time().Unix() > rows[j].EventCreatedAt.Time().Unix()
 	})
 
-	eventMap, keys, _, err := st.procesEventRows(&rows)
+	eventMap, keys, seenMap, err := st.procesEventRows(&rows)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	/*
-		tx = st.GormDB.WithContext(ctx).Model(&Seen{})
-		seens := []*Seen{}
-		for noteid, eventid := range seenMap {
-			seens = append(seens, &Seen{NoteID: uint(noteid), EventId: eventid})
-		}
 
-		result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&seens)
-		if result.Error != nil {
-			return &[]Event{}, result.Error
-		}
+	tx = st.GormDB.WithContext(ctx).Model(&Seen{})
+	seens := []*Seen{}
+	for noteid, eventid := range seenMap {
+		seens = append(seens, &Seen{NoteID: uint(noteid), EventId: eventid})
+	}
 
-		log.Fatal(len(rows), p.PreviousCursor, p.Cursor, p.NextCursor)
-	*/
+	result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&seens)
+	if result.Error != nil {
+		return &[]Event{}, result.Error
+	}
 
 	st.getChildren(ctx, eventMap)
 

@@ -166,6 +166,8 @@ func (c *Controller) GetNotes() http.HandlerFunc {
 		switch p.Context {
 		case "refresh":
 			options = Options{Follow: true, BookMark: false, Renew: p.Renew}
+		case "refresh.global":
+			options = Options{Follow: false, BookMark: false, Renew: p.Renew}
 		case "follow":
 			options = Options{Follow: true, BookMark: false, Renew: p.Renew}
 		case "bookmark":
@@ -181,12 +183,6 @@ func (c *Controller) GetNotes() http.HandlerFunc {
 		if err != nil {
 			log.Println(err)
 		}
-
-		/*
-			log.Println("GOQU OUTPUT: START")
-			c.Goqu.GetNotes(ctx, &pagination, options)
-			log.Println("GOQU OUTPUT: END")
-		*/
 
 		data := &ResponseEventData{Paging: &pagination, Events: events}
 		response := &Response{}
