@@ -467,7 +467,7 @@ type Options struct {
 
 func (st *Storage) GetNewNotesCount(ctx context.Context, cursor uint64, options Options) (int, error) {
 	var count int
-	tx := st.GormDB.Debug().Model(&NotesAndProfiles{}).
+	tx := st.GormDB.Model(&NotesAndProfiles{}).
 		Select(`COUNT(id)`).
 		Where("id > ?", cursor).
 		Where("followed = ? and bookmarked = ?", options.Follow, options.BookMark).
@@ -503,7 +503,7 @@ func (st *Storage) initPaging(p *Pagination, options Options) {
 			loc, _ := time.LoadLocation("Local")
 			since := time.Date(year, time.Month(month), day, 0, 0, 0, 0, loc).Unix()
 			//since := maxTimeStamp - int64(60*60*24*p.GetSince())
-			st.GormDB.Debug().Model(&NotesAndProfiles{}).
+			st.GormDB.Model(&NotesAndProfiles{}).
 				Where("event_created_at > ?", since).
 				Order("id ASC").
 				Limit(1).
