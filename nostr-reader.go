@@ -4,9 +4,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
+	"log/slog"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -16,7 +20,46 @@ const name = "nostr-reader"
 
 const version = "0.0.10"
 
+func getFireSignalsChannel() chan os.Signal {
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c,
+		// https://www.gnu.org/software/libc/manual/html_node/Termination-Signals.html
+		syscall.SIGTERM, // "the normal way to politely ask a program to terminate"
+		syscall.SIGINT,  // Ctrl+C
+		syscall.SIGQUIT, // Ctrl-\
+		//syscall.SIGKILL, // "always fatal", "SIGKILL and SIGSTOP may not be caught by a program"
+		syscall.SIGHUP, // "terminal is disconnected"
+	)
+	return c
+
+}
+
 func main() {
+	logFile, err := os.OpenFile("log.txt", os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
+	if err != nil {
+		panic(err)
+	}
+	mw := io.MultiWriter(os.Stdout, logFile)
+	log.SetOutput(mw)
+	slog.NewTextHandler(mw, nil)
+	defer logFile.Close()
+
+	exitChan := getFireSignalsChannel()
+	done := make(chan bool, 1)
+	go func() {
+		sig := <-exitChan
+		logFile.Close()
+		fmt.Println(sig)
+		done <- true
+	}()
+
+	go func() {
+		<-done
+		fmt.Println("Closing app")
+		os.Exit(0)
+	}()
+
 	devMode := false
 
 	helpPtr := flag.Bool("h", false, "Show help dialog")
@@ -45,8 +88,8 @@ func main() {
 		return
 	}
 
-	fmt.Println("Running in dev mode: ", *modePtr)
-	fmt.Println("Sync interval is: ", *syncIntervalPtr, " minutes")
+	slog.Info("Running in dev mode ", "mode", *modePtr)
+	slog.Info("Sync interval is: " + string(*syncIntervalPtr) + " minutes")
 
 	cfg, err := LoadConfig()
 	if err != nil {
@@ -56,7 +99,7 @@ func main() {
 
 	cfg.Interval = uint(*syncIntervalPtr)
 	if cfg.Interval < 1 {
-		log.Println("Setting interval to 1 minute. This is the minimum")
+		slog.Info("Setting interval to 1 minute. This is the minimum")
 		cfg.Interval = 1
 	}
 
@@ -114,7 +157,6 @@ func main() {
 	httpServer.Start()
 
 	wg.Wait()
-
 }
 
 func intervalTask(wg *sync.WaitGroup, ctx context.Context, st *Storage, nostrWrapper *Wrapper, timeOut int, syncDisabled bool) {

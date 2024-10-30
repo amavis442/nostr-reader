@@ -301,7 +301,7 @@ func (st *Storage) SaveNote(ctx context.Context, event *Event) (Note, error) {
 
 	tagJson, err := json.Marshal(ev.Tags)
 	if err != nil {
-		log.Println(err)
+		slog.Warn(getCallerInfo(1), "error", err.Error())
 	}
 
 	p := bluemonday.StrictPolicy()
@@ -346,7 +346,7 @@ func (st *Storage) SaveNote(ctx context.Context, event *Event) (Note, error) {
 	// turn off stupid go json encoding automatically doing HTML escaping...
 	enc.SetEscapeHTML(false)
 	if err := enc.Encode(ev); err != nil {
-		log.Println(err)
+		slog.Warn(getCallerInfo(1), "error", err.Error())
 		return Note{}, err
 	}
 
@@ -374,7 +374,7 @@ func (st *Storage) SaveNote(ctx context.Context, event *Event) (Note, error) {
 		case err == sql.ErrNoRows:
 			log.Printf("FindProfile() -> Query:: 404 no profile with pubkey %s\n", ev.PubKey)
 		default:
-			log.Fatalf("FindProfile() -> Query:: 502 query error: %v\n", err)
+			log.Fatalf(getCallerInfo(1)+" FindProfile() -> Query:: 502 query error: %v\n", err)
 		}
 		return Note{}, err
 	}
@@ -392,42 +392,42 @@ func (st *Storage) SaveNote(ctx context.Context, event *Event) (Note, error) {
 	//}
 
 	if err != nil {
+		slog.Warn(getCallerInfo(1), "error", err.Error())
 		return Note{}, err
 	}
 
 	if note.ID > 0 && len(tree.RootTag) > 0 {
-		var treeSearch Tree
-		if len(tree.ReplyTag) > 0 {
-			err = st.GormDB.Model(&Tree{}).Where(&Tree{RootEventId: tree.RootTag, ReplyEventId: tree.ReplyTag}).Find(&treeSearch).Error
-		} else {
-			err = st.GormDB.Model(&Tree{}).Where(&Tree{RootEventId: tree.RootTag}).Find(&treeSearch).Error
-		}
+		treeData := Tree{EventId: ev.ID, RootEventId: tree.RootTag, ReplyEventId: tree.ReplyTag}
+		err = st.GormDB.Model(&Tree{}).WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&treeData).Error
 		if err != nil {
-			return Note{}, err
+			slog.Error(getCallerInfo(1), "error", err.Error())
 		}
-		if treeSearch.ID == 0 {
-			treeData := Tree{EventId: ev.ID, RootEventId: tree.RootTag, ReplyEventId: tree.ReplyTag}
-			st.GormDB.Model(&Tree{}).WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&treeData)
-		}
+
 		if hasNotification {
 			notification := Notification{NoteID: note.ID}
-			st.GormDB.Model(&Notification{}).WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&notification)
+			err = st.GormDB.Model(&Notification{}).WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&notification).Error
+			if err != nil {
+				slog.Error(getCallerInfo(1), "error", err.Error())
+			}
 		}
 
 		// Check if we already have the root Note
 		var searchNoteRootNote Note
 		err = st.GormDB.Model(&Note{}).Where(&Note{EventId: tree.RootTag}).Find(&searchNoteRootNote).Error
 		if err != nil {
+			slog.Error(getCallerInfo(1), "error", err.Error())
 			return Note{}, err
 		}
 		if searchNoteRootNote.ID == 0 {
 			Missing_event_ids = append(Missing_event_ids, tree.RootTag)
 		}
+
 		// Same goes for reply which is replied to
 		if len(tree.ReplyTag) > 0 {
 			var searchNoteReplyNote Note
 			err = st.GormDB.Model(&Note{}).Where(&Note{EventId: tree.ReplyTag}).Find(&searchNoteReplyNote).Error
 			if err != nil {
+				slog.Error(getCallerInfo(1), "error", err.Error())
 				return Note{}, err
 			}
 			if searchNoteReplyNote.ID == 0 {

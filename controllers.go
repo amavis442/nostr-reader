@@ -973,7 +973,7 @@ func (c *Controller) GetNewNotesCount() http.HandlerFunc {
 		count, err := c.Db.GetNewNotesCount(ctx, p.Cursor, options)
 
 		response.Data = fmt.Sprintf("%d", count)
-		log.Println(options)
+
 		if err != nil {
 			response.Status = "error"
 			response.Message = err.Error()
@@ -1133,37 +1133,47 @@ func (c *Controller) Publish() http.HandlerFunc {
 
 		log.Println("Msg to publish: ", msg.Msg)
 		var postEv Event
+
 		if msg.Event_id == "" {
 			postEv, err = c.Nostr.DoPost(msg.Msg)
 			if err != nil {
-				slog.Warn(Red + "Something went wrong creating post for broadcasting: " + Reset + err.Error())
-			}
-			_, err = c.Db.SaveEvents(ctx, []*Event{&postEv})
-			if err != nil {
-				slog.Warn(Red + getCallerInfo(1) + Reset + err.Error())
-			}
-			success, err := c.Nostr.BroadCast(ctx, postEv)
-			if !success || err != nil {
-				var errMsg string = ""
-				if err != nil {
-					errMsg = err.Error()
-				}
-				slog.Warn(Red + getCallerInfo(1) + "cannot post" + Reset + errMsg)
-				log.Println("Post:: cannot post")
+				slog.Warn(Red+"Something went wrong creating post for broadcasting: "+Reset, "error", err.Error())
 			}
 		}
 
 		if msg.Event_id != "" {
-			replyEv, _ := c.Db.FindRawEvent(ctx, msg.Event_id)
-			postEv, _ = c.Nostr.DoReply(msg.Msg, *replyEv)
-			c.Db.SaveEvents(ctx, []*Event{&postEv})
-
-			success, err := c.Nostr.BroadCast(ctx, postEv)
-
-			if !success || err != nil {
-				log.Println("Reply:: cannot reply")
+			replyEv, err := c.Db.FindRawEvent(ctx, msg.Event_id)
+			if err != nil {
+				slog.Warn(Red+getCallerInfo(1)+" Something went wrong: "+Reset, "error", err.Error())
 			}
+			postEv, err = c.Nostr.DoReply(msg.Msg, *replyEv)
+			if err != nil {
+				slog.Warn(Red+"Something went wrong creating post for broadcasting: "+Reset, "error", err.Error())
+			}
+
 		}
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func(wg *sync.WaitGroup, c *Controller, postEv *Event) {
+			c.Db.SaveNote(ctx, postEv)
+			if err != nil {
+				slog.Warn(Red + getCallerInfo(1) + Reset + err.Error())
+			}
+			wg.Done()
+		}(&wg, c, &postEv)
+
+		wg.Add(1)
+		go func(ctx context.Context, c *Controller, postEv *Event) {
+			success, err := c.Nostr.BroadCast(ctx, *postEv)
+			if err != nil {
+				slog.Warn(Red+getCallerInfo(1)+"cannot broadcast"+Reset, "error", err.Error())
+			}
+			if !success {
+				slog.Warn(Red + getCallerInfo(1) + "cannot broadcast succesfully" + Reset)
+			}
+			wg.Done()
+		}(ctx, c, &postEv)
 
 		response := &Response{}
 		response.Status = "ok"
@@ -1182,7 +1192,10 @@ func (c *Controller) Publish() http.HandlerFunc {
 		if err != nil {
 			panic(err)
 		}
+
+		wg.Wait()
 	}
+
 }
 
 // SetMetaData godoc

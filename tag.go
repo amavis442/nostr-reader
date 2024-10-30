@@ -57,6 +57,8 @@ func ProcessTags(ev *nostr.Event, pubkey string) (etags []string, ptags []string
 					hasNotification = true
 				}
 			}
+		default:
+			continue
 		}
 	}
 
