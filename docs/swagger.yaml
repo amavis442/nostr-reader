@@ -13,68 +13,49 @@ definitions:
       msg:
         type: string
     type: object
+  main.NullString:
+    properties:
+      string:
+        type: string
+      valid:
+        description: Valid is true if String is not NULL
+        type: boolean
+    type: object
   main.PageRequest:
     properties:
       context:
         type: string
       cursor:
         type: integer
-      end_id:
+      next_cursor:
         type: integer
-      ids[]:
-        items:
-          type: string
-        type: array
       per_page:
+        type: integer
+      prev_cursor:
         type: integer
       renew:
         type: boolean
       since:
         type: integer
-      start_id:
-        type: integer
-      total:
-        type: integer
-    type: object
-  main.Pagination:
-    properties:
-      cursor:
-        type: integer
-      end_id:
-        type: integer
-      next_cursor:
-        type: integer
-      per_page:
-        type: integer
-      previous_cursor:
-        type: integer
-      since:
-        type: integer
-      sort:
-        type: string
-      start_id:
-        type: integer
-      total:
-        type: integer
     type: object
   main.Profile:
     properties:
       about:
-        type: string
+        $ref: '#/definitions/main.NullString'
       blocked:
         type: boolean
       display_name:
-        type: string
+        $ref: '#/definitions/main.NullString'
       followed:
         type: boolean
       lud16:
-        type: string
+        $ref: '#/definitions/main.NullString'
       name:
-        type: string
+        $ref: '#/definitions/main.NullString'
       nip05:
-        type: string
+        $ref: '#/definitions/main.NullString'
       picture:
-        type: string
+        $ref: '#/definitions/main.NullString'
       pubkey:
         type: string
       uid:
@@ -84,7 +65,7 @@ definitions:
           type: string
         type: array
       website:
-        type: string
+        $ref: '#/definitions/main.NullString'
     type: object
   main.Pubkey:
     properties:
@@ -263,40 +244,6 @@ paths:
       summary: Follow a user
       tags:
       - user
-  /api/getbookmarked:
-    get:
-      consumes:
-      - application/json
-      description: Remove bookmark from note
-      parameters:
-      - description: Body for the retrieval of data
-        in: body
-        name: Body
-        required: true
-        schema:
-          $ref: '#/definitions/main.PageRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/main.Pagination'
-        "400":
-          description: error
-          schema:
-            type: string
-        "404":
-          description: error
-          schema:
-            type: string
-        "500":
-          description: error
-          schema:
-            type: string
-      summary: Remove bookmark from note
-      tags:
-      - bookmark
   /api/getfollowed:
     get:
       consumes:
@@ -324,63 +271,6 @@ paths:
       summary: Profiles of the followed users
       tags:
       - user
-  /api/getfollownotes:
-    get:
-      consumes:
-      - application/json
-      description: get Notes
-      parameters:
-      - description: Cursor
-        in: query
-        name: cursor
-        required: true
-        type: integer
-      - description: Start id
-        in: query
-        name: start_id
-        required: true
-        type: integer
-      - description: End id
-        in: query
-        name: end_id
-        required: true
-        type: integer
-      - default: 10
-        description: Results per page
-        in: query
-        name: per_page
-        type: integer
-      - default: false
-        description: Renew page and ignore start_id
-        in: query
-        name: renew
-        type: boolean
-      - description: Since
-        in: query
-        name: since
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/main.Response'
-        "400":
-          description: error
-          schema:
-            type: string
-        "404":
-          description: error
-          schema:
-            type: string
-        "500":
-          description: error
-          schema:
-            type: string
-      summary: Retrieve stored Notes
-      tags:
-      - notes
   /api/getinbox:
     get:
       consumes:

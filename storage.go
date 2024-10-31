@@ -476,7 +476,6 @@ func (st *Storage) initPaging(p *Pagination, options Options) {
 				Find(&notesAndProfiles)
 			p.Cursor = notesAndProfiles.ID
 		}
-		p.StartId = p.Cursor
 	}
 }
 
@@ -618,10 +617,6 @@ func (st *Storage) GetNotes(ctx context.Context, context string, p *Pagination, 
 	// Make sure the order stays the same
 	for _, k := range keys {
 		events = append(events, eventMap[k])
-	}
-
-	if p.EndId == 0 {
-		st.GormDB.Select("MAX(notes.id)").Find(&p.EndId)
 	}
 
 	return &events, nil
@@ -931,7 +926,6 @@ func (st *Storage) GetInbox(ctx context.Context, p *Pagination, pubkey string) (
 	st.GormDB.WithContext(ctx).Raw(qry, pubkey).Limit(100).Find(&rows)
 
 	eventMap, keys, _, _ := st.procesEventRows(&rows)
-	p.SetTotal(uint64(len(keys)))
 
 	st.getChildren(ctx, eventMap)
 	events := make([]Event, 0)

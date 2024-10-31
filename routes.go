@@ -50,7 +50,6 @@ func routes(c *Controller, port string) *chi.Mux {
 	 */
 	router.Post("/api/followuser", c.Follow())
 	router.Post("/api/unfollowuser", c.Unfollow())
-	router.Get("/api/getfollownotes", c.GetFollowedNotes())
 	router.Get("/api/getfollowed", c.GetFollowedProfiles())
 
 	/**
@@ -58,7 +57,6 @@ func routes(c *Controller, port string) *chi.Mux {
 	 */
 	router.Post("/api/bookmark", c.AddBookMark())
 	router.Post("/api/removebookmark", c.RemoveBookMark())
-	router.Get("/api/getbookmarked", c.GetBookMarked())
 
 	/**
 	 * Relay settings

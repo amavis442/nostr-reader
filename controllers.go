@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-chi/chi"
 	"github.com/go-chi/render"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip19"
@@ -54,17 +53,13 @@ var syncHash string = ""
 
 // Send from client API
 type PageRequest struct {
-	Cursor     uint64   `json:"cursor"`
-	PrevCursor uint64   `json:"prev_cursor"`
-	NextCursor uint64   `json:"next_cursor"`
-	StartId    uint64   `json:"start_id"`
-	EndId      uint64   `json:"end_id"`
-	PerPage    uint     `json:"per_page"`
-	Total      uint64   `json:"total"`
-	Since      uint     `json:"since"`
-	Renew      bool     `json:"renew"`
-	Context    string   `json:"context"`
-	Ids        []string `json:"ids[]"`
+	Cursor     uint64 `json:"cursor"`
+	PrevCursor uint64 `json:"prev_cursor"`
+	NextCursor uint64 `json:"next_cursor"`
+	PerPage    uint   `json:"per_page"`
+	Since      uint   `json:"since"`
+	Renew      bool   `json:"renew"`
+	Context    string `json:"context"`
 }
 
 // Response godoc
@@ -130,12 +125,6 @@ func (c *Controller) GetNotes() http.HandlerFunc {
 		prev_cursor := r.URL.Query().Get("prev_cursor")
 		p.PrevCursor, _ = strconv.ParseUint(prev_cursor, 10, 64)
 
-		start_id := r.URL.Query().Get("start_id")
-		p.StartId, _ = strconv.ParseUint(start_id, 10, 64)
-
-		end_id := r.URL.Query().Get("end_id")
-		p.EndId, _ = strconv.ParseUint(end_id, 10, 64)
-
 		per_page := r.URL.Query().Get("per_page")
 		perpage, _ := strconv.ParseUint(per_page, 10, 64)
 		p.PerPage = uint(perpage)
@@ -155,10 +144,8 @@ func (c *Controller) GetNotes() http.HandlerFunc {
 		pagination := Pagination{}
 		pagination.SetPerPage(uint(p.PerPage))
 		pagination.SetCursor(p.Cursor)
-		pagination.PreviousCursor = p.PrevCursor
-		pagination.NextCursor = p.NextCursor
-		pagination.SetStartId(p.StartId)
-		pagination.SetEndId(p.EndId)
+		pagination.SetPrev(p.PrevCursor)
+		pagination.SetNext(p.NextCursor)
 		pagination.SetPerPage(p.PerPage)
 		pagination.SetSince(p.Since)
 
@@ -183,110 +170,6 @@ func (c *Controller) GetNotes() http.HandlerFunc {
 		if err != nil {
 			log.Println(err)
 		}
-
-		data := &ResponseEventData{Paging: &pagination, Events: events}
-		response := &Response{}
-		response.Status = "ok"
-		response.Message = "Pagination results"
-		if err != nil {
-			response.Status = "failed"
-			response.Message = err.Error()
-		}
-		response.Data = data
-		render.JSON(w, r, response)
-	}
-}
-
-// GetFollowedNotes godoc
-// @Summary      Retrieve stored Notes
-// @Description  get Notes
-// @Tags         notes
-// @Accept       json
-// @Produce      json
-// @Param		 cursor	query	int	true	"Cursor"
-// @Param		 start_id	query	int	true	"Start id"
-// @Param		 end_id		query	int	true	"End id"
-// @Param		 per_page	query	int	false	"Results per page"	Default(10)
-// @Param		 renew		query	bool	false	"Renew page and ignore start_id" Default(false)
-// @Param		 since		query	int	false	"Since"
-// @Success      200  {object}  Response
-// @Failure      400  {string}  string    "error"
-// @Failure      404  {string}  string    "error"
-// @Failure      500  {string}  string    "error"
-// @Router       /api/getfollownotes [get]
-func (c *Controller) GetFollowedNotes() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
-		ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
-		defer cancel()
-
-		var err error
-		var p PageRequest
-		cursor := chi.URLParam(r, "cursor")
-		p.Cursor, err = strconv.ParseUint(cursor, 10, 64)
-		if err != nil {
-			log.Println(err.Error())
-			p.Cursor = 0
-		}
-		start_id := chi.URLParam(r, "start_id")
-		p.StartId, err = strconv.ParseUint(start_id, 10, 64)
-		if err != nil {
-			log.Println(err.Error())
-			p.StartId = 0
-		}
-		max_id := chi.URLParam(r, "max_id")
-		p.EndId, err = strconv.ParseUint(max_id, 10, 64)
-		if err != nil {
-			log.Println(err.Error())
-			p.EndId = 0
-		}
-		per_page := chi.URLParam(r, "per_page")
-		perpage, err := strconv.ParseUint(per_page, 10, 64)
-		p.PerPage = uint(perpage)
-		if err != nil {
-			log.Println(err.Error())
-			p.PerPage = 10
-		}
-		renew := chi.URLParam(r, "renew")
-		p.Renew, err = strconv.ParseBool(renew)
-		if err != nil {
-			log.Println(err.Error())
-			p.Renew = false
-		}
-		p.Context = chi.URLParam(r, "context")
-
-		since := chi.URLParam(r, "since")
-		sinceI, err := strconv.ParseUint(since, 10, 64)
-		p.Since = uint(sinceI)
-		if err != nil {
-			log.Println(err.Error())
-			p.Since = 0
-		}
-
-		pagination := Pagination{}
-		pagination.SetPerPage(p.PerPage)
-		pagination.SetCursor(p.Cursor)
-		pagination.SetStartId(p.StartId)
-		pagination.SetEndId(p.EndId)
-		pagination.SetSince(p.Since)
-
-		var options = Options{
-			Follow:   false,
-			BookMark: false,
-			Renew:    p.Renew,
-		}
-		var events *[]Event
-		switch p.Context {
-		case "refresh":
-			options.Follow = true
-		case "follow":
-			options.Follow = true
-		case "bookmark":
-			options.BookMark = true
-		default:
-			options.Follow = true
-		}
-		events, err = c.Db.GetNotes(ctx, "", &pagination, options)
 
 		data := &ResponseEventData{Paging: &pagination, Events: events}
 		response := &Response{}
@@ -332,8 +215,6 @@ func (c *Controller) GetInbox() http.HandlerFunc {
 		pagination := Pagination{}
 		pagination.SetPerPage(p.PerPage)
 		pagination.SetCursor(p.Cursor)
-		pagination.SetStartId(p.StartId)
-		pagination.SetEndId(p.EndId)
 
 		var events []Event
 		events, err = c.Db.GetInbox(ctx, &pagination, c.Pubkey)
@@ -719,56 +600,6 @@ func (c *Controller) RemoveBookMark() http.HandlerFunc {
 	}
 }
 
-// GetBookMarked godoc
-// @Summary      Remove bookmark from note
-// @Description  Remove bookmark from note
-// @Tags         bookmark
-// @Accept       json
-// @Produce      json
-// @Param        Body body PageRequest true "Body for the retrieval of data"
-// @Success      200  {object}  Pagination
-// @Failure      400  {string}  string    "error"
-// @Failure      404  {string}  string    "error"
-// @Failure      500  {string}  string    "error"
-// @Router       /api/getbookmarked [get]
-func (c *Controller) GetBookMarked() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
-		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
-		defer cancel()
-
-		var p PageRequest
-		err := json.NewDecoder(r.Body).Decode(&p)
-		if err != nil {
-			panic(err)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
-		w.WriteHeader(http.StatusOK)
-
-		pagination := Pagination{}
-		pagination.SetPerPage(p.PerPage)
-		pagination.SetCursor(p.Cursor)
-		pagination.SetStartId(p.StartId)
-		pagination.SetEndId(p.EndId)
-
-		var events *[]Event
-		events, err = c.Db.GetNotes(ctx, "bookmark", &pagination, Options{Follow: false, BookMark: true, Renew: p.Renew})
-
-		data := &ResponseEventData{Paging: &pagination, Events: events}
-		response := &Response{}
-		response.Status = "ok"
-		response.Message = "Pagination results"
-
-		if err != nil {
-			response.Status = "failed"
-			response.Message = err.Error()
-		}
-		response.Data = data
-		render.JSON(w, r, response)
-	}
-}
-
 // AddRelay godoc
 // @Summary      Add relay
 // @Description  Add relay
@@ -931,12 +762,6 @@ func (c *Controller) GetNewNotesCount() http.HandlerFunc {
 		var p PageRequest
 		cursor := r.URL.Query().Get("cursor")
 		p.Cursor, _ = strconv.ParseUint(cursor, 10, 64)
-
-		start_id := r.URL.Query().Get("start_id")
-		p.StartId, _ = strconv.ParseUint(start_id, 10, 64)
-
-		end_id := r.URL.Query().Get("end_id")
-		p.EndId, _ = strconv.ParseUint(end_id, 10, 64)
 
 		per_page := r.URL.Query().Get("per_page")
 		perpage, _ := strconv.ParseUint(per_page, 10, 64)

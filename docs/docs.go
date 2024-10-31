@@ -232,58 +232,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/getbookmarked": {
-            "get": {
-                "description": "Remove bookmark from note",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "bookmark"
-                ],
-                "summary": "Remove bookmark from note",
-                "parameters": [
-                    {
-                        "description": "Body for the retrieval of data",
-                        "name": "Body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/main.PageRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/main.Pagination"
-                        }
-                    },
-                    "400": {
-                        "description": "error",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "404": {
-                        "description": "error",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "500": {
-                        "description": "error",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
         "/api/getfollowed": {
             "get": {
                 "description": "Profiles of the followed users",
@@ -297,90 +245,6 @@ const docTemplate = `{
                     "user"
                 ],
                 "summary": "Profiles of the followed users",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/main.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "error",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "404": {
-                        "description": "error",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "500": {
-                        "description": "error",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/getfollownotes": {
-            "get": {
-                "description": "get Notes",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "notes"
-                ],
-                "summary": "Retrieve stored Notes",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Cursor",
-                        "name": "cursor",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Start id",
-                        "name": "start_id",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "End id",
-                        "name": "end_id",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "default": 10,
-                        "description": "Results per page",
-                        "name": "per_page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Renew page and ignore start_id",
-                        "name": "renew",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Since",
-                        "name": "since",
-                        "in": "query"
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -1099,6 +963,18 @@ const docTemplate = `{
                 }
             }
         },
+        "main.NullString": {
+            "type": "object",
+            "properties": {
+                "string": {
+                    "type": "string"
+                },
+                "valid": {
+                    "description": "Valid is true if String is not NULL",
+                    "type": "boolean"
+                }
+            }
+        },
         "main.PageRequest": {
             "type": "object",
             "properties": {
@@ -1108,60 +984,19 @@ const docTemplate = `{
                 "cursor": {
                     "type": "integer"
                 },
-                "end_id": {
-                    "type": "integer"
-                },
-                "ids[]": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "per_page": {
-                    "type": "integer"
-                },
-                "renew": {
-                    "type": "boolean"
-                },
-                "since": {
-                    "type": "integer"
-                },
-                "start_id": {
-                    "type": "integer"
-                },
-                "total": {
-                    "type": "integer"
-                }
-            }
-        },
-        "main.Pagination": {
-            "type": "object",
-            "properties": {
-                "cursor": {
-                    "type": "integer"
-                },
-                "end_id": {
-                    "type": "integer"
-                },
                 "next_cursor": {
                     "type": "integer"
                 },
                 "per_page": {
                     "type": "integer"
                 },
-                "previous_cursor": {
+                "prev_cursor": {
                     "type": "integer"
+                },
+                "renew": {
+                    "type": "boolean"
                 },
                 "since": {
-                    "type": "integer"
-                },
-                "sort": {
-                    "type": "string"
-                },
-                "start_id": {
-                    "type": "integer"
-                },
-                "total": {
                     "type": "integer"
                 }
             }
@@ -1170,28 +1005,28 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "about": {
-                    "type": "string"
+                    "$ref": "#/definitions/main.NullString"
                 },
                 "blocked": {
                     "type": "boolean"
                 },
                 "display_name": {
-                    "type": "string"
+                    "$ref": "#/definitions/main.NullString"
                 },
                 "followed": {
                     "type": "boolean"
                 },
                 "lud16": {
-                    "type": "string"
+                    "$ref": "#/definitions/main.NullString"
                 },
                 "name": {
-                    "type": "string"
+                    "$ref": "#/definitions/main.NullString"
                 },
                 "nip05": {
-                    "type": "string"
+                    "$ref": "#/definitions/main.NullString"
                 },
                 "picture": {
-                    "type": "string"
+                    "$ref": "#/definitions/main.NullString"
                 },
                 "pubkey": {
                     "type": "string"
@@ -1206,7 +1041,7 @@ const docTemplate = `{
                     }
                 },
                 "website": {
-                    "type": "string"
+                    "$ref": "#/definitions/main.NullString"
                 }
             }
         },
