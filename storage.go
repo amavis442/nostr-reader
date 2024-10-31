@@ -88,41 +88,6 @@ func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
 		PrepareStmt: true,
 	})
 
-	st.GormDB.AutoMigrate(&Note{}, &Profile{}, &Notification{}, &Block{}, &Follow{}, &Seen{}, &Tree{}, &Bookmark{}, &Relay{})
-
-	st.GormDB.Exec(`DO $$ BEGIN
-		    		CREATE TYPE vote AS ENUM('like','dislike');
-		 				EXCEPTION
-		    			WHEN duplicate_object THEN null;
-		 			END $$;`)
-	st.GormDB.AutoMigrate(&Reaction{})
-
-	st.GormDB.Exec(`CREATE OR REPLACE FUNCTION delete_submission() RETURNS trigger AS $$
-			BEGIN
-		  		IF NEW.kind=5 THEN
-		       		DELETE FROM notes WHERE ARRAY[event_id] && NEW.etags AND NEW.pubkey=pubkey;
-		    		RETURN NULL;
-		  		END IF;
-		  		RETURN NEW;
-			END;
-			$$ LANGUAGE plpgsql;`)
-	st.GormDB.Exec(`DROP TRIGGER IF EXISTS delete_trigger ON notes;`)
-	st.GormDB.Exec(`CREATE TRIGGER delete_trigger BEFORE INSERT ON notes FOR EACH ROW EXECUTE FUNCTION delete_submission();`)
-
-	st.GormDB.Exec(`CREATE OR REPLACE VIEW notes_and_profiles
-		AS
- 		SELECT notes.id, notes.uid as note_uuid, notes.event_id, notes.pubkey, notes.kind, notes.event_created_at,
-        notes.content, notes.tags_full::json, notes.sig, notes.etags, notes.ptags,
-        profiles.uid as profile_uuid, profiles.name, profiles.about , profiles.picture,
-        profiles.website, profiles.nip05, profiles.lud16, profiles.display_name,
-        CASE WHEN length(follows.pubkey) > 0 THEN TRUE ELSE FALSE END followed,
-        CASE WHEN length(bookmarks.event_id) > 0 THEN TRUE ELSE FALSE END bookmarked FROM "notes" 
-		  LEFT JOIN profiles ON (profiles.pubkey = notes.pubkey) 
-		  LEFT JOIN blocks  on (blocks.pubkey = notes.pubkey) 
-		  LEFT JOIN bookmarks ON (bookmarks.note_id = notes.id) 
-		  LEFT JOIN follows ON (follows.pubkey = notes.pubkey) 
-		  WHERE notes.kind = 1 AND notes.garbage = false AND notes.root = true AND blocks.pubkey IS NULL ORDER BY notes.id asc;`)
-
 	log.Printf(`Connect() -> Cleaning history older then %d days`, cfg.Retention)
 	then := time.Now().AddDate(0, 0, -1*cfg.Retention)
 	past := fmt.Sprintf("%d-%d-%d 00:00:00\n",
@@ -149,6 +114,7 @@ func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
 
 		return nil
 	})
+
 	Missing_event_ids = make([]string, 0)
 
 	log.Println("Connect() -> Connected to database:", cfg.Dbname)

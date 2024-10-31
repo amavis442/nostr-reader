@@ -66,6 +66,18 @@ Minimal configuration. Need to be at ~/.config/nostr-reader/config.json or in [U
 
 Private key can also start with nsec and it will have the form of nsecXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
+## Database migrations
+
+use [Migrate](https://github.com/golang-migrate/migrate) for database migrations. Migration fiels for postgresql can be found in folder db/migrations
+
+Make sure the database is owned by user nostr or the setting of user in config.json (see server config)
+
+```
+> psql --username
+> $ CREATE ROLE nostr WITH CREATEDB LOGIN PASSWORD 'nostr';
+> $ CREATE DATABASE nostr WITH OWNER nostr;
+```
+
 ## Features
 
 - [x] Nip 01
