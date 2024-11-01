@@ -202,24 +202,45 @@ func (c *Controller) GetInbox() http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 		defer cancel()
 
+		var err error
 		var p PageRequest
-		err := json.NewDecoder(r.Body).Decode(&p)
+		cursor := r.URL.Query().Get("cursor")
+		p.Cursor, _ = strconv.ParseUint(cursor, 10, 64)
+
+		next_cursor := r.URL.Query().Get("next_cursor")
+		p.NextCursor, _ = strconv.ParseUint(next_cursor, 10, 64)
+
+		prev_cursor := r.URL.Query().Get("prev_cursor")
+		p.PrevCursor, _ = strconv.ParseUint(prev_cursor, 10, 64)
+
+		per_page := r.URL.Query().Get("per_page")
+		perpage, _ := strconv.ParseUint(per_page, 10, 64)
+		p.PerPage = uint(perpage)
+
+		renew := r.URL.Query().Get("renew")
+		p.Renew, err = strconv.ParseBool(renew)
 		if err != nil {
-			panic(err)
+			p.Renew = false
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*") // for CORS
-		w.WriteHeader(http.StatusOK)
+		p.Context = r.URL.Query().Get("context")
+
+		since := r.URL.Query().Get("since")
+		sinceI, _ := strconv.ParseUint(since, 10, 64)
+		p.Since = uint(sinceI)
 
 		pagination := Pagination{}
-		pagination.SetPerPage(p.PerPage)
+		pagination.SetPerPage(uint(p.PerPage))
 		pagination.SetCursor(p.Cursor)
+		pagination.SetPrev(p.PrevCursor)
+		pagination.SetNext(p.NextCursor)
+		pagination.SetPerPage(p.PerPage)
+		pagination.SetSince(p.Since)
 
-		var events []Event
-		events, err = c.Db.GetInbox(ctx, &pagination, c.Pubkey)
+		var events *[]Event
+		events, err = c.Db.GetInbox(ctx, p.Context, &pagination, c.Pubkey)
 
-		data := &ResponseEventData{Paging: &pagination, Events: &events}
+		data := &ResponseEventData{Paging: &pagination, Events: events}
 		response := &Response{}
 		response.Status = "ok"
 		response.Message = "Pagination results"

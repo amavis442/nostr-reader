@@ -66,7 +66,7 @@ func (wrapper *Wrapper) Do(ctx context.Context, r Relay, f func(context.Context,
 
 			relay, err := nostr.RelayConnect(ctx, relayUrl)
 			if err != nil {
-				log.Printf(Magenta+"Can't connect to relay: %s"+Reset, relay.URL)
+				slog.Info("can't connect to relay: " + relay.URL)
 				return
 			}
 
@@ -170,16 +170,17 @@ func (wrapper *Wrapper) BroadCast(ctx context.Context, ev Event) (bool, error) {
 	wrapper.Do(ctx, Relay{Write: true}, func(ctx context.Context, relay *nostr.Relay) bool {
 		err := relay.Publish(ctx, *ev.Event)
 		if err != nil {
-			log.Println("broadcast:: ", relay.URL, err)
+			slog.Error(getCallerInfo(1), "broadcast", relay.URL, "error", err.Error())
+			wrapper.Cfg.Relays[relay.URL] = Relay{Write: false}
 		} else {
 			success.Add(1)
 		}
-		slog.Info(Cyan+"broadcast to: "+Reset, "relay", relay.URL, "data", ev.Event)
+		slog.Info(getCallerInfo(1), "broadcast", relay.URL, "data", ev.Event)
 		return true
 	})
 
 	if success.Load() == 0 {
-		log.Println("cannot broadcast")
+		slog.Warn(getCallerInfo(1) + " cannot broadcast")
 		return false, errors.New("cannot Broadcast")
 	}
 

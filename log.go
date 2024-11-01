@@ -16,5 +16,5 @@ func getCallerInfo(skip int) (info string) {
 	}
 	funcName := runtime.FuncForPC(pc).Name()
 	fileName := path.Base(file) // The Base function returns the last element of the path
-	return fmt.Sprintf("FuncName=%s, file=%s, line=%d ", funcName, fileName, lineNo)
+	return fmt.Sprintf("Func=%s, file=%s:%d", funcName, fileName, lineNo)
 }

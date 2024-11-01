@@ -471,10 +471,22 @@ func (st *Storage) initPaging(p *Pagination, options Options) {
 			//since := maxTimeStamp - int64(60*60*24*p.GetSince())
 			st.GormDB.Model(&NotesAndProfiles{}).
 				Where("event_created_at > ?", since).
+				Where("followed = ? and bookmarked = ?", options.Follow, options.BookMark).
 				Order("id ASC").
 				Limit(1).
 				Find(&notesAndProfiles)
-			p.Cursor = notesAndProfiles.ID
+			if notesAndProfiles.ID > 0 {
+				p.Cursor = notesAndProfiles.ID
+			}
+			if notesAndProfiles.ID == 0 {
+				st.GormDB.Model(&NotesAndProfiles{}).
+					Where("event_created_at > ?", since).
+					Where("followed = ? and bookmarked = ?", options.Follow, options.BookMark).
+					Order("id DESC").
+					Limit(1).
+					Find(&notesAndProfiles)
+				p.Cursor = notesAndProfiles.ID
+			}
 		}
 	}
 }
@@ -538,8 +550,8 @@ func (st *Storage) GetNotes(ctx context.Context, context string, p *Pagination, 
 	if p.PreviousCursor != 0 {
 		state = stateName[StatePrev]
 	}
-	slog.Info("State is: ", "state", state)
 	st.initPaging(p, options)
+	slog.Info("State is: ", "state", state)
 
 	tx := st.GormDB.Debug().Where("followed = ? and bookmarked = ?", options.Follow, options.BookMark)
 
@@ -555,6 +567,104 @@ func (st *Storage) GetNotes(ctx context.Context, context string, p *Pagination, 
 	if state == stateName[StatePrev] {
 		tx.Where("id < ?", p.PreviousCursor).
 			Order("id DESC")
+	}
+
+	tx.Limit(int(p.GetPerPage())) // Last one is not shown and only used for the next cursor
+
+	var rows []NotesAndProfiles
+	tx.Find(&rows)
+	if len(rows) == 0 {
+		return &[]Event{}, nil
+	}
+
+	p.NextCursor = 0
+	p.PreviousCursor = 0
+
+	sort.Slice(rows, func(i, j int) bool {
+		return rows[i].ID > rows[j].ID
+	})
+
+	if (state == stateName[StateInit] || state == stateName[StateNext] || state == stateName[StateRefresh]) && !(len(rows) < int(p.PerPage)) {
+		next_cursor := rows[0]
+		p.NextCursor = next_cursor.ID
+	}
+
+	if (state == stateName[StatePrev] || state == stateName[StateRefresh]) && !(len(rows) < int(p.PerPage)) {
+		next_cursor := rows[0]
+		p.NextCursor = next_cursor.ID
+	}
+
+	if state == stateName[StateInit] || state == stateName[StateNext] || state == stateName[StateRefresh] {
+		prev_cursor := rows[len(rows)-1]
+		p.PreviousCursor = prev_cursor.ID
+	}
+	if (state == stateName[StatePrev] || state == stateName[StateRefresh]) && !(len(rows) < int(p.PerPage)) {
+		prev_cursor := rows[len(rows)-1]
+		p.PreviousCursor = prev_cursor.ID
+	}
+
+	sort.Slice(rows, func(i, j int) bool {
+		return rows[i].EventCreatedAt.Time().Unix() > rows[j].EventCreatedAt.Time().Unix()
+	})
+
+	eventMap, keys, seenMap, err := st.procesEventRows(&rows)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	tx = st.GormDB.WithContext(ctx).Model(&Seen{})
+	seens := []*Seen{}
+	for noteid, eventid := range seenMap {
+		seens = append(seens, &Seen{NoteID: uint(noteid), EventId: eventid})
+	}
+
+	result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&seens)
+	if result.Error != nil {
+		return &[]Event{}, result.Error
+	}
+
+	st.getChildren(ctx, eventMap)
+
+	events := make([]Event, 0)
+	// Make sure the order stays the same
+	for _, k := range keys {
+		events = append(events, eventMap[k])
+	}
+
+	return &events, nil
+}
+
+func (st *Storage) GetInbox1(ctx context.Context, context string, p *Pagination, pubkey string) (*[]Event, error) {
+	var state string
+	if p.Cursor == 0 {
+		state = stateName[StateInit]
+	}
+	if p.Cursor > 0 {
+		state = stateName[StateRefresh]
+	}
+	if p.NextCursor != 0 {
+		state = stateName[StateNext]
+	}
+	if p.PreviousCursor != 0 {
+		state = stateName[StatePrev]
+	}
+
+	slog.Info("State is: ", "state", state)
+
+	tx := st.GormDB.Debug().Joins("JOIN notifications ON (notifications.note_id = notes_and_profiles.id)")
+
+	if state == stateName[StateInit] || state == stateName[StateRefresh] {
+		tx.Where("notes_and_profiles.id > ?", p.Cursor).
+			Order("notes_and_profiles.id ASC")
+	}
+
+	if state == stateName[StateNext] {
+		tx.Where("notes_and_profiles.id > ?", p.NextCursor).
+			Order("notes_and_profiles.id ASC")
+	}
+	if state == stateName[StatePrev] {
+		tx.Where("notes_and_profiles.id < ?", p.PreviousCursor).
+			Order("notes_and_profiles.id DESC")
 	}
 
 	tx.Limit(int(p.GetPerPage())) // Last one is not shown and only used for the next cursor
@@ -895,35 +1005,34 @@ func walk(parent *Event, payload Event, reply_event_id string, level int64) bool
 	return false
 }
 
-func (st *Storage) GetInbox(ctx context.Context, p *Pagination, pubkey string) ([]Event, error) {
+func (st *Storage) GetInbox(ctx context.Context, context string, p *Pagination, pubkey string) (*[]Event, error) {
 	qry := `
 	SELECT
-		notes.id, notes.event_id, notes.pubkey, notes.kind, notes.event_created_at, 
-		notes.content, notes.tags_full::json, notes.sig, notes.etags, notes.ptags,
-		profiles.name, profiles.about , profiles.picture,
-		profiles.website, profiles.nip05, profiles.lud16, profiles.display_name, 
-		CASE WHEN length(follows.pubkey) > 0 THEN TRUE ELSE FALSE END followed, 
-		CASE WHEN length(bookmarks.event_id) > 0 THEN TRUE ELSE FALSE END bookmarked
-	FROM 
-	notes
-	LEFT JOIN profiles ON (profiles.pubkey = notes.pubkey)
-	LEFT JOIN follows f ON (f.pubkey = e0.pubkey)
-	LEFT JOIN bookmarks bm ON (bm.event_id = e0.event_id)
-
-	JOIN
-	(SELECT
-	DISTINCT e0.event_id
-	FROM 
-	notes e0 
-	JOIN (SELECT t.root_event_id, t.event_id, t.reply_event_id FROM trees t, notes e1 WHERE e1.pubkey = $1 AND e1.event_id = t.event_id) t0 ON e0.event_id = t0.root_event_id
-	) tbl 
-	ON
-	tbl.event_id = e0.event_id
-	ORDER BY e0.event_created_at DESC;`
+        np.*
+        FROM
+        notes_and_profiles np
+        JOIN
+        (
+			SELECT
+        	DISTINCT e1.event_id
+        	FROM
+        	notes e1
+        	JOIN (
+		        SELECT t.root_event_id, t.event_id, t.reply_event_id FROM trees t, notes e2
+       		 	WHERE e2.pubkey = $1
+        		AND e2.event_id = t.event_id
+			) t0 ON e1.event_id = t0.root_event_id
+        ) tbl
+        ON
+        (tbl.event_id = np.event_id)
+        ORDER BY np.event_created_at DESC`
 
 	var rows []NotesAndProfiles
 	//rows, err := tx.Query(ctx, qry, pubkey)
-	st.GormDB.WithContext(ctx).Raw(qry, pubkey).Limit(100).Find(&rows)
+	err := st.GormDB.Debug().WithContext(ctx).Raw(qry, pubkey).Limit(100).Find(&rows).Error
+	if err != nil {
+		slog.Error(getCallerInfo(1), "error", err)
+	}
 
 	eventMap, keys, _, _ := st.procesEventRows(&rows)
 
@@ -934,7 +1043,7 @@ func (st *Storage) GetInbox(ctx context.Context, p *Pagination, pubkey string) (
 		events = append(events, eventMap[k])
 	}
 
-	return events, nil
+	return &events, nil
 }
 
 /**
