@@ -253,6 +253,63 @@ func (c *Controller) GetInbox() http.HandlerFunc {
 	}
 }
 
+func (c *Controller) GetNotifications() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+		defer cancel()
+
+		var err error
+		var p PageRequest
+		cursor := r.URL.Query().Get("cursor")
+		p.Cursor, _ = strconv.ParseUint(cursor, 10, 64)
+
+		next_cursor := r.URL.Query().Get("next_cursor")
+		p.NextCursor, _ = strconv.ParseUint(next_cursor, 10, 64)
+
+		prev_cursor := r.URL.Query().Get("prev_cursor")
+		p.PrevCursor, _ = strconv.ParseUint(prev_cursor, 10, 64)
+
+		per_page := r.URL.Query().Get("per_page")
+		perpage, _ := strconv.ParseUint(per_page, 10, 64)
+		p.PerPage = uint(perpage)
+
+		renew := r.URL.Query().Get("renew")
+		p.Renew, err = strconv.ParseBool(renew)
+		if err != nil {
+			p.Renew = false
+		}
+
+		p.Context = r.URL.Query().Get("context")
+
+		since := r.URL.Query().Get("since")
+		sinceI, _ := strconv.ParseUint(since, 10, 64)
+		p.Since = uint(sinceI)
+
+		pagination := Pagination{}
+		pagination.SetPerPage(uint(p.PerPage))
+		pagination.SetCursor(p.Cursor)
+		pagination.SetPrev(p.PrevCursor)
+		pagination.SetNext(p.NextCursor)
+		pagination.SetPerPage(p.PerPage)
+		pagination.SetSince(p.Since)
+
+		var events *[]Event
+		events, err = c.Db.GetNotifications(ctx, &pagination)
+
+		data := &ResponseEventData{Paging: &pagination, Events: events}
+		response := &Response{}
+		response.Status = "ok"
+		response.Message = "Pagination results"
+		if err != nil {
+			response.Status = "failed"
+			response.Message = err.Error()
+		}
+		response.Data = data
+		render.JSON(w, r, response)
+	}
+}
+
 func (c *Controller) StartSync() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)

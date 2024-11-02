@@ -634,7 +634,7 @@ func (st *Storage) GetNotes(ctx context.Context, context string, p *Pagination, 
 	return &events, nil
 }
 
-func (st *Storage) GetInbox1(ctx context.Context, context string, p *Pagination, pubkey string) (*[]Event, error) {
+func (st *Storage) GetNotifications(ctx context.Context, p *Pagination) (*[]Event, error) {
 	var state string
 	if p.Cursor == 0 {
 		state = stateName[StateInit]
@@ -648,30 +648,36 @@ func (st *Storage) GetInbox1(ctx context.Context, context string, p *Pagination,
 	if p.PreviousCursor != 0 {
 		state = stateName[StatePrev]
 	}
-
 	slog.Info("State is: ", "state", state)
 
-	tx := st.GormDB.Debug().Joins("JOIN notifications ON (notifications.note_id = notes_and_profiles.id)")
+	tx := st.GormDB.Debug().Model(&Note{}).
+		Joins("JOIN notifications ON (notifications.note_id = notes.id)").
+		Limit(int(p.GetPerPage())) // Last one is not shown and only used for the next cursor
 
-	if state == stateName[StateInit] || state == stateName[StateRefresh] {
-		tx.Where("notes_and_profiles.id > ?", p.Cursor).
-			Order("notes_and_profiles.id ASC")
+	var notes []Note
+	tx.Find(&notes)
+	if len(notes) == 0 {
+		return &[]Event{}, nil
 	}
 
-	if state == stateName[StateNext] {
-		tx.Where("notes_and_profiles.id > ?", p.NextCursor).
-			Order("notes_and_profiles.id ASC")
-	}
-	if state == stateName[StatePrev] {
-		tx.Where("notes_and_profiles.id < ?", p.PreviousCursor).
-			Order("notes_and_profiles.id DESC")
-	}
+	var root_tags []string
+	for _, row := range notes {
+		//var etags []string
+		var ev *nostr.Event
+		json.Unmarshal(row.Raw, &ev)
+		_, _, _, _, tree := ProcessTags(ev, st.Pubkey)
 
-	tx.Limit(int(p.GetPerPage())) // Last one is not shown and only used for the next cursor
-
+		fmt.Println(tree.RootTag)
+		root_tags = append(root_tags, tree.RootTag)
+	}
 	var rows []NotesAndProfiles
-	tx.Find(&rows)
-	if len(rows) == 0 {
+	err := st.GormDB.Debug().Model(&NotesAndProfiles{}).Where("event_id IN (?)", root_tags).Find(&rows).Error
+	if err != nil {
+		slog.Error(getCallerInfo(1), "error", err.Error())
+		return nil, nil
+	}
+
+	if len(notes) == 0 {
 		return &[]Event{}, nil
 	}
 
@@ -705,20 +711,9 @@ func (st *Storage) GetInbox1(ctx context.Context, context string, p *Pagination,
 		return rows[i].EventCreatedAt.Time().Unix() > rows[j].EventCreatedAt.Time().Unix()
 	})
 
-	eventMap, keys, seenMap, err := st.procesEventRows(&rows)
+	eventMap, keys, _, err := st.procesEventRows(&rows)
 	if err != nil {
 		log.Fatal(err.Error())
-	}
-
-	tx = st.GormDB.WithContext(ctx).Model(&Seen{})
-	seens := []*Seen{}
-	for noteid, eventid := range seenMap {
-		seens = append(seens, &Seen{NoteID: uint(noteid), EventId: eventid})
-	}
-
-	result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&seens)
-	if result.Error != nil {
-		return &[]Event{}, result.Error
 	}
 
 	st.getChildren(ctx, eventMap)

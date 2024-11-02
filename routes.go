@@ -34,6 +34,7 @@ func routes(c *Controller, port string) *chi.Mux {
 
 	router.Get("/api/getnotes", c.GetNotes())
 	router.Get("/api/getinbox", c.GetInbox())
+	router.Get("/api/getnotifications", c.GetNotifications())
 
 	router.Get("/api/getnewnotescount", c.GetNewNotesCount())
 
