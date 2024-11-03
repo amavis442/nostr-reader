@@ -227,7 +227,13 @@ func (wrapper *Wrapper) GetEvents(ctx context.Context, filter nostr.Filter) []*E
 
 	var evs []*Event
 	m.Range(func(k, v any) bool {
-		evs = append(evs, v.(*Event))
+		event := v.(*Event)
+		if event.Event.Kind == 1 && len(event.Event.Content) > 0 {
+			evs = append(evs, event)
+		}
+		if event.Event.Kind > 1 {
+			evs = append(evs, event)
+		}
 		return true
 	})
 
