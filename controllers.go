@@ -87,6 +87,37 @@ type ResponseRelay struct {
 	Relays []Relay `json:"relays"`
 }
 
+func (c *Controller) parseUrlParams(r *http.Request) PageRequest {
+	var err error
+	var p PageRequest
+	cursor := r.URL.Query().Get("cursor")
+	p.Cursor, _ = strconv.ParseUint(cursor, 10, 64)
+
+	next_cursor := r.URL.Query().Get("next_cursor")
+	p.NextCursor, _ = strconv.ParseUint(next_cursor, 10, 64)
+
+	prev_cursor := r.URL.Query().Get("prev_cursor")
+	p.PrevCursor, _ = strconv.ParseUint(prev_cursor, 10, 64)
+
+	per_page := r.URL.Query().Get("per_page")
+	perpage, _ := strconv.ParseUint(per_page, 10, 64)
+	p.PerPage = uint(perpage)
+
+	renew := r.URL.Query().Get("renew")
+	p.Renew, err = strconv.ParseBool(renew)
+	if err != nil {
+		p.Renew = false
+	}
+
+	p.Context = r.URL.Query().Get("context")
+
+	since := r.URL.Query().Get("since")
+	sinceI, _ := strconv.ParseUint(since, 10, 64)
+	p.Since = uint(sinceI)
+
+	return p
+}
+
 /**
 * The API requests
  */
@@ -114,32 +145,7 @@ func (c *Controller) GetNotes() http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 		defer cancel()
 
-		var err error
-		var p PageRequest
-		cursor := r.URL.Query().Get("cursor")
-		p.Cursor, _ = strconv.ParseUint(cursor, 10, 64)
-
-		next_cursor := r.URL.Query().Get("next_cursor")
-		p.NextCursor, _ = strconv.ParseUint(next_cursor, 10, 64)
-
-		prev_cursor := r.URL.Query().Get("prev_cursor")
-		p.PrevCursor, _ = strconv.ParseUint(prev_cursor, 10, 64)
-
-		per_page := r.URL.Query().Get("per_page")
-		perpage, _ := strconv.ParseUint(per_page, 10, 64)
-		p.PerPage = uint(perpage)
-
-		renew := r.URL.Query().Get("renew")
-		p.Renew, err = strconv.ParseBool(renew)
-		if err != nil {
-			p.Renew = false
-		}
-
-		p.Context = r.URL.Query().Get("context")
-
-		since := r.URL.Query().Get("since")
-		sinceI, _ := strconv.ParseUint(since, 10, 64)
-		p.Since = uint(sinceI)
+		p := c.parseUrlParams(r)
 
 		pagination := Pagination{}
 		pagination.SetPerPage(uint(p.PerPage))
@@ -165,8 +171,7 @@ func (c *Controller) GetNotes() http.HandlerFunc {
 			options = Options{Follow: true, BookMark: false, Renew: p.Renew}
 		}
 
-		var events *[]Event
-		events, err = c.Db.GetNotes(ctx, p.Context, &pagination, options)
+		events, err := c.Db.GetNotes(ctx, p.Context, &pagination, options)
 		if err != nil {
 			log.Println(err)
 		}
@@ -202,32 +207,7 @@ func (c *Controller) GetInbox() http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 		defer cancel()
 
-		var err error
-		var p PageRequest
-		cursor := r.URL.Query().Get("cursor")
-		p.Cursor, _ = strconv.ParseUint(cursor, 10, 64)
-
-		next_cursor := r.URL.Query().Get("next_cursor")
-		p.NextCursor, _ = strconv.ParseUint(next_cursor, 10, 64)
-
-		prev_cursor := r.URL.Query().Get("prev_cursor")
-		p.PrevCursor, _ = strconv.ParseUint(prev_cursor, 10, 64)
-
-		per_page := r.URL.Query().Get("per_page")
-		perpage, _ := strconv.ParseUint(per_page, 10, 64)
-		p.PerPage = uint(perpage)
-
-		renew := r.URL.Query().Get("renew")
-		p.Renew, err = strconv.ParseBool(renew)
-		if err != nil {
-			p.Renew = false
-		}
-
-		p.Context = r.URL.Query().Get("context")
-
-		since := r.URL.Query().Get("since")
-		sinceI, _ := strconv.ParseUint(since, 10, 64)
-		p.Since = uint(sinceI)
+		p := c.parseUrlParams(r)
 
 		pagination := Pagination{}
 		pagination.SetPerPage(uint(p.PerPage))
@@ -237,8 +217,7 @@ func (c *Controller) GetInbox() http.HandlerFunc {
 		pagination.SetPerPage(p.PerPage)
 		pagination.SetSince(p.Since)
 
-		var events *[]Event
-		events, err = c.Db.GetInbox(ctx, p.Context, &pagination, c.Pubkey)
+		events, err := c.Db.GetInbox(ctx, p.Context, &pagination, c.Pubkey)
 
 		data := &ResponseEventData{Paging: &pagination, Events: events}
 		response := &Response{}
@@ -259,32 +238,7 @@ func (c *Controller) GetNotifications() http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 		defer cancel()
 
-		var err error
-		var p PageRequest
-		cursor := r.URL.Query().Get("cursor")
-		p.Cursor, _ = strconv.ParseUint(cursor, 10, 64)
-
-		next_cursor := r.URL.Query().Get("next_cursor")
-		p.NextCursor, _ = strconv.ParseUint(next_cursor, 10, 64)
-
-		prev_cursor := r.URL.Query().Get("prev_cursor")
-		p.PrevCursor, _ = strconv.ParseUint(prev_cursor, 10, 64)
-
-		per_page := r.URL.Query().Get("per_page")
-		perpage, _ := strconv.ParseUint(per_page, 10, 64)
-		p.PerPage = uint(perpage)
-
-		renew := r.URL.Query().Get("renew")
-		p.Renew, err = strconv.ParseBool(renew)
-		if err != nil {
-			p.Renew = false
-		}
-
-		p.Context = r.URL.Query().Get("context")
-
-		since := r.URL.Query().Get("since")
-		sinceI, _ := strconv.ParseUint(since, 10, 64)
-		p.Since = uint(sinceI)
+		p := c.parseUrlParams(r)
 
 		pagination := Pagination{}
 		pagination.SetPerPage(uint(p.PerPage))
@@ -294,8 +248,7 @@ func (c *Controller) GetNotifications() http.HandlerFunc {
 		pagination.SetPerPage(p.PerPage)
 		pagination.SetSince(p.Since)
 
-		var events *[]Event
-		events, err = c.Db.GetNotifications(ctx, &pagination)
+		events, err := c.Db.GetNotifications(ctx, &pagination)
 
 		data := &ResponseEventData{Paging: &pagination, Events: events}
 		response := &Response{}
@@ -1119,25 +1072,28 @@ func (c *Controller) GetMetaData() http.HandlerFunc {
 		defer cancel()
 
 		response := &Response{}
-		response.Status = "ok"
-		response.Message = "Metadata"
-
 		event, err := c.Nostr.GetMetaData(ctx)
 		response.Data = event
 		if err != nil {
 			response.Status = "error"
 			response.Message = err.Error()
+			render.JSON(w, r, response)
+			return
 		}
 
 		err = c.Db.SaveProfiles(ctx, []*Event{&event})
 		if err != nil {
-			panic(err)
+			response.Status = "error"
+			response.Message = err.Error()
+			render.JSON(w, r, response)
+			return
 		}
 
-		err = json.NewEncoder(w).Encode(response)
-		if err != nil {
-			panic(err)
-		}
+		data := &event
+		response.Status = "ok"
+		response.Message = "Metadata"
+		response.Data = data
+		render.JSON(w, r, response)
 	}
 }
 
@@ -1174,7 +1130,7 @@ func (c *Controller) SetMetaData() http.HandlerFunc {
 		response := &Response{}
 		response.Status = "ok"
 		response.Message = "Set metadata"
-		response.Data = user
+		response.Data = &user
 
 		if err != nil {
 			response.Status = "error"
@@ -1201,16 +1157,17 @@ func (c *Controller) SetMetaData() http.HandlerFunc {
 // @Router       /api/getprofile [get]
 func (c *Controller) GetProfile() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
 		ctx := context.Background()
 
-		profile, err := c.Db.FindProfile(ctx, c.Pubkey)
+		profile, _ := c.Db.FindProfile(ctx, c.Pubkey)
 
 		response := &Response{}
 		response.Status = "ok"
 		response.Message = "Profile"
-		response.Data = profile
+		response.Data = &profile
 
+		jsonStr, err := json.Marshal(profile)
+		slog.Info(string(jsonStr))
 		if err != nil {
 			response.Status = "error"
 			response.Message = err.Error()

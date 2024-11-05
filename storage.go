@@ -458,35 +458,36 @@ func (st *Storage) GetLastSeenID(ctx context.Context) (int, error) {
 
 func (st *Storage) initPaging(p *Pagination, options Options) {
 	if p.Cursor == 0 {
-		var notesAndProfiles NotesAndProfiles
+		var notesAndProfiles []NotesAndProfiles
 		fmt.Println("Empty cursor")
 		if !options.BookMark {
 			//var maxTimeStamp int64 = time.Now().Unix()
-			currentTime := time.Now()
-			year := currentTime.Year()
-			month := currentTime.Month()
-			day := currentTime.Day()
-			loc, _ := time.LoadLocation("Local")
-			since := time.Date(year, time.Month(month), day, 0, 0, 0, 0, loc).Unix()
+			//currentTime := time.Now()
+			//year := currentTime.Year()
+			//month := currentTime.Month()
+			//day := currentTime.Day()
+			//loc, _ := time.LoadLocation("Local")
+			//since := time.Date(year, time.Month(month), day, 0, 0, 0, 0, loc).Unix()
 			//since := maxTimeStamp - int64(60*60*24*p.GetSince())
-			st.GormDB.Model(&NotesAndProfiles{}).
-				Where("event_created_at > ?", since).
-				Where("followed = ? and bookmarked = ?", options.Follow, options.BookMark).
-				Order("id ASC").
-				Limit(1).
+			st.GormDB.Debug().Model(&NotesAndProfiles{}).
+				Where(`id < (SELECT MAX(id) FROM "notes_and_profiles" WHERE followed = @follow and bookmarked = @bookmark)`, sql.Named("follow", options.Follow), sql.Named("bookmark", options.BookMark)).
+				Where("followed = @follow and bookmarked = @bookmark", sql.Named("follow", options.Follow), sql.Named("bookmark", options.BookMark)).
+				Order("id DESC").
+				Limit(30).
 				Find(&notesAndProfiles)
-			if notesAndProfiles.ID > 0 {
-				p.Cursor = notesAndProfiles.ID
-			}
-			if notesAndProfiles.ID == 0 {
-				st.GormDB.Model(&NotesAndProfiles{}).
-					Where("event_created_at > ?", since).
-					Where("followed = ? and bookmarked = ?", options.Follow, options.BookMark).
-					Order("id DESC").
-					Limit(1).
-					Find(&notesAndProfiles)
-				p.Cursor = notesAndProfiles.ID
-			}
+
+			p.Cursor = notesAndProfiles[len(notesAndProfiles)-1].ID
+			/*
+				if notesAndProfiles.ID == 0 {
+					st.GormDB.Model(&NotesAndProfiles{}).
+						Where("event_created_at > ?", since).
+						Where("followed = ? and bookmarked = ?", options.Follow, options.BookMark).
+						Order("id DESC").
+						Limit(1).
+						Find(&notesAndProfiles)
+					p.Cursor = notesAndProfiles.ID
+				}
+			*/
 		}
 	}
 }
@@ -1319,53 +1320,14 @@ func (st *Storage) GetLastTimeStamp(ctx context.Context) int64 {
 }
 
 func (st *Storage) FindProfile(ctx context.Context, pubkey string) (Profile, error) {
-	var qry = `SELECT
-	name, about, picture, website, nip05, lud16, display_name
-	FROM profiles WHERE pubkey = $1`
+	var profile Profile
+	err := st.GormDB.Debug().Model(&Profile{}).Where("pubkey = ?", pubkey).Find(&profile).Error
 
-	var profile Profile = Profile{}
-
-	var name sql.NullString
-	var about sql.NullString
-	var picture sql.NullString
-	var website sql.NullString
-	var nip05 sql.NullString
-	var lud16 sql.NullString
-	var displayname sql.NullString
-
-	row := st.GormDB.WithContext(ctx).Raw(qry, pubkey).Row()
-	err := row.Scan(&name, &about, &picture, &website, &nip05, &lud16, &displayname)
 	switch {
 	case err == sql.ErrNoRows:
-		log.Printf("FindProfile() -> Query:: 404 no profile with pubkey %s\n", pubkey)
-	case err != nil:
-		log.Fatalf("FindProfile() -> Query:: 502 query error: %v\n", err)
-	}
-
-	profile.Pubkey = pubkey
-	if name.Valid {
-		profile.Name.String = name.String
-	} else {
-		profile.Name.String = pubkey
-	}
-	if about.Valid {
-		profile.About.String = about.String
-	}
-	if picture.Valid {
-		profile.Picture.String = picture.String
-	}
-
-	if website.Valid {
-		profile.Website.String = website.String
-	}
-	if nip05.Valid {
-		profile.Nip05.String = nip05.String
-	}
-	if lud16.Valid {
-		profile.Lud16.String = lud16.String
-	}
-	if displayname.Valid {
-		profile.DisplayName.String = displayname.String
+		slog.Info(fmt.Sprintf("FindProfile() -> Query:: 404 no profile with pubkey %s\n", pubkey))
+	default:
+		slog.Info(fmt.Sprintf("FindProfile() -> Query:: 502 query error: %v\n", err))
 	}
 
 	return profile, err
