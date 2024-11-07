@@ -338,6 +338,17 @@ func (wrapper *Wrapper) GetMetaData(ctx context.Context) (Event, error) {
 	return Event{}, nil
 }
 
+type NostrProfile struct {
+	Pubkey      string
+	Name        string
+	About       string
+	Picture     string
+	Website     string
+	Nip05       string
+	Lud16       string
+	DisplayName string
+}
+
 func (wrapper *Wrapper) DoPublishMetaData(ctx context.Context, user *Profile) error {
 	var err error
 	ev := nostr.Event{}
@@ -348,9 +359,21 @@ func (wrapper *Wrapper) DoPublishMetaData(ctx context.Context, user *Profile) er
 		log.Println(err)
 		return err
 	}
+
+	profile := &NostrProfile{
+		Pubkey:      user.Pubkey,
+		Name:        user.Name.String,
+		About:       user.About.String,
+		Picture:     user.Picture.String,
+		Website:     user.Website.String,
+		Nip05:       user.Nip05.String,
+		Lud16:       user.Lud16.String,
+		DisplayName: user.DisplayName.String,
+	}
+
 	ev.CreatedAt = nostr.Now()
 	ev.Kind = nostr.KindProfileMetadata
-	c, err := json.Marshal(*user)
+	c, err := json.Marshal(profile)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -361,12 +384,14 @@ func (wrapper *Wrapper) DoPublishMetaData(ctx context.Context, user *Profile) er
 	}
 
 	fmt.Println(ev)
+
 	var success atomic.Int64
 	wrapper.Do(ctx, Relay{Write: true}, func(ctx context.Context, relay *nostr.Relay) bool {
 		err := relay.Publish(ctx, ev)
 		if err != nil {
-			log.Println(relay.URL, err)
+			slog.Error(relay.URL, "error", err)
 		} else {
+			slog.Info("Publish to:", "ralay", relay.URL)
 			success.Add(1)
 		}
 		return true
