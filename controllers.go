@@ -173,13 +173,26 @@ func (c *Controller) GetNotes() http.HandlerFunc {
 
 		events, err := c.Db.GetNotes(ctx, p.Context, &pagination, options)
 		if err != nil {
-			log.Println(err)
+			slog.Error(getCallerInfo(1), "error", err.Error())
 		}
 
 		data := &ResponseEventData{Paging: &pagination, Events: events}
 		response := &Response{}
+
 		response.Status = "ok"
-		response.Message = "Pagination results"
+		if len(*data.Events) == 0 {
+			response.Status = "empty"
+			pagination.SetPerPage(uint(p.PerPage))
+			pagination.SetCursor(p.Cursor)
+			pagination.SetPrev(p.PrevCursor)
+			pagination.SetNext(0)
+			pagination.SetPerPage(p.PerPage)
+			pagination.SetSince(p.Since)
+			data.Paging = &pagination
+			data.Events = events
+		}
+
+		response.Message = "No results"
 		if err != nil {
 			response.Status = "failed"
 			response.Message = err.Error()
