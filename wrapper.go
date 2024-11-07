@@ -350,7 +350,7 @@ func (wrapper *Wrapper) DoPublishMetaData(ctx context.Context, user *Profile) er
 	}
 	ev.CreatedAt = nostr.Now()
 	ev.Kind = nostr.KindProfileMetadata
-	c, err := json.Marshal(*user)
+	c, err := json.Marshal(&user)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -361,6 +361,7 @@ func (wrapper *Wrapper) DoPublishMetaData(ctx context.Context, user *Profile) er
 	}
 
 	fmt.Println(ev)
+
 	var success atomic.Int64
 	wrapper.Do(ctx, Relay{Write: true}, func(ctx context.Context, relay *nostr.Relay) bool {
 		err := relay.Publish(ctx, ev)
