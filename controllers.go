@@ -180,8 +180,10 @@ func (c *Controller) GetNotes() http.HandlerFunc {
 		response := &Response{}
 
 		response.Status = "ok"
+		response.Message = "Data ok"
 		if len(*data.Events) == 0 {
 			response.Status = "empty"
+			response.Message = "No results"
 			pagination.SetPerPage(uint(p.PerPage))
 			pagination.SetCursor(p.Cursor)
 			pagination.SetPrev(p.PrevCursor)
@@ -192,7 +194,6 @@ func (c *Controller) GetNotes() http.HandlerFunc {
 			data.Events = events
 		}
 
-		response.Message = "No results"
 		if err != nil {
 			response.Status = "failed"
 			response.Message = err.Error()
