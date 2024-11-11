@@ -222,7 +222,7 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*Event) ([]string, erro
 			continue
 		}
 
-		etags, _, _, _, _ := ProcessTags(ev.Event, st.Pubkey)
+		etags, _, _, _, _, _ := ProcessTags(ev.Event, st.Pubkey)
 
 		if ev.Event.Kind == 0 {
 			err := st.SaveProfile(ctx, ev)
@@ -261,7 +261,7 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*Event) ([]string, erro
 func (st *Storage) SaveNote(ctx context.Context, event *Event) (Note, error) {
 	var tree EventTree
 	ev := event.Event
-	etags, ptags, hasNotification, isRoot, tree := ProcessTags(ev, st.Pubkey)
+	etags, ptags, hasNotification, isRoot, tree, _ := ProcessTags(ev, st.Pubkey)
 	ptagsNum := len(ptags)
 	etagsNum := len(etags)
 
@@ -666,7 +666,7 @@ func (st *Storage) GetNotifications(ctx context.Context, p *Pagination) (*[]Even
 		//var etags []string
 		var ev *nostr.Event
 		json.Unmarshal(row.Raw, &ev)
-		_, _, _, _, tree := ProcessTags(ev, st.Pubkey)
+		_, _, _, _, tree, _ := ProcessTags(ev, st.Pubkey)
 
 		fmt.Println(tree.RootTag)
 		root_tags = append(root_tags, tree.RootTag)

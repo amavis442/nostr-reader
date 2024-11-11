@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"errors"
 	"log"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -12,15 +12,14 @@ type EventTree struct {
 	ReplyTag string
 }
 
-/*
- * Processes the #tags into etags, ptags and see which is the root and which is the reply
- */
-func ProcessTags(ev *nostr.Event, pubkey string) (etags []string, ptags []string, hasNotification bool, isRoot bool, tree EventTree) {
+// Processes the #tags into etags, ptags and see which is the root and which is the reply
+func ProcessTags(ev *nostr.Event, pubkey string) (etags []string, ptags []string, hasNotification bool, isRoot bool, tree EventTree, err error) {
 	ptags, etags = make([]string, 0), make([]string, 0)
 	isRoot = true
 
 	if len(ev.PubKey) != 64 {
-		fmt.Println("Incorrect pubkey to long max 64: ", ev.PubKey, " Content:", ev.Content)
+		err = errors.New("incorrect pubkey to long. max 64")
+		//fmt.Println("Incorrect pubkey to long max 64: ", ev.PubKey, " Content:", ev.Content)
 	}
 	ptags = ptags[:0]
 	etags = etags[:0]
@@ -70,5 +69,5 @@ func ProcessTags(ev *nostr.Event, pubkey string) (etags []string, ptags []string
 		isRoot = false
 	}
 
-	return etags, ptags, hasNotification, isRoot, tree
+	return etags, ptags, hasNotification, isRoot, tree, err
 }
