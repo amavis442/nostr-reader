@@ -1,3 +1,4 @@
+// Get nostr notes and use api to retrieve them from a postgresql database.
 package main
 
 import (
@@ -89,7 +90,7 @@ func main() {
 	}
 
 	slog.Info("Running in dev mode ", "mode", *modePtr)
-	slog.Info("Sync interval is: " + string(*syncIntervalPtr) + " minutes")
+	slog.Info("Sync interval is: " + fmt.Sprint(*syncIntervalPtr) + " minutes")
 
 	cfg, err := LoadConfig()
 	if err != nil {
