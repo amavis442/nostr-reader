@@ -808,18 +808,10 @@ func (c *Controller) GetNewNotesCount() http.HandlerFunc {
 		cursor := r.URL.Query().Get("cursor")
 		p.Cursor, _ = strconv.ParseUint(cursor, 10, 64)
 
-		per_page := r.URL.Query().Get("per_page")
-		perpage, _ := strconv.ParseUint(per_page, 10, 64)
-		p.PerPage = uint(perpage)
-
 		renew := r.URL.Query().Get("renew")
 		p.Renew, _ = strconv.ParseBool(renew)
 
 		p.Context = r.URL.Query().Get("context")
-
-		since := r.URL.Query().Get("since")
-		sinceI, _ := strconv.ParseUint(since, 10, 64)
-		p.Since = uint(sinceI)
 
 		var options Options
 		switch p.Context {

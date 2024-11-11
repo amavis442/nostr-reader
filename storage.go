@@ -461,14 +461,6 @@ func (st *Storage) initPaging(p *Pagination, options Options) {
 		var notesAndProfiles []NotesAndProfiles
 		fmt.Println("Empty cursor")
 		if !options.BookMark {
-			//var maxTimeStamp int64 = time.Now().Unix()
-			//currentTime := time.Now()
-			//year := currentTime.Year()
-			//month := currentTime.Month()
-			//day := currentTime.Day()
-			//loc, _ := time.LoadLocation("Local")
-			//since := time.Date(year, time.Month(month), day, 0, 0, 0, 0, loc).Unix()
-			//since := maxTimeStamp - int64(60*60*24*p.GetSince())
 			st.GormDB.Debug().Model(&NotesAndProfiles{}).
 				Where(`id < (SELECT MAX(id) FROM "notes_and_profiles" WHERE followed = @follow and bookmarked = @bookmark)`, sql.Named("follow", options.Follow), sql.Named("bookmark", options.BookMark)).
 				Where("followed = @follow and bookmarked = @bookmark", sql.Named("follow", options.Follow), sql.Named("bookmark", options.BookMark)).
@@ -477,17 +469,6 @@ func (st *Storage) initPaging(p *Pagination, options Options) {
 				Find(&notesAndProfiles)
 
 			p.Cursor = notesAndProfiles[len(notesAndProfiles)-1].ID
-			/*
-				if notesAndProfiles.ID == 0 {
-					st.GormDB.Model(&NotesAndProfiles{}).
-						Where("event_created_at > ?", since).
-						Where("followed = ? and bookmarked = ?", options.Follow, options.BookMark).
-						Order("id DESC").
-						Limit(1).
-						Find(&notesAndProfiles)
-					p.Cursor = notesAndProfiles.ID
-				}
-			*/
 		}
 	}
 }
