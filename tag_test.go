@@ -9,10 +9,10 @@ import (
 func TestProcessTagsPubkeyToLong(t *testing.T) {
 	ev := &nostr.Event{}
 
-	_, _, _, _, _, err := ProcessTags(ev, "118cd39da270a800372ab7276a46b488cca3c40dd2b34f73b857fc8f72fae0f81234")
+	_, _, _, _, _, err := ProcessTags(ev, "118cd39da270a800372ab7276a46b488cca3c40dd2b34f73b857fc8f72fae0f81234121")
 
-	if err == nil || err.Error() != "Incorrect pubkey to long max 64" {
-		t.Log("Pubkey is empty and should give an error")
+	if err == nil || err.Error() != "incorrect pubkey to long. max 64" {
+		t.Log("Pubkey is empty or is too long and should give an error")
 		t.Fail()
 	}
 }
