@@ -1202,9 +1202,7 @@ func (st *Storage) CreateBlock(ctx context.Context, pubkey string) error {
 		fmt.Println(err)
 	}
 
-	if err := st.GormDB.WithContext(ctx).Model(&Note{}).Where("pubkey = ?", pubkey).Update("block_id", blockPubkey.ID).Error; err != nil {
-		fmt.Println(err)
-	}
+	st.GormDB.WithContext(ctx).Model(&Profile{}).Where("pubkey = ?", pubkey).Update("blocked", true)
 
 	return nil
 }
@@ -1217,7 +1215,7 @@ func (st *Storage) CreateFollow(ctx context.Context, pubkey string) error {
 	if tx := st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&followPubkey); tx.Error != nil {
 		log.Println("CreateFollow() -> Create follow: ", tx.Error.Error())
 	}
-
+	st.GormDB.Model(&Profile{}).Where("pubkey = ?", pubkey).Update("followed", true)
 	return nil
 }
 
@@ -1225,7 +1223,7 @@ func (st *Storage) RemoveFollow(ctx context.Context, pubkey string) error {
 	if tx := st.GormDB.WithContext(ctx).Where("pubkey = ?", pubkey).Delete(&Follow{}); tx.Error != nil {
 		log.Println("RemoveFollow() -> Remove follow: ", tx.Error.Error())
 	}
-
+	st.GormDB.Model(&Profile{}).Where("pubkey = ?", pubkey).Update("followed", false)
 	return nil
 }
 
@@ -1312,4 +1310,18 @@ func (st *Storage) FindProfile(ctx context.Context, pubkey string) (Profile, err
 	}
 
 	return profile, err
+}
+
+func (st *Storage) SearchProfiles(ctx context.Context, searchStr string) (*[]Profile, error) {
+	var profile []Profile
+	err := st.GormDB.Model(&Profile{}).Where("pubkey = $1 OR LOWER(name) LIKE LOWER($2)", searchStr, "%"+searchStr+"%").Find(&profile).Error
+
+	switch {
+	case err == sql.ErrNoRows:
+		slog.Info(fmt.Sprintf("SearchProfiles() -> Query:: 404 no profile with pubkey %s\n", searchStr))
+	default:
+		slog.Info(fmt.Sprintf("SearchProfiles() -> Query:: 502 query error: %v\n", err))
+	}
+
+	return &profile, err
 }

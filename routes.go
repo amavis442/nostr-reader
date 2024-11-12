@@ -52,6 +52,7 @@ func routes(c *Controller, port string) *chi.Mux {
 	router.Post("/api/followuser", c.Follow())
 	router.Post("/api/unfollowuser", c.Unfollow())
 	router.Get("/api/getfollowed", c.GetFollowedProfiles())
+	router.Get("/api/searchprofiles", c.SearchProfiles())
 
 	/**
 	 * Bookmark events you want to keep track of

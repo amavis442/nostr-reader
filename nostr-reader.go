@@ -33,7 +33,6 @@ func getFireSignalsChannel() chan os.Signal {
 		syscall.SIGHUP, // "terminal is disconnected"
 	)
 	return c
-
 }
 
 func main() {
@@ -43,7 +42,9 @@ func main() {
 	}
 	mw := io.MultiWriter(os.Stdout, logFile)
 	log.SetOutput(mw)
+	logger := slog.New(slog.NewJSONHandler(mw, nil))
 	slog.NewTextHandler(mw, nil)
+	slog.SetDefault(logger)
 	defer logFile.Close()
 
 	exitChan := getFireSignalsChannel()
@@ -67,8 +68,13 @@ func main() {
 	modePtr := flag.Bool("dev", false, "Run in dev mode?")
 	disableSyncPtr := flag.Bool("disable-sync", false, "Disable sync? can be handy to test swaggerui/api?")
 	versionPtr := flag.Bool("version", false, "Show version")
-	namePtr := flag.Bool("name", false, "Show name")
+	namePtr := flag.Bool("name", false, "Show exec name")
 	syncIntervalPtr := flag.Int("sync", 5, "What is the time (in minutes) between sync of relays to local database?")
+
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s [OPTIONS] [name ...]\n", os.Args[0])
+		flag.PrintDefaults()
+	}
 
 	flag.Parse()
 

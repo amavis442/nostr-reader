@@ -1026,6 +1026,7 @@ func (c *Controller) Publish() http.HandlerFunc {
 		}(&wg, c, &postEv)
 
 		wg.Add(1)
+
 		go func(ctx context.Context, c *Controller, postEv *Event) {
 			success, err := c.Nostr.BroadCast(ctx, *postEv)
 			if err != nil {
@@ -1174,6 +1175,40 @@ func (c *Controller) GetProfile() http.HandlerFunc {
 
 		jsonStr, err := json.Marshal(profile)
 		slog.Info(string(jsonStr))
+		if err != nil {
+			response.Status = "error"
+			response.Message = err.Error()
+		}
+		render.JSON(w, r, response)
+	}
+}
+
+// SearchProfiles godoc
+// @Summary      Search for profiles
+// @Description  Search for profiles
+// @Tags         profile
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  Response
+// @Failure      400  {string}  string    "error"
+// @Failure      404  {string}  string    "error"
+// @Failure      500  {string}  string    "error"
+// @Router       /api/searchprofiles [get]
+func (c *Controller) SearchProfiles() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+
+		var err error
+		searchStr := r.URL.Query().Get("q")
+
+		profiles, _ := c.Db.SearchProfiles(ctx, searchStr)
+
+		response := &Response{}
+		response.Status = "ok"
+		response.Message = "Profile"
+		response.Data = &profiles
+
 		if err != nil {
 			response.Status = "error"
 			response.Message = err.Error()
