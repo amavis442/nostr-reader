@@ -1,6 +1,9 @@
-package main
+package http
 
 import (
+	"amavis442/nostr-reader/internal/db"
+	"amavis442/nostr-reader/internal/logger"
+	wrapper "amavis442/nostr-reader/internal/nostr"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -19,8 +22,8 @@ import (
 
 type Controller struct {
 	Pubkey string
-	Db     *Storage
-	Nostr  *Wrapper
+	Db     *db.Storage
+	Nostr  *wrapper.Wrapper
 }
 
 /**
@@ -74,8 +77,8 @@ type Response struct {
 // ResponseEventData godoc
 // @Description  Paginated response to return to client
 type ResponseEventData struct {
-	Paging *Pagination `json:"paging"`
-	Events *[]Event    `json:"events"`
+	Paging *db.Pagination `json:"paging"`
+	Events *[]db.Event    `json:"events"`
 }
 
 type ResponseProfile struct {
@@ -84,7 +87,7 @@ type ResponseProfile struct {
 
 type ResponseRelay struct {
 	Response
-	Relays []Relay `json:"relays"`
+	Relays []db.Relay `json:"relays"`
 }
 
 func (c *Controller) parseUrlParams(r *http.Request) PageRequest {
@@ -147,7 +150,7 @@ func (c *Controller) GetNotes() http.HandlerFunc {
 
 		p := c.parseUrlParams(r)
 
-		pagination := Pagination{}
+		pagination := db.Pagination{}
 		pagination.SetPerPage(uint(p.PerPage))
 		pagination.SetCursor(p.Cursor)
 		pagination.SetPrev(p.PrevCursor)
@@ -155,25 +158,25 @@ func (c *Controller) GetNotes() http.HandlerFunc {
 		pagination.SetPerPage(p.PerPage)
 		pagination.SetSince(p.Since)
 
-		var options Options
+		var options db.Options
 		switch p.Context {
 		case "refresh":
-			options = Options{Follow: true, BookMark: false, Renew: p.Renew}
+			options = db.Options{Follow: true, BookMark: false, Renew: p.Renew}
 		case "refresh.global":
-			options = Options{Follow: false, BookMark: false, Renew: p.Renew}
+			options = db.Options{Follow: false, BookMark: false, Renew: p.Renew}
 		case "follow":
-			options = Options{Follow: true, BookMark: false, Renew: p.Renew}
+			options = db.Options{Follow: true, BookMark: false, Renew: p.Renew}
 		case "bookmark":
-			options = Options{Follow: false, BookMark: true, Renew: p.Renew}
+			options = db.Options{Follow: false, BookMark: true, Renew: p.Renew}
 		case "global":
-			options = Options{Follow: false, BookMark: false, Renew: p.Renew}
+			options = db.Options{Follow: false, BookMark: false, Renew: p.Renew}
 		default:
-			options = Options{Follow: true, BookMark: false, Renew: p.Renew}
+			options = db.Options{Follow: true, BookMark: false, Renew: p.Renew}
 		}
 
 		events, err := c.Db.GetNotes(ctx, p.Context, &pagination, options)
 		if err != nil {
-			slog.Error(getCallerInfo(1), "error", err.Error())
+			slog.Error(logger.GetCallerInfo(1), "error", err.Error())
 		}
 
 		data := &ResponseEventData{Paging: &pagination, Events: events}
@@ -223,7 +226,7 @@ func (c *Controller) GetInbox() http.HandlerFunc {
 
 		p := c.parseUrlParams(r)
 
-		pagination := Pagination{}
+		pagination := db.Pagination{}
 		pagination.SetPerPage(uint(p.PerPage))
 		pagination.SetCursor(p.Cursor)
 		pagination.SetPrev(p.PrevCursor)
@@ -254,7 +257,7 @@ func (c *Controller) GetNotifications() http.HandlerFunc {
 
 		p := c.parseUrlParams(r)
 
-		pagination := Pagination{}
+		pagination := db.Pagination{}
 		pagination.SetPerPage(uint(p.PerPage))
 		pagination.SetCursor(p.Cursor)
 		pagination.SetPrev(p.PrevCursor)
@@ -663,7 +666,7 @@ func (c *Controller) AddRelay() http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
 
-		var j Relay
+		var j db.Relay
 		err := json.NewDecoder(r.Body).Decode(&j)
 		if err != nil {
 			log.Println(err)
@@ -714,7 +717,7 @@ func (c *Controller) RemoveRelay() http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
 
-		var j Relay
+		var j db.Relay
 		err := json.NewDecoder(r.Body).Decode(&j)
 		if err != nil {
 			log.Println(err)
@@ -813,18 +816,18 @@ func (c *Controller) GetNewNotesCount() http.HandlerFunc {
 
 		p.Context = r.URL.Query().Get("context")
 
-		var options Options
+		var options db.Options
 		switch p.Context {
 		case "refresh":
-			options = Options{Follow: true, BookMark: false, Renew: p.Renew}
+			options = db.Options{Follow: true, BookMark: false, Renew: p.Renew}
 		case "follow":
-			options = Options{Follow: true, BookMark: false, Renew: p.Renew}
+			options = db.Options{Follow: true, BookMark: false, Renew: p.Renew}
 		case "bookmark":
-			options = Options{Follow: false, BookMark: true, Renew: p.Renew}
+			options = db.Options{Follow: false, BookMark: true, Renew: p.Renew}
 		case "global":
-			options = Options{Follow: false, BookMark: false, Renew: p.Renew}
+			options = db.Options{Follow: false, BookMark: false, Renew: p.Renew}
 		default:
-			options = Options{Follow: true, BookMark: false, Renew: p.Renew}
+			options = db.Options{Follow: true, BookMark: false, Renew: p.Renew}
 		}
 
 		response := &Response{}
@@ -994,46 +997,46 @@ func (c *Controller) Publish() http.HandlerFunc {
 		w.WriteHeader(http.StatusOK)
 
 		log.Println("Msg to publish: ", msg.Msg)
-		var postEv Event
+		var postEv db.Event
 
 		if msg.Event_id == "" {
 			postEv, err = c.Nostr.DoPost(msg.Msg)
 			if err != nil {
-				slog.Warn(Red+"Something went wrong creating post for broadcasting: "+Reset, "error", err.Error())
+				slog.Warn("something went wrong creating post for broadcasting", "error", err.Error())
 			}
 		}
 
 		if msg.Event_id != "" {
 			replyEv, err := c.Db.FindRawEvent(ctx, msg.Event_id)
 			if err != nil {
-				slog.Warn(Red+getCallerInfo(1)+" Something went wrong: "+Reset, "error", err.Error())
+				slog.Warn(logger.GetCallerInfo(1)+" Something went wrong", "error", err.Error())
 			}
 			postEv, err = c.Nostr.DoReply(msg.Msg, *replyEv)
 			if err != nil {
-				slog.Warn(Red+"Something went wrong creating post for broadcasting: "+Reset, "error", err.Error())
+				slog.Warn("Something went wrong creating post for broadcasting: ", "error", err.Error())
 			}
 
 		}
 
 		var wg sync.WaitGroup
 		wg.Add(1)
-		go func(wg *sync.WaitGroup, c *Controller, postEv *Event) {
+		go func(wg *sync.WaitGroup, c *Controller, postEv *db.Event) {
 			c.Db.SaveNote(ctx, postEv)
 			if err != nil {
-				slog.Warn(Red + getCallerInfo(1) + Reset + err.Error())
+				slog.Warn(logger.GetCallerInfo(1), "error", err.Error())
 			}
 			wg.Done()
 		}(&wg, c, &postEv)
 
 		wg.Add(1)
 
-		go func(ctx context.Context, c *Controller, postEv *Event) {
+		go func(ctx context.Context, c *Controller, postEv *db.Event) {
 			success, err := c.Nostr.BroadCast(ctx, *postEv)
 			if err != nil {
-				slog.Warn(Red+getCallerInfo(1)+"cannot broadcast"+Reset, "error", err.Error())
+				slog.Warn(logger.GetCallerInfo(1)+"cannot broadcast", "error", err.Error())
 			}
 			if !success {
-				slog.Warn(Red + getCallerInfo(1) + "cannot broadcast succesfully" + Reset)
+				slog.Warn(logger.GetCallerInfo(1) + "cannot broadcast succesfully")
 			}
 			wg.Done()
 		}(ctx, c, &postEv)
@@ -1088,7 +1091,7 @@ func (c *Controller) GetMetaData() http.HandlerFunc {
 			return
 		}
 
-		err = c.Db.SaveProfiles(ctx, []*Event{&event})
+		err = c.Db.SaveProfiles(ctx, []*db.Event{&event})
 		if err != nil {
 			response.Status = "error"
 			response.Message = err.Error()
@@ -1122,7 +1125,7 @@ func (c *Controller) SetMetaData() http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
 
-		var user Profile
+		var user db.Profile
 		err := json.NewDecoder(r.Body).Decode(&user)
 		if err != nil {
 			log.Println(err)

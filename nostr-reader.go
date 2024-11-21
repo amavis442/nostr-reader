@@ -2,6 +2,10 @@
 package main
 
 import (
+	"amavis442/nostr-reader/internal/config"
+	"amavis442/nostr-reader/internal/db"
+	"amavis442/nostr-reader/internal/http"
+	wrapper "amavis442/nostr-reader/internal/nostr"
 	"context"
 	"flag"
 	"fmt"
@@ -98,7 +102,7 @@ func main() {
 	slog.Info("Running in dev mode ", "mode", *modePtr)
 	slog.Info("Sync interval is: " + fmt.Sprint(*syncIntervalPtr) + " minutes")
 
-	cfg, err := LoadConfig()
+	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Println(err.Error())
 		os.Exit(0)
@@ -110,16 +114,16 @@ func main() {
 		cfg.Interval = 1
 	}
 
-	fmt.Println("Your public key is: ", cfg.Nostr.PubKey)
-	fmt.Println("Your npub is: ", cfg.Nostr.Npub)
-	fmt.Println("Your nsec is: ", cfg.Nostr.Nsec)
+	slog.Info(fmt.Sprintf("Your public key is: %s", cfg.Nostr.PubKey))
+	slog.Info(fmt.Sprintf("Your npub is: %s", cfg.Nostr.Npub))
+	slog.Info(fmt.Sprintf("Your nsec is: %s", cfg.Nostr.Nsec))
 
 	var ctx context.Context = context.Background()
-	var nostrWrapper Wrapper
+	var nostrWrapper wrapper.Wrapper
 
 	nostrWrapper.SetConfig(cfg.Nostr)
 
-	var st Storage
+	var st db.Storage
 	st.SetEnvironment(cfg.Env)
 	st.Pubkey = cfg.Nostr.PubKey
 
@@ -148,14 +152,14 @@ func main() {
 				return
 			// interval task
 			case tm := <-ticker.C:
-				log.Println("The Current time is: ", tm)
+				slog.Info("The Current time is", "time", tm)
 				wg.Add(1)
 				go intervalTask(&wg, ctx, &st, &nostrWrapper, 120, *disableSyncPtr)
 			}
 		}
 	}()
 
-	var httpServer HttpServer
+	var httpServer http.HttpServer
 	httpServer.DevMode = devMode
 	httpServer.Server = cfg.Server
 	httpServer.Database = &st
@@ -166,7 +170,7 @@ func main() {
 	wg.Wait()
 }
 
-func intervalTask(wg *sync.WaitGroup, ctx context.Context, st *Storage, nostrWrapper *Wrapper, timeOut int, syncDisabled bool) {
+func intervalTask(wg *sync.WaitGroup, ctx context.Context, st *db.Storage, nostrWrapper *wrapper.Wrapper, timeOut int, syncDisabled bool) {
 	if syncDisabled {
 		return
 	}
@@ -180,20 +184,20 @@ func intervalTask(wg *sync.WaitGroup, ctx context.Context, st *Storage, nostrWra
 
 	createdAt := st.GetLastTimeStamp(ctx)
 	t := time.Unix(createdAt, 0)
-	log.Println("TimeStamps: ", createdAt, t.UTC())
+	slog.Info(fmt.Sprint("TimeStamps: ", createdAt, t.UTC()))
 	filter := nostrWrapper.GetEventData(createdAt, false)
 	evs := nostrWrapper.GetEvents(ctx, filter)
 
 	_, err := st.SaveEvents(ctx, evs)
 	if err != nil {
-		log.Println(err)
+		slog.Error(err.Error())
 	}
 
-	if len(Missing_event_ids) > 0 {
-		log.Println("Sniping missing events...........")
+	if len(db.Missing_event_ids) > 0 {
+		slog.Info("Sniping missing events...........")
 		//need to try to get them
 		filter = nostr.Filter{
-			IDs: Missing_event_ids,
+			IDs: db.Missing_event_ids,
 		}
 		evs := nostrWrapper.GetEvents(ctx, filter)
 
@@ -203,6 +207,6 @@ func intervalTask(wg *sync.WaitGroup, ctx context.Context, st *Storage, nostrWra
 		}
 	}
 
-	log.Println(Green + "Done syncing" + Reset)
+	slog.Info("Done syncing")
 
 }

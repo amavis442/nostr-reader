@@ -1,10 +1,13 @@
-package main
+package http
 
 import (
+	"amavis442/nostr-reader/internal/db"
+	wrapper "amavis442/nostr-reader/internal/nostr"
 	"fmt"
-	"log"
+	"log/slog"
 	"mime"
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi"
 )
@@ -16,8 +19,8 @@ type ServerConfig struct {
 type HttpServer struct {
 	DevMode  bool
 	Server   *ServerConfig
-	Database *Storage
-	Nostr    *Wrapper
+	Database *db.Storage
+	Nostr    *wrapper.Wrapper
 	Router   *chi.Mux
 }
 
@@ -56,11 +59,12 @@ func (s *HttpServer) Start() {
 	// Windows may be missing this
 	mime.AddExtensionType(".js", "application/javascript")
 
-	fmt.Println("Server running: http://localhost:" + port)
+	slog.Info(fmt.Sprint("Server running: http://localhost:" + port))
 
 	err := http.ListenAndServe(":"+port, s.Router)
 	if err != nil {
-		log.Println("Could not start http server on this port: " + port)
-		log.Fatal(err)
+		slog.Info(fmt.Sprintf("Could not start http server on this port: %s", port))
+		slog.Error(err.Error())
+		os.Exit(1)
 	}
 }

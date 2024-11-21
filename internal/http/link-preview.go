@@ -1,4 +1,4 @@
-package main
+package http
 
 /*
  * Based on https://github.com/sbabashahi/urlPreviewGo/blob/master/main.go

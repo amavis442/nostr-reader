@@ -1,6 +1,8 @@
-package main
+package db
 
 import (
+	"amavis442/nostr-reader/internal/logger"
+	"amavis442/nostr-reader/internal/tag"
 	"bytes"
 	"context"
 	"database/sql"
@@ -8,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"os"
 	"regexp"
 	"runtime"
 	"sort"
@@ -22,7 +25,7 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"gorm.io/gorm/logger"
+	gormLogger "gorm.io/gorm/logger"
 )
 
 /**
@@ -84,7 +87,7 @@ func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
 		cfg.Port)
 
 	st.GormDB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger:      logger.Default.LogMode(logger.Silent),
+		Logger:      gormLogger.Default.LogMode(gormLogger.Silent),
 		PrepareStmt: true,
 	})
 
@@ -126,7 +129,7 @@ func (st *Storage) SaveProfile(ctx context.Context, ev *Event) error {
 	content := ev.Event.Content
 	err := json.Unmarshal([]byte(content), &data)
 	if err != nil {
-		log.Printf(Red + getCallerInfo(1) + " SaveProfile() --> Unmarshal:: " + err.Error() + Reset + "\n")
+		slog.Error(fmt.Sprintf("%s SaveProfile() --> Unmarshal:: %s", logger.GetCallerInfo(1), err.Error()))
 		return err
 	}
 
@@ -156,16 +159,17 @@ func (st *Storage) SaveProfile(ctx context.Context, ev *Event) error {
 	}
 	profile.UpdatedAt.Time = time.Now()
 
-	slog.Info(Yellow + "SaveProfile() -> Adding or updating profile: pubkey = " + profile.Pubkey + Reset)
+	slog.Info(fmt.Sprintf("SaveProfile() -> Adding or updating profile: pubkey = %s", profile.Pubkey))
 
 	var searchProfile Profile
 	if err := st.GormDB.Model(&Profile{}).Where(Profile{Pubkey: ev.Event.PubKey}).Find(&searchProfile).Error; err != nil {
 		switch {
 		case err == sql.ErrNoRows:
-			log.Printf(Yellow+"FindProfile() -> Query:: 404 no profile with pubkey %s\n"+Reset, ev.Event.PubKey)
+			slog.Info("FindProfile() -> Query:: 404 no profile with pubkey", "pubkey", ev.Event.PubKey)
 		default:
 			_, file, line, _ := runtime.Caller(0)
-			log.Fatalf(Yellow+"FindProfile(%s::%d) -> Query:: 502 query error: %v\n"+Reset, file, line, err)
+			slog.Error(fmt.Sprintf("FindProfile(%s::%d) -> Query:: 502 query error: %v", file, line, err))
+			os.Exit(1)
 		}
 		return err
 	}
@@ -222,7 +226,7 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*Event) ([]string, erro
 			continue
 		}
 
-		etags, _, _, _, _, _ := ProcessTags(ev.Event, st.Pubkey)
+		etags, _, _, _, _, _ := tag.ProcessTags(ev.Event, st.Pubkey)
 
 		if ev.Event.Kind == 0 {
 			err := st.SaveProfile(ctx, ev)
@@ -259,15 +263,15 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*Event) ([]string, erro
 }
 
 func (st *Storage) SaveNote(ctx context.Context, event *Event) (Note, error) {
-	var tree EventTree
+	var tree tag.EventTree
 	ev := event.Event
-	etags, ptags, hasNotification, isRoot, tree, _ := ProcessTags(ev, st.Pubkey)
+	etags, ptags, hasNotification, isRoot, tree, _ := tag.ProcessTags(ev, st.Pubkey)
 	ptagsNum := len(ptags)
 	etagsNum := len(etags)
 
 	tagJson, err := json.Marshal(ev.Tags)
 	if err != nil {
-		slog.Warn(getCallerInfo(1), "error", err.Error())
+		slog.Warn(logger.GetCallerInfo(1), "error", err.Error())
 	}
 
 	p := bluemonday.StrictPolicy()
@@ -312,7 +316,7 @@ func (st *Storage) SaveNote(ctx context.Context, event *Event) (Note, error) {
 	// turn off stupid go json encoding automatically doing HTML escaping...
 	enc.SetEscapeHTML(false)
 	if err := enc.Encode(ev); err != nil {
-		slog.Warn(getCallerInfo(1), "error", err.Error())
+		slog.Warn(logger.GetCallerInfo(1), "error", err.Error())
 		return Note{}, err
 	}
 
@@ -338,9 +342,10 @@ func (st *Storage) SaveNote(ctx context.Context, event *Event) (Note, error) {
 	if err := st.GormDB.Model(&Profile{}).Where(Profile{Pubkey: ev.PubKey}).Find(&searchProfile).Error; err != nil {
 		switch {
 		case err == sql.ErrNoRows:
-			log.Printf("FindProfile() -> Query:: 404 no profile with pubkey %s\n", ev.PubKey)
+			slog.Info("FindProfile() -> Query:: 404 no profile with pubkey", "pubkey", ev.PubKey)
 		default:
-			log.Fatalf(getCallerInfo(1)+" FindProfile() -> Query:: 502 query error: %v\n", err)
+			slog.Error(fmt.Sprintf("%s FindProfile() -> Query:: 502 query.", logger.GetCallerInfo(1)), "error", err.Error())
+			os.Exit(1)
 		}
 		return Note{}, err
 	}
@@ -358,7 +363,7 @@ func (st *Storage) SaveNote(ctx context.Context, event *Event) (Note, error) {
 	//}
 
 	if err != nil {
-		slog.Warn(getCallerInfo(1), "error", err.Error())
+		slog.Warn(logger.GetCallerInfo(1), "error", err.Error())
 		return Note{}, err
 	}
 
@@ -366,14 +371,14 @@ func (st *Storage) SaveNote(ctx context.Context, event *Event) (Note, error) {
 		treeData := Tree{EventId: ev.ID, RootEventId: tree.RootTag, ReplyEventId: tree.ReplyTag}
 		err = st.GormDB.Model(&Tree{}).WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&treeData).Error
 		if err != nil {
-			slog.Error(getCallerInfo(1), "error", err.Error())
+			slog.Error(logger.GetCallerInfo(1), "error", err.Error())
 		}
 
 		if hasNotification {
 			notification := Notification{NoteID: note.ID}
 			err = st.GormDB.Model(&Notification{}).WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&notification).Error
 			if err != nil {
-				slog.Error(getCallerInfo(1), "error", err.Error())
+				slog.Error(logger.GetCallerInfo(1), "error", err.Error())
 			}
 		}
 
@@ -381,7 +386,7 @@ func (st *Storage) SaveNote(ctx context.Context, event *Event) (Note, error) {
 		var searchNoteRootNote Note
 		err = st.GormDB.Model(&Note{}).Where(&Note{EventId: tree.RootTag}).Find(&searchNoteRootNote).Error
 		if err != nil {
-			slog.Error(getCallerInfo(1), "error", err.Error())
+			slog.Error(logger.GetCallerInfo(1), "error", err.Error())
 			return Note{}, err
 		}
 		if searchNoteRootNote.ID == 0 {
@@ -393,7 +398,7 @@ func (st *Storage) SaveNote(ctx context.Context, event *Event) (Note, error) {
 			var searchNoteReplyNote Note
 			err = st.GormDB.Model(&Note{}).Where(&Note{EventId: tree.ReplyTag}).Find(&searchNoteReplyNote).Error
 			if err != nil {
-				slog.Error(getCallerInfo(1), "error", err.Error())
+				slog.Error(logger.GetCallerInfo(1), "error", err.Error())
 				return Note{}, err
 			}
 			if searchNoteReplyNote.ID == 0 {
@@ -647,7 +652,7 @@ func (st *Storage) GetNotifications(ctx context.Context, p *Pagination) (*[]Even
 		//var etags []string
 		var ev *nostr.Event
 		json.Unmarshal(row.Raw, &ev)
-		_, _, _, _, tree, _ := ProcessTags(ev, st.Pubkey)
+		_, _, _, _, tree, _ := tag.ProcessTags(ev, st.Pubkey)
 
 		fmt.Println(tree.RootTag)
 		root_tags = append(root_tags, tree.RootTag)
@@ -655,7 +660,7 @@ func (st *Storage) GetNotifications(ctx context.Context, p *Pagination) (*[]Even
 	var rows []NotesAndProfiles
 	err := st.GormDB.Debug().Model(&NotesAndProfiles{}).Where("event_id IN (?)", root_tags).Find(&rows).Error
 	if err != nil {
-		slog.Error(getCallerInfo(1), "error", err.Error())
+		slog.Error(logger.GetCallerInfo(1), "error", err.Error())
 		return nil, nil
 	}
 
@@ -1008,7 +1013,7 @@ func (st *Storage) GetInbox(ctx context.Context, context string, p *Pagination, 
 	//rows, err := tx.Query(ctx, qry, pubkey)
 	err := st.GormDB.Debug().WithContext(ctx).Raw(qry, pubkey).Limit(100).Find(&rows).Error
 	if err != nil {
-		slog.Error(getCallerInfo(1), "error", err)
+		slog.Error(logger.GetCallerInfo(1), "error", err)
 	}
 
 	eventMap, keys, _, _ := st.procesEventRows(&rows)

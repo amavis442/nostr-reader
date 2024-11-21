@@ -1,4 +1,4 @@
-package main
+package config
 
 var Reset = "\033[0m"
 var Red = "\033[31m"

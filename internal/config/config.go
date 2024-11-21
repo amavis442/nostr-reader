@@ -1,6 +1,9 @@
-package main
+package config
 
 import (
+	"amavis442/nostr-reader/internal/db"
+	"amavis442/nostr-reader/internal/http"
+	wrapper "amavis442/nostr-reader/internal/nostr"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -17,11 +20,11 @@ import (
  *
  */
 type Config struct {
-	Database *DbConfig
-	Server   *ServerConfig
+	Database *db.DbConfig
+	Server   *http.ServerConfig
 	Env      string
 	Interval uint
-	Nostr    *WrapperConfig
+	Nostr    *wrapper.WrapperConfig
 }
 
 func configDir() (string, error) {

@@ -1,4 +1,4 @@
-package main
+package logger
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"runtime"
 )
 
-func getCallerInfo(skip int) (info string) {
+func GetCallerInfo(skip int) (info string) {
 
 	pc, file, lineNo, ok := runtime.Caller(skip)
 	if !ok {

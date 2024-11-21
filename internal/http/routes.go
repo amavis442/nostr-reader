@@ -1,4 +1,4 @@
-package main
+package http
 
 import (
 	_ "amavis442/nostr-reader/docs"

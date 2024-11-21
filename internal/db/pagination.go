@@ -1,4 +1,4 @@
-package main
+package db
 
 // Return to client API
 type Pagination struct {
