@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	// Sqlite driver based on CGO
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/microcosm-cc/bluemonday"

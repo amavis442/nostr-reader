@@ -258,7 +258,7 @@ func (wrapper *Wrapper) GetEventData(createdAt int64, withOffset bool) nostr.Fil
 	var timeStamp nostr.Timestamp = nostr.Timestamp(createdAt + 1)
 
 	filter := nostr.Filter{
-		Kinds: []int{nostr.KindTextNote, nostr.KindReaction, nostr.KindArticle, nostr.KindDeletion, nostr.KindProfileMetadata},
+		Kinds: []int{nostr.KindTextNote, nostr.KindReaction, nostr.KindArticle, nostr.KindDeletion, nostr.KindProfileMetadata, nostr.KindRecommendServer, 2003, 2004, 9802},
 		Since: &timeStamp,
 		Limit: 1000,
 	}
@@ -305,6 +305,37 @@ func (wrapper *Wrapper) UpdateProfiles(ctx context.Context, pubkeys []string) []
 	})
 
 	return evs
+}
+
+func (wrapper *Wrapper) SearchProfileByNpub(ctx context.Context, npub string) (db.Event, error) {
+	filter := nostr.Filter{
+		Kinds:   []int{nostr.KindProfileMetadata},
+		Authors: []string{npub},
+		Limit:   1,
+	}
+
+	var m sync.Map
+	wrapper.Do(ctx, db.Relay{Read: true}, func(ctx context.Context, relay *nostr.Relay) bool {
+		evs, err := relay.QuerySync(ctx, filter)
+		if err != nil {
+			return false
+		}
+		for _, ev := range evs {
+			if _, ok := m.Load(ev.PubKey); !ok {
+				m.LoadOrStore(ev.PubKey, ev)
+			}
+		}
+		return true
+	})
+
+	if v, ok := m.Load(npub); ok {
+		var event db.Event
+		event.Event = &nostr.Event{}
+		event.Event = v.(*nostr.Event)
+		return event, nil
+	}
+
+	return db.Event{}, nil
 }
 
 func (wrapper *Wrapper) GetMetaData(ctx context.Context) (db.Event, error) {

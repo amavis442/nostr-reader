@@ -1202,20 +1202,50 @@ func (c *Controller) SearchProfiles() http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
 
-		var err error
-		searchStr := r.URL.Query().Get("q")
-
-		profiles, _ := c.Db.SearchProfiles(ctx, searchStr)
-
 		response := &Response{}
 		response.Status = "ok"
 		response.Message = "Profile"
-		response.Data = &profiles
 
+		//var err error
+		searchStr := r.URL.Query().Get("q")
+		var pubkey string
+		pubkey = searchStr
+		if searchStr[0:4] == "npub" {
+			prefix, val, err := nip19.Decode(searchStr)
+			if err != nil {
+				response.Status = "error"
+				response.Message = err.Error()
+			}
+			if err == nil && prefix == "npub" {
+				pubkey = val.(string)
+			}
+		}
+
+		profiles, err := c.Db.SearchProfiles(ctx, pubkey)
+		if len(*profiles) > 0 {
+			response.Data = &profiles
+		}
 		if err != nil {
 			response.Status = "error"
 			response.Message = err.Error()
 		}
+
+		if len(*profiles) < 1 && err == nil {
+			event, err := c.Nostr.SearchProfileByNpub(ctx, pubkey)
+			if err != nil {
+				slog.Error(err.Error())
+				response.Status = "error"
+				response.Message = err.Error()
+			}
+			if err == nil {
+				c.Db.SaveProfile(ctx, &event)
+				profile, _ := c.Db.FindProfile(ctx, event.Event.PubKey)
+				profiles := make([]db.Profile, 0)
+				profiles = append(profiles, profile)
+				response.Data = profiles
+			}
+		}
+
 		render.JSON(w, r, response)
 	}
 }

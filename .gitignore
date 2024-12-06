@@ -29,3 +29,5 @@ config.json
 *~
 *.log
 log.txt
+
+*.db
