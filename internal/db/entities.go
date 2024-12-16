@@ -51,6 +51,7 @@ type Note struct {
 	EventCreatedAt int64          `gorm:"type:bigint; not null" json:"event_created_at" db:"event_created_at"`
 	Content        string         `gorm:"type:text;" json:"content" db:"content"`
 	TagsFull       string         `gorm:"type:text;" json:"tags" db:"tags_full"`
+	ContentHash    string         `gorm:"type:text; unique; index;comment:content hash" json:"hash" db:"hash"`
 	Ptags          pq.StringArray `gorm:"type:text[];index:idx_notes_ptags,type:gin" json:"-" db:"ptags"`
 	Etags          pq.StringArray `gorm:"type:text[];index:idx_notes_etags,type:gin" json:"-" db:"etags"`
 	Sig            string         `gorm:"type:varchar(200);not null;" json:"sig" db:"sig"`

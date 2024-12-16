@@ -5,6 +5,7 @@ import (
 	"amavis442/nostr-reader/internal/tag"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -237,7 +238,6 @@ func (st *Storage) SaveEvents(ctx context.Context, evs []*Event) ([]string, erro
 		}
 
 		if ev.Event.Kind == 1 {
-
 			note, err := st.SaveNote(ctx, ev)
 			if err != nil {
 				return []string{}, err
@@ -321,6 +321,11 @@ func (st *Storage) SaveNote(ctx context.Context, event *Event) (Note, error) {
 		return Note{}, err
 	}
 
+	data := []byte(ev.PubKey + ev.Content)
+	hash := sha256.Sum256(data)
+	fingerprint := fmt.Sprintf("%x", hash[:])
+	slog.Info("Fingerprint", "fingerprint", fingerprint)
+
 	newUUID, _ := uuid.NewV7()
 	note := Note{}
 	note.EventId = ev.ID
@@ -329,6 +334,7 @@ func (st *Storage) SaveNote(ctx context.Context, event *Event) (Note, error) {
 	note.Kind = ev.Kind
 	note.EventCreatedAt = ev.CreatedAt.Time().Unix()
 	note.Content = ev.Content
+	note.ContentHash = fingerprint
 	note.TagsFull = string(tagJson)
 	note.Sig = ev.Sig
 	note.Ptags = ptags
@@ -426,8 +432,7 @@ func (st *Storage) SaveReaction(ctx context.Context, ev *nostr.Event, targetEven
 
 	err := st.GormDB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&vote).Error
 	if err != nil {
-		log.Println("SaveReaction() -> Query error:: ", err.Error())
-		panic(err)
+		slog.Error(logger.GetCallerInfo(1), "Query error", err.Error())
 	}
 }
 
