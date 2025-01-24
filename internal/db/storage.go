@@ -30,6 +30,15 @@ import (
 	gormLogger "gorm.io/gorm/logger"
 )
 
+type DbConfig struct {
+	User      string
+	Password  string
+	Dbname    string
+	Port      int
+	Host      string
+	Retention int
+}
+
 /**
  * We neede an active database connection object.
  * The filter is used for certain words in de posts we want to filter out, because they can be spam
@@ -41,15 +50,7 @@ type Storage struct {
 	Env           string
 	Pubkey        string
 	Notifications []string
-}
-
-type DbConfig struct {
-	User      string
-	Password  string
-	Dbname    string
-	Port      int
-	Host      string
-	Retention int
+	DbConfig      *DbConfig
 }
 
 var Missing_event_ids []string
@@ -81,6 +82,8 @@ func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
 
 	st.Notifications = make([]string, 0)
 
+	st.DbConfig = cfg
+
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable TimeZone=Europe/Amsterdam",
 		cfg.Host,
 		cfg.User,
@@ -93,13 +96,20 @@ func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
 		PrepareStmt: true,
 	})
 
-	log.Printf(`Connect() -> Cleaning history older then %d days`, cfg.Retention)
-	then := time.Now().AddDate(0, 0, -1*cfg.Retention)
+	Missing_event_ids = make([]string, 0)
+
+	log.Println("Connect() -> Connected to database:", cfg.Dbname)
+	return err
+}
+
+func (st *Storage) Clean(ctx context.Context) error {
+	then := time.Now().AddDate(0, 0, -1*st.DbConfig.Retention)
 	past := fmt.Sprintf("%d-%d-%d 00:00:00\n",
 		then.Year(),
 		then.Month(),
 		then.Day())
 
+	var err error
 	st.GormDB.Transaction(func(tx *gorm.DB) error {
 		err = tx.Exec(`DELETE FROM reactions WHERE note_id in (SELECT id FROM notes WHERE created_at <= $1);`, past).Error
 		if err != nil {
@@ -120,10 +130,7 @@ func (st *Storage) Connect(ctx context.Context, cfg *DbConfig) error {
 		return nil
 	})
 
-	Missing_event_ids = make([]string, 0)
-
-	log.Println("Connect() -> Connected to database:", cfg.Dbname)
-	return err
+	return nil
 }
 
 func (st *Storage) SaveProfile(ctx context.Context, ev *Event) error {
@@ -1242,6 +1249,7 @@ func (st *Storage) GetFollowedProfiles(ctx context.Context) []Profile {
 	var profiles []Profile
 	st.GormDB.
 		WithContext(ctx).
+		Debug().
 		Model(&Profile{}).
 		Joins("JOIN follows ON (follows.pubkey = profiles.pubkey)").
 		Scan(&profiles)

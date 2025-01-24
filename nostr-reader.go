@@ -67,6 +67,7 @@ func main() {
 	}()
 
 	devMode := false
+	var cleanStorage bool = false
 
 	helpPtr := flag.Bool("h", false, "Show help dialog")
 	modePtr := flag.Bool("dev", false, "Run in dev mode?")
@@ -74,6 +75,7 @@ func main() {
 	versionPtr := flag.Bool("version", false, "Show version")
 	namePtr := flag.Bool("name", false, "Show exec name")
 	syncIntervalPtr := flag.Int("sync", 5, "What is the time (in minutes) between sync of relays to local database?")
+	cleanPtr := flag.Bool("clean", false, "Clean database after x days retention?")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [OPTIONS] [name ...]\n", os.Args[0])
@@ -82,9 +84,14 @@ func main() {
 
 	flag.Parse()
 
+	if *cleanPtr {
+		cleanStorage = true
+	}
+
 	if *modePtr {
 		devMode = true
 	}
+
 	if *helpPtr {
 		flag.Usage()
 		return
@@ -100,6 +107,7 @@ func main() {
 	}
 
 	slog.Info("Running in dev mode ", "mode", *modePtr)
+	slog.Info("Cleaning database ", "cleanit", *cleanPtr)
 	slog.Info("Sync interval is: " + fmt.Sprint(*syncIntervalPtr) + " minutes")
 
 	cfg, err := config.LoadConfig()
@@ -134,6 +142,10 @@ func main() {
 		os.Exit(0)
 	}
 
+	if cleanStorage {
+		slog.Info(fmt.Sprintf("Cleaning database entries older then %d days.", st.DbConfig.Retention))
+		_ = st.Clean(ctx)
+	}
 	relays := st.GetRelays(ctx)
 	nostrWrapper.UpdateRelays(relays)
 
